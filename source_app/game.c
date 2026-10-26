@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #define GAME_ERR(...) { snprintf(err, errlen, __VA_ARGS__); }
 
@@ -76,6 +77,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     g->dirty = 1;
   }
   camera_init(&g->cam, 320, 240, tw, th, GAME_MAXZOOM);
+  stick_init(&g->stick, 156, GAME_STICK_DEADZONE, GAME_STICK_CURVE);
+  stick_init(&g->cstick, GAME_CSTICK_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE);
   camera_set(&g->cam, tw / 2, th / 2, GAME_STARTCELL / l->cell);
   g->lastsave = osGetTime();
   if(!cont) game_save(g, 1);
@@ -146,10 +149,13 @@ int game_update(Game * g, const GameInput * in) {
   // Zoom: up/down, or X/B for the other hand
   if(in->repeat & (KEY_DUP | KEY_X)) camera_zoom(c, GAME_ZOOMSTEP);
   if(in->repeat & (KEY_DDOWN | KEY_B)) camera_zoom(c, 1.0f / GAME_ZOOMSTEP);
+  // Smooth zoom on the New 3DS C-stick, up = in, same response curve as panning
+  float zx, zy;
+  if(stick_read(&g->cstick, 0, in->cstick.dy, &zx, &zy)) camera_zoom(c, powf(GAME_STICKZOOM, zy));
   // Pan: circle pad
-  float cx = in->circle.dx, cy = -in->circle.dy;
-  if(cx * cx + cy * cy > 20 * 20) {
-    camera_pan(c, cx / 156.0f * GAME_PANSPEED, cy / 156.0f * GAME_PANSPEED);
+  float px, py;
+  if(stick_read(&g->stick, in->circle.dx, -in->circle.dy, &px, &py)) {
+    camera_pan(c, px * GAME_PANSPEED, py * GAME_PANSPEED);
   }
 
   if(in->down & KEY_TOUCH) {

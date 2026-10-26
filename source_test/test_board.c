@@ -2,6 +2,7 @@
 #include "board.h"
 #include "boardsave.h"
 #include "camera.h"
+#include "stick.h"
 
 #include <stdlib.h>
 
@@ -205,4 +206,24 @@ void test_camera(void) {
   CHECKF(c.cx, 1610); CHECKF(c.cy, 595);
   camera_pan(&c, 1e6, 1e6);
   CHECKF(c.cx, 3200); CHECKF(c.cy, 1200);
+}
+
+void test_stick(void) {
+  Stick s;
+  stick_init(&s, 156, 0.12f, 2);
+  float x, y;
+  CHECK(stick_read(&s, 10, 5, &x, &y) == 0 && x == 0 && y == 0);   // deadzone
+  CHECK(stick_read(&s, 0, 0, &x, &y) == 0);
+  CHECK(stick_read(&s, 156, 0, &x, &y) == 1);
+  CHECKF(x, 1); CHECKF(y, 0);
+  CHECK(stick_read(&s, 0, -300, &x, &y) == 1);                     // clamps past full
+  CHECKF(x, 0); CHECKF(y, -1);
+  // Just outside the deadzone is barely moving; halfway is well under half speed
+  stick_read(&s, 156 * 0.13f, 0, &x, &y);
+  CHECK(x > 0 && x < 0.01f);
+  stick_read(&s, 156 * 0.56f, 0, &x, &y);
+  CHECK(x > 0.2f && x < 0.3f);
+  // Direction preserved on diagonals
+  stick_read(&s, 100, 100, &x, &y);
+  CHECKF(x, y);
 }

@@ -15,6 +15,7 @@ int main(int argc, char ** argv) {
   RUN(test_board);
   RUN(test_boardsave);
   RUN(test_camera);
+  RUN(test_stick);
   RUN(test_layout);
   RUN(test_edgegen);
   RUN(test_edgegen_irregular);

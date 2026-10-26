@@ -122,6 +122,7 @@ int main(int argc, char ** argv) {
     in.repeat = hidKeysDownRepeat();
     hidTouchRead(&in.touch);
     hidCircleRead(&in.circle);
+    hidCstickRead(&in.cstick);
 
     if(app.mode == MODE_MENU) {
       PuzzleChoice choice = puzzlemenu_update(&app.menu, in.down, in.repeat);

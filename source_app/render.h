@@ -13,7 +13,7 @@
 #define RENDER_COLOR_VOID   C2D_Color32(24, 26, 30, 255)
 #define RENDER_TABLECOLORS  10      // Size of the table color palette (see render.c)
 #define RENDER_COLOR_GLOW   C2D_Color32(0, 0, 0, 70)  // Shadow blob color; alpha = strength per blob
-#define RENDER_GLOW_SIZE    1.9f    // Shadow blob diameter, in cells
+#define RENDER_GLOW_SIZE    1.52f   // Shadow blob diameter, in cells
 #define RENDER_GLOW_CORE    0.5f    // Fraction of the blob radius that's solid before fading
 #define RENDER_GLOW_SQUARE  4.0f    // Blob shape: 2 = circle, higher = squarer (rounded corners)
 #define RENDER_GLOW_OFFSET  0.15f   // Shadow offset down-right, in cells (scales with zoom)

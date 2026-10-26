@@ -54,3 +54,4 @@ Result svcGetThreadPriority(s32 * out, Handle handle); void svcSleepThread(s64 n
 #ifndef U64_MAX
 #define U64_MAX UINT64_MAX
 #endif
+void hidCstickRead(circlePosition * pos);

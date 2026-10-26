@@ -5,6 +5,7 @@
 
 #include "board.h"
 #include "camera.h"
+#include "stick.h"
 #include "puzzlegfx.h"
 #include "render.h"
 #include "savewriter.h"
@@ -16,8 +17,12 @@
 #define GAME_SNAP 0.3f            // Snap distance, in cells
 #define GAME_MAXZOOM 2.0f
 #define GAME_STARTCELL 28.0f      // Starting zoom shows a cell this many pixels wide
-#define GAME_ZOOMSTEP 1.15f
-#define GAME_PANSPEED 7.0f        // Pixels per frame at full circle pad
+#define GAME_ZOOMSTEP 1.15f       // Per D-pad / X / B press or repeat
+#define GAME_STICKZOOM 1.035f     // Per frame zoom factor at full C-stick tilt (New 3DS)
+#define GAME_CSTICK_RANGE 146     // C-stick full tilt (guess; values past it just clamp)
+#define GAME_PANSPEED 10.0f       // Pixels per frame at full circle pad
+#define GAME_STICK_DEADZONE 0.12f // Fraction of stick travel ignored
+#define GAME_STICK_CURVE 2.0f     // Pan speed grows with tilt^this (slow and precise near center)
 #define GAME_EDGEPAN 18           // Dragging this close to the screen edge pans
 #define GAME_EDGEPANSPEED 4.0f
 #define GAME_AUTOSAVE_MS 30000
@@ -31,6 +36,7 @@ typedef struct {
   u32 down, held, up, repeat;
   touchPosition touch;
   circlePosition circle;
+  circlePosition cstick;  // New 3DS only; always 0,0 elsewhere
 } GameInput;
 
 // One puzzle being played: the board, the view onto it, its graphics, and the
@@ -38,6 +44,8 @@ typedef struct {
 typedef struct {
   Board board;
   Camera cam;
+  Stick stick;
+  Stick cstick;
   PuzzleGfx gfx;
   char name[256];
   uint32_t target;
