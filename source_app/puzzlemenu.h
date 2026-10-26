@@ -12,6 +12,8 @@
 #define PMENU_MAXNAME 128
 #define PMENU_NUMCOUNTS 4
 #define PMENU_ACT_CONTINUE 0
+#define PMENU_ACT_NONE 0xFFFFFFFF
+#define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
 
 typedef struct {
   char name[PMENU_MAXNAME];
@@ -23,6 +25,7 @@ typedef struct {
 typedef struct {
   const char * name;    // NULL = nothing picked yet
   uint32_t target;      // Piece count for a new game, 0 = continue
+  uint8_t style;        // Cut style for a new game (PGFX_STYLE_*)
   u8 quit;
 } PuzzleChoice;
 
@@ -33,7 +36,8 @@ typedef struct {
   tui_menu confirm;
   PuzzleEntry * entries;
   int nentries;
-  uint32_t optact[PMENU_NUMCOUNTS + 1];  // Action for each options item
+  uint32_t optact[PMENU_NUMCOUNTS + 2];  // Action for each options item
+  tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
   char status[128];                      // Shown under the menu (errors etc.)
 } PuzzleMenu;
 

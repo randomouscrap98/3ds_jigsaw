@@ -18,8 +18,10 @@ void storage_puzzlepath(const char * name, char * out) {
   snprintf(out, STORAGE_MAXPATH, "%s/%s", STORAGE_PUZZLES, name);
 }
 
-void storage_cachepath(const char * name, uint32_t target, char * out) {
-  snprintf(out, STORAGE_MAXPATH, "%s/%s_%lu.bin", STORAGE_CACHE, name, (unsigned long)target);
+void storage_cachepath(const char * name, uint32_t target, uint8_t style, char * out) {
+  // Classic keeps the original name
+  if(style) snprintf(out, STORAGE_MAXPATH, "%s/%s_%lu_s%u.bin", STORAGE_CACHE, name, (unsigned long)target, style);
+  else snprintf(out, STORAGE_MAXPATH, "%s/%s_%lu.bin", STORAGE_CACHE, name, (unsigned long)target);
 }
 
 void storage_savepath(const char * name, char * out) {
@@ -81,7 +83,9 @@ int storage_peeksave(const char * name, StorageSaveInfo * info) {
   if(len < 4) return 2;
   BoardSaveInfo bi;
   if(boardsave_peek(head + 4, len - 4, &bi)) return 3;
-  info->target = head[0] | (head[1] << 8) | (head[2] << 16) | ((uint32_t)head[3] << 24);
+  uint32_t prefix = head[0] | (head[1] << 8) | (head[2] << 16) | ((uint32_t)head[3] << 24);
+  info->target = STORAGE_SAVE_TARGET(prefix);
+  info->style = STORAGE_SAVE_STYLE(prefix);
   info->pieces = (uint32_t)bi.cols * bi.rows;
   info->groups = bi.ngroups;
   return 0;

@@ -16,10 +16,11 @@ void test_boardsave(void);
 void test_camera(void);
 void test_layout(void);
 void test_edgegen(void);
+void test_edgegen_irregular(void);
 void test_imgscale(void);
 void test_swizzle(void);
 void test_piecebake(void);
 void test_littlemenu(void);
-void test_dump_cut(const char * path);
+void test_dump_cut(const char * path, int irregular);
 
 #endif

@@ -4,8 +4,8 @@
 #include <stdint.h>
 
 #define LAYOUT_PAGESIZE 1024
-// Tabs stick out at most ~0.34 cells (see edgegen); plus room for antialiasing/outline
-#define LAYOUT_MARGIN(cell) ((uint16_t)((cell) * 0.35f + 0.999f) + 2)
+// Room around a cell for tabs (reach, in cells) plus antialiasing/outline pixels
+#define LAYOUT_MARGIN(cell, reach) ((uint16_t)((cell) * (reach) + 0.999f) + 2)
 #define LAYOUT_MINCELL 8
 
 // How a puzzle is cut and packed: grid size, piece size in pixels, which part of the
@@ -25,9 +25,10 @@ typedef struct {
 } Layout;
 
 // Choose a grid close to target pieces that matches the image aspect, then the biggest
-// cell size that fits maxside and maxpages. Never upscales. Returns 0 on success.
+// cell size that fits maxside and maxpages. reach = how far (in cells) pieces can stick
+// out of their cell (see edgegen). Never upscales. Returns 0 on success.
 int layout_compute(Layout * l, uint32_t srcw, uint32_t srch, uint32_t target,
-    uint32_t maxside, uint32_t maxpages);
+    uint32_t maxside, uint32_t maxpages, float reach);
 // Where piece's tile is: page index and top-left pixel in that page
 void layout_tile(const Layout * l, uint32_t piece, uint16_t * page, uint16_t * x, uint16_t * y);
 // Just the grid choice (exposed for testing)

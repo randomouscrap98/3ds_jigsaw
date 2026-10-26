@@ -8,6 +8,7 @@
 #include "defaults.h"
 #include "game.h"
 #include "puzzlemenu.h"
+#include "render.h"
 #include "sfx.h"
 #include "storage.h"
 #include "textdraw.h"
@@ -28,6 +29,7 @@ typedef struct {
   C3D_RenderTarget * top;
   C3D_RenderTarget * bottom;
   TextDraw td;
+  Render render;
   PuzzleMenu menu;
   Game game;
   Sfx sfx;
@@ -67,7 +69,7 @@ static void app_hook(APT_HookType type, void * param) {
 
 static void app_start_game(App * app, PuzzleChoice choice) {
   char err[256] = "";
-  if(game_init(&app->game, choice.name, choice.target, app_progress, app, err, sizeof(err))) {
+  if(game_init(&app->game, choice.name, choice.target, choice.style, app_progress, app, err, sizeof(err))) {
     puzzlemenu_setstatus(&app->menu, err[0] ? err : "Couldn't start the puzzle");
     return;
   }
@@ -91,6 +93,7 @@ int main(int argc, char ** argv) {
   app.bottom = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
   hidSetRepeatParameters(MAIN_REPEAT_DELAY, MAIN_REPEAT_INTERVAL);
   textdraw_init(&app.td);
+  render_init(&app.render);  // Without it there's just no glow
   sfx_init(&app.sfx);
   storage_init();
   if(R_SUCCEEDED(romfsInit())) {
@@ -129,7 +132,7 @@ int main(int argc, char ** argv) {
     else game_render_top(&app.game, &app.td);
     C2D_SceneBegin(app.bottom);
     if(app.mode == MODE_MENU) puzzlemenu_render_bottom(&app.menu, &app.td);
-    else game_render_bottom(&app.game);
+    else game_render_bottom(&app.game, &app.render);
     C3D_FrameEnd(0);
   }
 
@@ -140,6 +143,7 @@ int main(int argc, char ** argv) {
   aptUnhook(&app.hook);
   puzzlemenu_free(&app.menu);
   sfx_free(&app.sfx);
+  render_free(&app.render);
   textdraw_free(&app.td);
   C2D_Fini();
   C3D_Fini();

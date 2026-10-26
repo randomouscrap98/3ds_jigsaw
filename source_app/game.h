@@ -6,10 +6,12 @@
 #include "board.h"
 #include "camera.h"
 #include "puzzlegfx.h"
+#include "render.h"
 #include "storage.h"
 #include "textdraw.h"
 
 #define GAME_TABLESCALE 3.0f      // Table is this many times the puzzle size each way
+#define GAME_SCATTER 0.67f        // Pieces start spread over this fraction of the table (centered)
 #define GAME_SNAP 0.3f            // Snap distance, in cells
 #define GAME_MAXZOOM 2.0f
 #define GAME_STARTCELL 28.0f      // Starting zoom shows a cell this many pixels wide
@@ -38,6 +40,7 @@ typedef struct {
   PuzzleGfx gfx;
   char name[256];
   uint32_t target;
+  uint8_t style;          // Cut style (PGFX_STYLE_*)
   int32_t held;           // Group being dragged, or -1
   u8 panning;             // Stylus is dragging the table
   float lastwx, lastwy;   // World point under the stylus last frame
@@ -46,13 +49,14 @@ typedef struct {
   u64 lastsave;
 } Game;
 
-// Start a puzzle. target = piece count for a new game, or 0 to continue the save.
-int game_init(Game * g, const char * name, uint32_t target, progress_fn cb, void * udata,
+// Start a puzzle. target = piece count for a new game (cut in the given style), or 0 to
+// continue the save (style then comes from the save).
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, progress_fn cb, void * udata,
     char * err, size_t errlen);
 void game_free(Game * g);
 // Returns GAME_EV_ flags
 int game_update(Game * g, const GameInput * in);
-void game_render_bottom(Game * g);
+void game_render_bottom(Game * g, Render * r);
 void game_render_top(Game * g, TextDraw * td);
 int game_save(Game * g);
 

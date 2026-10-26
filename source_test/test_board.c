@@ -105,18 +105,18 @@ void test_board(void) {
 
   // Scatter: everything inside the table, all separate, deterministic per seed
   CHECK(board_init(&b, 26, 19, 37, 26 * 37 * 3, 19 * 37 * 3) == 0);
-  board_scatter(&b, 1234);
+  board_scatter(&b, 1234, b.width / 4, b.height / 4, b.width / 2, b.height / 2);
   CHECK(b.ngroups == b.count);
   int inside = 1, rots[4] = {0};
   for(uint32_t i = 0; i < b.count; i++) {
     board_piece_center(&b, i, &cx, &cy);
-    if(cx < 0 || cy < 0 || cx > b.width || cy > b.height) inside = 0;
+    if(cx < b.width / 4 || cy < b.height / 4 || cx > b.width * 3 / 4 || cy > b.height * 3 / 4) inside = 0;
     rots[board_piece_rot(&b, i)]++;
   }
   CHECK(inside);
   CHECK(rots[0] > 50 && rots[1] > 50 && rots[2] > 50 && rots[3] > 50);
   float x0 = b.groups[0].x;
-  board_scatter(&b, 1234);
+  board_scatter(&b, 1234, b.width / 4, b.height / 4, b.width / 2, b.height / 2);
   CHECKF(b.groups[0].x, x0);
   // Nothing should merge right after a scatter (pieces are spread apart)
   int merged = 0;
@@ -128,7 +128,7 @@ void test_board(void) {
 void test_boardsave(void) {
   Board b, c;
   CHECK(board_init(&b, 6, 5, 20, 400, 300) == 0);
-  board_scatter(&b, 99);
+  board_scatter(&b, 99, 0, 0, b.width, b.height);
   // Merge a few things to make the groups interesting
   b.groups[1].x = b.groups[0].x; b.groups[1].y = b.groups[0].y; b.groups[1].rot = b.groups[0].rot;
   b.groups[7].x = b.groups[0].x; b.groups[7].y = b.groups[0].y; b.groups[7].rot = b.groups[0].rot;

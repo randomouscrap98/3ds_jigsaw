@@ -9,11 +9,11 @@
 
 #define GAME_ERR(...) { snprintf(err, errlen, __VA_ARGS__); }
 
-static uint32_t game_cutseed(const char * name, uint32_t target) {
-  return rng_hashstr(name) ^ (target * 2654435761u);
+static uint32_t game_cutseed(const char * name, uint32_t target, uint8_t style) {
+  return rng_hashstr(name) ^ (target * 2654435761u) ^ (style * 0x9E3779B9u);
 }
 
-static int game_loadsave(Game * g, uint32_t * target) {
+static int game_loadsave(Game * g, uint32_t * target, uint8_t * style) {
   char path[STORAGE_MAXPATH];
   storage_savepath(g->name, path);
   uint8_t * buf;
@@ -21,7 +21,9 @@ static int game_loadsave(Game * g, uint32_t * target) {
   if(storage_readfile(path, &buf, &len)) return 1;
   int result = 1;
   if(len > 4) {
-    *target = buf[0] | (buf[1] << 8) | (buf[2] << 16) | ((uint32_t)buf[3] << 24);
+    uint32_t prefix = buf[0] | (buf[1] << 8) | (buf[2] << 16) | ((uint32_t)buf[3] << 24);
+    *target = STORAGE_SAVE_TARGET(prefix);
+    *style = STORAGE_SAVE_STYLE(prefix);
     if(g->board.count) result = boardsave_read(&g->board, buf + 4, len - 4);
     else result = 0;  // Only wanted the target
   }
@@ -29,21 +31,23 @@ static int game_loadsave(Game * g, uint32_t * target) {
   return result;
 }
 
-int game_init(Game * g, const char * name, uint32_t target, progress_fn cb, void * udata,
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, progress_fn cb, void * udata,
     char * err, size_t errlen) {
   memset(g, 0, sizeof(Game));
   g->held = -1;
   snprintf(g->name, sizeof(g->name), "%s", name);
   int cont = target == 0;
-  if(cont && game_loadsave(g, &target)) {
+  if(cont && game_loadsave(g, &target, &style)) {
     GAME_ERR("Couldn't read the save file");
     return 1;
   }
   g->target = target;
+  g->style = style;
   char ipath[STORAGE_MAXPATH], cpath[STORAGE_MAXPATH];
   storage_puzzlepath(name, ipath);
-  storage_cachepath(name, target, cpath);
-  if(puzzlegfx_load(&g->gfx, ipath, cpath, target, game_cutseed(name, target), cb, udata, err, errlen)) {
+  storage_cachepath(name, target, style, cpath);
+  if(puzzlegfx_load(&g->gfx, ipath, cpath, target, game_cutseed(name, target, style), style,
+      cb, udata, err, errlen)) {
     return 1;
   }
   Layout * l = &g->gfx.layout;
@@ -55,13 +59,15 @@ int game_init(Game * g, const char * name, uint32_t target, progress_fn cb, void
   }
   if(cont) {
     uint32_t t2;
-    if(game_loadsave(g, &t2)) {
+    uint8_t s2;
+    if(game_loadsave(g, &t2, &s2)) {
       GAME_ERR("Save file doesn't match this puzzle; start a new one");
       game_free(g);
       return 1;
     }
   } else {
-    board_scatter(&g->board, (uint32_t)osGetTime() ^ rng_hashstr(name));
+    float sw = tw * GAME_SCATTER, sh = th * GAME_SCATTER;
+    board_scatter(&g->board, (uint32_t)osGetTime() ^ rng_hashstr(name), (tw - sw) / 2, (th - sh) / 2, sw, sh);
     g->dirty = 1;
   }
   camera_init(&g->cam, 320, 240, tw, th, GAME_MAXZOOM);
@@ -81,10 +87,11 @@ int game_save(Game * g) {
   size_t len = 4 + boardsave_size(&g->board);
   uint8_t * buf = malloc(len);
   if(!buf) return 1;
-  buf[0] = g->target & 0xFF;
-  buf[1] = (g->target >> 8) & 0xFF;
-  buf[2] = (g->target >> 16) & 0xFF;
-  buf[3] = (g->target >> 24) & 0xFF;
+  uint32_t prefix = STORAGE_SAVE_PREFIX(g->target, g->style);
+  buf[0] = prefix & 0xFF;
+  buf[1] = (prefix >> 8) & 0xFF;
+  buf[2] = (prefix >> 16) & 0xFF;
+  buf[3] = (prefix >> 24) & 0xFF;
   boardsave_write(&g->board, buf + 4);
   char path[STORAGE_MAXPATH];
   storage_savepath(g->name, path);
@@ -181,8 +188,8 @@ int game_update(Game * g, const GameInput * in) {
   return ev;
 }
 
-void game_render_bottom(Game * g) {
-  render_table(&g->board, &g->cam, &g->gfx, g->held);
+void game_render_bottom(Game * g, Render * r) {
+  render_table(r, &g->board, &g->cam, &g->gfx, g->held);
 }
 
 void game_render_top(Game * g, TextDraw * td) {

@@ -18,13 +18,24 @@ typedef struct {
 // always produces the same cut.
 //   h: horizontal edges, the one below cell (c, r) is h[r * cols + c], r < rows - 1
 //   v: vertical edges, the one right of cell (c, r) is v[r * (cols - 1) + c], c < cols - 1
+//   corners: (cols + 1) x (rows + 1) grid corner offsets (dx, dy pairs, in cells).
+//     All zero for a classic straight grid; jittered for an irregular cut. Corners on the
+//     outer border only slide along it, so the puzzle stays a rectangle.
 typedef struct {
   EdgeTab * h;
   EdgeTab * v;
+  float * corners;
   uint16_t cols, rows;
 } EdgeGen;
 
-int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed);
+// Tabs stick out at most this far (in cells) from their edge line
+#define EDGEGEN_TABREACH 0.35f
+// Corner jitter for irregular cuts, in cells (pass to edgegen_init / layout)
+#define EDGEGEN_IRREGULAR 0.1f
+
+// cornerjitter = 0 gives a classic straight grid; EDGEGEN_IRREGULAR gives an irregular one.
+// Pieces never extend more than EDGEGEN_TABREACH + cornerjitter cells outside their cell.
+int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, float cornerjitter);
 void edgegen_free(EdgeGen * eg);
 // Closed outline of piece (col, row), clockwise (y down), in coordinates where the
 // piece's cell spans (ox, oy) to (ox + cell, oy + cell). xy must hold EDGEGEN_MAXPOINTS

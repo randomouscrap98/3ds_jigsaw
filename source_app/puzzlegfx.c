@@ -23,6 +23,7 @@ typedef struct {
   u64 srcmtime;
   u32 target;
   u32 seed;
+  u32 style;
   Layout layout;
   u16 previeww, previewh;
 } PuzzleCacheHeader;
@@ -104,7 +105,8 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, const char * cachepath, const Puz
   int result = 1;
   if(fread(&h, sizeof(h), 1, f) != 1) goto done;
   if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.srcsize != want->srcsize ||
-     h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed) goto done;
+     h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed ||
+     h.style != want->style) goto done;
   if(h.layout.pages > PGFX_MAXPAGES) goto done;
   pg->layout = h.layout;
   if(puzzlegfx_alloc(pg, err, errlen)) { result = 2; goto done; }
@@ -161,7 +163,8 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
     PGFX_ERR("Can't decode image: %s", stbi_failure_reason());
     return 1;
   }
-  if(layout_compute(&pg->layout, sw, sh, h->target, PGFX_MAXSIDE, PGFX_MAXPAGES)) {
+  float jitter = h->style == PGFX_STYLE_IRREGULAR ? EDGEGEN_IRREGULAR : 0;
+  if(layout_compute(&pg->layout, sw, sh, h->target, PGFX_MAXSIDE, PGFX_MAXPAGES, EDGEGEN_TABREACH + jitter)) {
     PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->target);
     goto done;
   }
@@ -180,7 +183,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
   for(int i = 0; i < pg->npages; i++) memset(pg->pages[i].data, 0, pg->pages[i].size);
   memset(pg->preview.data, 0, pg->preview.size);
 
-  if(edgegen_init(&eg, l->cols, l->rows, h->seed) || piecebake_init(&pb, l->tile)) {
+  if(edgegen_init(&eg, l->cols, l->rows, h->seed, jitter) || piecebake_init(&pb, l->tile)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }
@@ -236,7 +239,7 @@ done:
 }
 
 int puzzlegfx_load(PuzzleGfx * pg, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, progress_fn cb, void * udata, char * err, size_t errlen) {
+    uint32_t target, uint32_t seed, uint8_t style, progress_fn cb, void * udata, char * err, size_t errlen) {
   puzzlegfx_zero(pg);
   err[0] = 0;
   PuzzleCacheHeader h;
@@ -245,6 +248,7 @@ int puzzlegfx_load(PuzzleGfx * pg, const char * imagepath, const char * cachepat
   h.version = PGFX_CACHE_VERSION;
   h.target = target;
   h.seed = seed;
+  h.style = style;
   puzzlegfx_srcinfo(imagepath, &h.srcsize, &h.srcmtime);
   if(h.srcsize == 0) {
     PGFX_ERR("Can't find image %s", imagepath);

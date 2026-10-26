@@ -23,7 +23,7 @@ void test_layout(void) {
   for(int s = 0; s < 3; s++) {
     for(int t = 0; t < 4; t++) {
       Layout l;
-      CHECK(layout_compute(&l, sizes[s][0], sizes[s][1], targets[t], 1024, 2) == 0);
+      CHECK(layout_compute(&l, sizes[s][0], sizes[s][1], targets[t], 1024, 2, EDGEGEN_TABREACH) == 0);
       CHECK(l.pages <= 2);
       CHECK(l.width <= 1024 && l.height <= 1024);
       CHECK(l.width <= l.cropw + 0.01f && l.height <= l.croph + 0.01f);  // never upscale
@@ -38,14 +38,14 @@ void test_layout(void) {
     }
   }
   Layout l;
-  CHECK(layout_compute(&l, 0, 100, 48, 1024, 2) != 0);
-  CHECK(layout_compute(&l, 20, 20, 500, 1024, 2) != 0);  // too small to cut that many
+  CHECK(layout_compute(&l, 0, 100, 48, 1024, 2, EDGEGEN_TABREACH) != 0);
+  CHECK(layout_compute(&l, 20, 20, 500, 1024, 2, EDGEGEN_TABREACH) != 0);  // too small to cut that many
 }
 
 void test_edgegen(void) {
   EdgeGen eg, eg2;
-  CHECK(edgegen_init(&eg, 5, 4, 42) == 0);
-  CHECK(edgegen_init(&eg2, 5, 4, 42) == 0);
+  CHECK(edgegen_init(&eg, 5, 4, 42, 0) == 0);
+  CHECK(edgegen_init(&eg2, 5, 4, 42, 0) == 0);
   CHECK(memcmp(eg.h, eg2.h, sizeof(EdgeTab) * 5 * 3) == 0);
   edgegen_free(&eg2);
 
@@ -106,6 +106,51 @@ void test_edgegen(void) {
     }
   }
   CHECK(matched >= 3 * EDGEGEN_SEGMENTS - 1);
+  edgegen_free(&eg);
+}
+
+// Irregular cut: same guarantees as classic, plus corners actually move and the border
+// stays straight
+void test_edgegen_irregular(void) {
+  const uint16_t cols = 7, rows = 5;
+  const float cell = 40, jitter = EDGEGEN_IRREGULAR;
+  EdgeGen eg;
+  CHECK(edgegen_init(&eg, cols, rows, 99, jitter) == 0);
+  int moved = 0;
+  for(int i = 0; i < (cols + 1) * (rows + 1); i++) if(eg.corners[i * 2] != 0) moved++;
+  CHECK(moved > (cols - 1) * (rows + 1) / 2);
+  float a[EDGEGEN_MAXPOINTS * 2], b[EDGEGEN_MAXPOINTS * 2];
+  int inbounds = 1, border = 1, clockwise = 1;
+  float reach = (EDGEGEN_TABREACH + jitter) * cell;
+  for(int r = 0; r < rows; r++) for(int c = 0; c < cols; c++) {
+    int n = edgegen_outline(&eg, c, r, cell, c * cell, r * cell, a);
+    float area = 0;
+    for(int i = 0; i < n; i++) {
+      float x = a[i*2], y = a[i*2+1];
+      if(x < c * cell - reach || x > (c + 1) * cell + reach || y < r * cell - reach || y > (r + 1) * cell + reach) inbounds = 0;
+      // Nothing may poke outside the puzzle rectangle
+      if(x < -1e-3f || y < -1e-3f || x > cols * cell + 1e-3f || y > rows * cell + 1e-3f) border = 0;
+      int j = (i + 1) % n;
+      area += a[i*2] * a[j*2+1] - a[j*2] * a[i*2+1];
+    }
+    if(area <= 0) clockwise = 0;
+  }
+  CHECK(inbounds);
+  CHECK(border);
+  CHECK(clockwise);
+  // Shared edges: every point of (2,2) that lies near (3,2) must appear in (3,2), and the same
+  // for (2,2) vs (2,3). Points are compared in world space.
+  int pairs[2][2] = { { 3, 2 }, { 2, 3 } };
+  for(int k = 0; k < 2; k++) {
+    int na = edgegen_outline(&eg, 2, 2, cell, 2 * cell, 2 * cell, a);
+    int nb = edgegen_outline(&eg, pairs[k][0], pairs[k][1], cell, pairs[k][0] * cell, pairs[k][1] * cell, b);
+    int shared = 0;
+    for(int i = 0; i < na; i++) for(int j = 0; j < nb; j++) {
+      if(fabsf(a[i*2] - b[j*2]) < 1e-3f && fabsf(a[i*2+1] - b[j*2+1]) < 1e-3f) { shared++; break; }
+    }
+    // A full tab edge has 3 * SEGMENTS + 1 points including both corners
+    CHECK(shared == 3 * EDGEGEN_SEGMENTS + 1);
+  }
   edgegen_free(&eg);
 }
 
@@ -173,17 +218,18 @@ void test_piecebake(void) {
 
 // Not a check: renders a whole small puzzle, pieces pulled slightly apart, to a PPM
 // so the shapes can be looked at.
-void test_dump_cut(const char * path) {
+void test_dump_cut(const char * path, int irregular) {
   const int cols = 6, rows = 4;
+  float jitter = irregular ? EDGEGEN_IRREGULAR : 0;
   Layout l;
-  layout_compute(&l, 600, 400, cols * rows, 1024, 2);
+  layout_compute(&l, 600, 400, cols * rows, 1024, 2, EDGEGEN_TABREACH + jitter);
   uint8_t * img = malloc(l.width * l.height * 3);
   for(uint32_t y = 0; y < l.height; y++) for(uint32_t x = 0; x < l.width; x++) {
     uint8_t * p = img + (y * l.width + x) * 3;
     p[0] = x * 255 / l.width; p[1] = y * 255 / l.height; p[2] = ((x / 20 + y / 20) & 1) ? 200 : 90;
   }
   EdgeGen eg;
-  edgegen_init(&eg, l.cols, l.rows, 7);
+  edgegen_init(&eg, l.cols, l.rows, 7, jitter);
   PieceBaker pb;
   piecebake_init(&pb, l.tile);
   uint32_t * tile = malloc(sizeof(uint32_t) * l.tile * l.tile);

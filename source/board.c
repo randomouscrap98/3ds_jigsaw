@@ -64,7 +64,7 @@ static void board_place_single(Board * b, uint16_t piece, float cx, float cy, ui
   g->y = cy - ry;
 }
 
-void board_scatter(Board * b, uint32_t seed) {
+void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h) {
   Rng rng;
   rng_init(&rng, seed);
   // Reset to one group per piece
@@ -75,11 +75,11 @@ void board_scatter(Board * b, uint32_t seed) {
   }
   b->ngroups = b->count;
   // Lay a grid of slots over the table with at least one slot per piece
-  float slot = sqrtf(b->width * b->height / b->count);
+  float slot = sqrtf(w * h / b->count);
   uint32_t scols, srows;
   for(;;) {
-    scols = (uint32_t)(b->width / slot);
-    srows = (uint32_t)(b->height / slot);
+    scols = (uint32_t)(w / slot);
+    srows = (uint32_t)(h / slot);
     if(scols * srows >= b->count) break;
     slot *= 0.95f;
   }
@@ -88,7 +88,7 @@ void board_scatter(Board * b, uint32_t seed) {
   if(!slots) {
     // Degenerate fallback: stack everything in the middle
     for(uint32_t i = 0; i < b->count; i++) {
-      board_place_single(b, i, b->width / 2, b->height / 2, rng_below(&rng, 4));
+      board_place_single(b, i, x + w / 2, y + h / 2, rng_below(&rng, 4));
     }
   } else {
     for(uint32_t i = 0; i < nslots; i++) slots[i] = i;
@@ -96,11 +96,12 @@ void board_scatter(Board * b, uint32_t seed) {
       uint32_t j = rng_below(&rng, i + 1);
       uint32_t t = slots[i]; slots[i] = slots[j]; slots[j] = t;
     }
-    // Pieces with tabs are ~1.7 cells across; jitter within whatever slack is left
+    // Pieces with tabs are ~1.7 cells across; jitter within whatever slack is left, but
+    // always a little so it doesn't look like a grid
     float slack = (slot - b->cell * 1.7f) / 2;
-    if(slack < 0) slack = 0;
-    float offx = (b->width - scols * slot) / 2;
-    float offy = (b->height - srows * slot) / 2;
+    if(slack < slot * 0.08f) slack = slot * 0.08f;
+    float offx = x + (w - scols * slot) / 2;
+    float offy = y + (h - srows * slot) / 2;
     for(uint32_t i = 0; i < b->count; i++) {
       uint32_t s = slots[i];
       float cx = offx + ((s % scols) + 0.5f) * slot + rng_range(&rng, -slack, slack);

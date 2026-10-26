@@ -41,8 +41,9 @@ typedef struct {
 // with rotation 0. Call board_scatter afterwards to make it an actual puzzle.
 int board_init(Board * b, uint16_t cols, uint16_t rows, float cell, float width, float height);
 void board_free(Board * b);
-// Throw all pieces into their own groups at random spots/rotations across the table
-void board_scatter(Board * b, uint32_t seed);
+// Throw all pieces into their own groups at random spots/rotations, spread evenly over
+// the region (x, y, w, h) of the table
+void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h);
 // Topmost group under world point, or -1 if none. Does not change draw order.
 int32_t board_pick(Board * b, float x, float y);
 // Move group to the top of the draw order

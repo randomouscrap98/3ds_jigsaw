@@ -41,13 +41,16 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   char name[TUIMENU_MAXNAME];
   if(e->hassave) {
     if(e->save.groups <= 1) {
-      snprintf(name, sizeof(name), "View finished puzzle (%lu pieces)", (unsigned long)e->save.pieces);
+      snprintf(name, sizeof(name), "View finished puzzle");
     } else {
-      snprintf(name, sizeof(name), "Continue (%lu pieces, %lu groups left)",
-          (unsigned long)e->save.pieces, (unsigned long)e->save.groups);
+      snprintf(name, sizeof(name), "Continue: %lu groups left", (unsigned long)e->save.groups);
     }
     TUIMITEM_BASIC(&pm->options, err, name, 0);
     pm->optact[n++] = PMENU_ACT_CONTINUE;
+  }
+  if(!err) {
+    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular");
+    pm->optact[n++] = PMENU_ACT_NONE;
   }
   for(int i = 0; i < PMENU_NUMCOUNTS && !err; i++) {
     snprintf(name, sizeof(name), "New: %lu pieces", (unsigned long)pmenu_counts[i]);
@@ -126,7 +129,7 @@ int puzzlemenu_init(PuzzleMenu * pm) {
   tui_menu_init(&pm->options, PMENU_HEIGHT);
   tui_menu_init(&pm->confirm, PMENU_HEIGHT);
   pm->root.valuewidth = 0;
-  pm->options.valuewidth = 0;
+  pm->options.valuewidth = PMENU_VALUEWIDTH;
   pm->confirm.valuewidth = 0;
   int err = 0;
   TUIMITEM_BASIC(&pm->confirm, err, "No, keep my save", 1);
@@ -163,9 +166,17 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   tui_menu_action act = { .action = TUIMENU_ACTION_NONE, .offset = 0 };
   if(repeat & KEY_DUP) act = (tui_menu_action) { .action = TUIMENU_ACTION_MOVE, .offset = -1 };
   else if(repeat & KEY_DDOWN) act = (tui_menu_action) { .action = TUIMENU_ACTION_MOVE, .offset = 1 };
-  else if(repeat & KEY_DLEFT) act = (tui_menu_action) { .action = TUIMENU_ACTION_MOVE, .offset = -PMENU_HEIGHT };
-  else if(repeat & KEY_DRIGHT) act = (tui_menu_action) { .action = TUIMENU_ACTION_MOVE, .offset = PMENU_HEIGHT };
-  else if(down & KEY_A) act = (tui_menu_action) { .action = TUIMENU_ACTION_ACCEPT, .offset = 0 };
+  else if(repeat & KEY_L) act = (tui_menu_action) { .action = TUIMENU_ACTION_MOVE, .offset = -PMENU_HEIGHT };
+  else if(repeat & KEY_R) act = (tui_menu_action) { .action = TUIMENU_ACTION_MOVE, .offset = PMENU_HEIGHT };
+  else if(repeat & KEY_DLEFT) act = (tui_menu_action) { .action = TUIMENU_ACTION_VALUE, .offset = -1 };
+  else if(repeat & KEY_DRIGHT) act = (tui_menu_action) { .action = TUIMENU_ACTION_VALUE, .offset = 1 };
+  else if(down & KEY_A) {
+    // A on an option value (piece style) just flips it, like Right would
+    tui_menu * m = puzzlemenu_active(pm);
+    int isenum = m->current >= 0 && m->current < m->numitems && m->items[m->current].type == TUIMENU_TYPE_ENUM;
+    act = isenum ? (tui_menu_action) { .action = TUIMENU_ACTION_VALUE, .offset = 1 } :
+                   (tui_menu_action) { .action = TUIMENU_ACTION_ACCEPT, .offset = 0 };
+  }
   else if(down & KEY_B) {
     // Cancel at the root would "exit" the menu; there's nothing above it, so ignore
     if(puzzlemenu_active(pm) != &pm->root) act = TUIMENU_CANCELACTION;
@@ -175,7 +186,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     return choice;
   }
   if(act.action == TUIMENU_ACTION_NONE) return choice;
-  if(act.action != TUIMENU_ACTION_MOVE) pm->status[0] = 0;
+  if(act.action == TUIMENU_ACTION_ACCEPT || act.action == TUIMENU_ACTION_CANCEL) pm->status[0] = 0;
 
   tui_menu_result r = tui_menu_run(&pm->root, act);
   if(!(act.action & TUIMENU_ACTION_ACCEPT) || r.cancelled || r.result < 0) return choice;
@@ -185,9 +196,10 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   int opt = pm->options.current;
   // Accepted inside options (no save, so no confirm) or "Yes" inside confirm
   if(active == &pm->options || (active == &pm->confirm && pm->confirm.current == 1)) {
-    if(opt < 0 || opt >= pm->options.numitems) return choice;
+    if(opt < 0 || opt >= pm->options.numitems || pm->optact[opt] == PMENU_ACT_NONE) return choice;
     choice.name = pm->entries[sel].name;
     choice.target = pm->optact[opt];
+    choice.style = pm->style;
     tui_menu_reset(&pm->root);
     // Keep the cursor on this puzzle when we come back
     tui_menu_run(&pm->root, (tui_menu_action) { .action = TUIMENU_ACTION_POSITION, .offset = sel });
@@ -221,7 +233,8 @@ void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td) {
   textdraw_center(td, 160, 20, 0.9f, white, "3DS Jigsaw");
   textdraw_print(td, 12, 70, 0.5f, dim, "Put .jpg/.png images in");
   textdraw_print(td, 12, 86, 0.5f, white, "  sdmc:/3ds/jigsaw/puzzles/");
-  textdraw_print(td, 12, 116, 0.5f, dim, "D-Pad: move   A: select   B: back");
-  textdraw_print(td, 12, 132, 0.5f, dim, "START: quit");
+  textdraw_print(td, 12, 116, 0.5f, dim, "Up/Down: move   A: select   B: back");
+  textdraw_print(td, 12, 132, 0.5f, dim, "Left/Right: change option   L/R: page");
+  textdraw_print(td, 12, 148, 0.5f, dim, "START: quit");
   if(pm->status[0]) textdraw_print(td, 12, 180, 0.5f, warn, "%s", pm->status);
 }

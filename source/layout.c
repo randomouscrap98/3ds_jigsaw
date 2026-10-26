@@ -23,9 +23,9 @@ void layout_grid(uint32_t srcw, uint32_t srch, uint32_t target, uint16_t * cols,
   }
 }
 
-static void layout_pack(Layout * l, uint16_t cell) {
+static void layout_pack(Layout * l, uint16_t cell, float reach) {
   l->cell = cell;
-  l->margin = LAYOUT_MARGIN(cell);
+  l->margin = LAYOUT_MARGIN(cell, reach);
   l->tile = cell + 2 * l->margin;
   l->perrow = LAYOUT_PAGESIZE / l->tile;
   l->perpage = l->perrow * l->perrow;
@@ -34,7 +34,7 @@ static void layout_pack(Layout * l, uint16_t cell) {
 }
 
 int layout_compute(Layout * l, uint32_t srcw, uint32_t srch, uint32_t target,
-    uint32_t maxside, uint32_t maxpages) {
+    uint32_t maxside, uint32_t maxpages, float reach) {
   if(srcw == 0 || srch == 0 || target == 0) return 1;
   layout_grid(srcw, srch, target, &l->cols, &l->rows);
   // Centered crop to the grid's exact aspect
@@ -52,7 +52,7 @@ int layout_compute(Layout * l, uint32_t srcw, uint32_t srch, uint32_t target,
   float fc = fw / l->cols < fh / l->rows ? fw / l->cols : fh / l->rows;
   int cell = (int)floorf(fc);
   for(; cell >= LAYOUT_MINCELL; cell--) {
-    layout_pack(l, cell);
+    layout_pack(l, cell, reach);
     if(l->perrow > 0 && l->pages <= maxpages) break;
   }
   if(cell < LAYOUT_MINCELL) return 2;
