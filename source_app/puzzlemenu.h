@@ -51,6 +51,9 @@ void puzzlemenu_free(PuzzleMenu * pm);
 // Rescan the puzzles folder and saves; keeps the cursor where it was
 int puzzlemenu_refresh(PuzzleMenu * pm);
 void puzzlemenu_setstatus(PuzzleMenu * pm, const char * msg);
+// Wait for the thumbnail worker to finish (its decode memory is needed to load a game).
+// Can take a second or two on an Old 3DS, so show something first.
+void puzzlemenu_waitidle(PuzzleMenu * pm);
 PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat);
 void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td);
 void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td);

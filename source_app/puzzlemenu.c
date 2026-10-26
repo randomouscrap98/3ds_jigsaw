@@ -164,6 +164,10 @@ void puzzlemenu_free(PuzzleMenu * pm) {
   pm->entries = NULL;
 }
 
+void puzzlemenu_waitidle(PuzzleMenu * pm) {
+  thumb_clear(&pm->thumb, 1);
+}
+
 void puzzlemenu_setstatus(PuzzleMenu * pm, const char * msg) {
   snprintf(pm->status, sizeof(pm->status), "%s", msg ? msg : "");
 }
@@ -220,7 +224,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     choice.name = pm->entries[sel].name;
     choice.target = pm->optact[opt];
     choice.style = pm->style;
-    thumb_clear(&pm->thumb, 1);  // Its decode memory must be free before the game loads
+    thumb_clear(&pm->thumb, 0);  // Caller waits (puzzlemenu_waitidle) once Loading is showing
     tui_menu_reset(&pm->root);
     // Keep the cursor on this puzzle when we come back
     tui_menu_run(&pm->root, (tui_menu_action) { .action = TUIMENU_ACTION_POSITION, .offset = sel });
