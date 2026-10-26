@@ -39,6 +39,9 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   tui_menu_clear(&pm->options);
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
+  char path[STORAGE_MAXPATH];
+  storage_puzzlepath(e->name, path);
+  thumb_request(&pm->thumb, path);
   if(e->hassave) {
     if(e->save.groups <= 1) {
       snprintf(name, sizeof(name), "View finished puzzle");
@@ -131,6 +134,7 @@ int puzzlemenu_init(PuzzleMenu * pm) {
   pm->root.valuewidth = 0;
   pm->options.valuewidth = PMENU_VALUEWIDTH;
   pm->confirm.valuewidth = 0;
+  thumb_init(&pm->thumb);  // On failure there's just no picture
   int err = 0;
   TUIMITEM_BASIC(&pm->confirm, err, "No, keep my save", 1);
   if(!err) TUIMITEM_BASIC(&pm->confirm, err, "Yes, erase it and start over", 0);
@@ -139,6 +143,7 @@ int puzzlemenu_init(PuzzleMenu * pm) {
 }
 
 void puzzlemenu_free(PuzzleMenu * pm) {
+  thumb_free(&pm->thumb);
   tui_menu_free(&pm->root);
   tui_menu_free(&pm->options);
   tui_menu_free(&pm->confirm);
@@ -189,6 +194,8 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   if(act.action == TUIMENU_ACTION_ACCEPT || act.action == TUIMENU_ACTION_CANCEL) pm->status[0] = 0;
 
   tui_menu_result r = tui_menu_run(&pm->root, act);
+  // Backed out to the list: the picture goes away
+  if(pm->thumb.state != THUMB_NONE && puzzlemenu_active(pm) == &pm->root) thumb_clear(&pm->thumb, 0);
   if(!(act.action & TUIMENU_ACTION_ACCEPT) || r.cancelled || r.result < 0) return choice;
   tui_menu * active = puzzlemenu_active(pm);
   int sel = pm->root.current;
@@ -200,6 +207,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     choice.name = pm->entries[sel].name;
     choice.target = pm->optact[opt];
     choice.style = pm->style;
+    thumb_clear(&pm->thumb, 1);  // Its decode memory must be free before the game loads
     tui_menu_reset(&pm->root);
     // Keep the cursor on this puzzle when we come back
     tui_menu_run(&pm->root, (tui_menu_action) { .action = TUIMENU_ACTION_POSITION, .offset = sel });
@@ -230,6 +238,20 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
 void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td) {
   const u32 white = C2D_Color32(220, 220, 220, 255), dim = C2D_Color32(140, 140, 140, 255);
   const u32 warn = C2D_Color32(255, 140, 120, 255);
+  int ts = thumb_poll(&pm->thumb);
+  if(ts != THUMB_NONE) {
+    // Picture fills the screen above a strip of controls. Nothing shows while it loads.
+    if(ts == THUMB_READY) {
+      Tex3DS_SubTexture * sub = &pm->thumb.sub;
+      C2D_DrawImageAt(thumb_image(&pm->thumb), (320 - sub->width) / 2,
+          (PMENU_THUMBH - sub->height) / 2, 0.5f, NULL, 1, 1);
+    } else if(ts == THUMB_FAILED) {
+      textdraw_center(td, 160, PMENU_THUMBH / 2 - 8, 0.6f, dim, "Can't preview");
+    }
+    textdraw_print(td, 8, PMENU_THUMBH + 4, 0.5f, dim, "Up/Down: move   A: select   B: back");
+    textdraw_print(td, 8, PMENU_THUMBH + 20, 0.5f, dim, "Left/Right: change option");
+    return;
+  }
   textdraw_center(td, 160, 20, 0.9f, white, "3DS Jigsaw");
   textdraw_print(td, 12, 70, 0.5f, dim, "Put .jpg/.png images in");
   textdraw_print(td, 12, 86, 0.5f, white, "  sdmc:/3ds/jigsaw/puzzles/");

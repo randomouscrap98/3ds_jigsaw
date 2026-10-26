@@ -6,6 +6,7 @@
 #include "littlemenu.h"
 #include "storage.h"
 #include "textdraw.h"
+#include "thumb.h"
 
 #define PMENU_HEIGHT 12
 #define PMENU_WIDTH 46
@@ -14,6 +15,7 @@
 #define PMENU_ACT_CONTINUE 0
 #define PMENU_ACT_NONE 0xFFFFFFFF
 #define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
+#define PMENU_THUMBH THUMB_MAXH  // Bottom screen height used by the picture; controls below
 
 typedef struct {
   char name[PMENU_MAXNAME];
@@ -39,6 +41,7 @@ typedef struct {
   uint32_t optact[PMENU_NUMCOUNTS + 2];  // Action for each options item
   tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
   char status[128];                      // Shown under the menu (errors etc.)
+  Thumb thumb;                           // Picture of the puzzle being set up (bottom screen)
 } PuzzleMenu;
 
 int puzzlemenu_init(PuzzleMenu * pm);
