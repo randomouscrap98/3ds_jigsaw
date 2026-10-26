@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <stdint.h>
 
 extern int test_failures;
 extern int test_checks;
@@ -23,6 +24,6 @@ void test_imgscale(void);
 void test_swizzle(void);
 void test_piecebake(void);
 void test_littlemenu(void);
-void test_dump_cut(const char * path, int irregular);
+void test_dump_cut(const char * path, uint8_t style);  // EDGEGEN_STYLE_*
 
 #endif

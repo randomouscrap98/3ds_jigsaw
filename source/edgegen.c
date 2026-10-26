@@ -7,22 +7,90 @@
 
 // Tab layout based on the well known bezier jigsaw shape (as in draradech's generator)
 #define EDGEGEN_TABSIZE 0.1f
-#define EDGEGEN_TABJITTER 0.012f
-#define EDGEGEN_JITTER 0.04f
 
-static void edgegen_random(Rng * r, EdgeTab * t) {
-  t->size = EDGEGEN_TABSIZE + rng_range(r, -EDGEGEN_TABJITTER, EDGEGEN_TABJITTER);
-  t->a = rng_range(r, -EDGEGEN_JITTER, EDGEGEN_JITTER);
-  t->b = rng_range(r, -EDGEGEN_JITTER, EDGEGEN_JITTER);
-  t->c = rng_range(r, -EDGEGEN_JITTER, EDGEGEN_JITTER);
-  t->d = rng_range(r, -EDGEGEN_JITTER, EDGEGEN_JITTER);
-  t->e = rng_range(r, -EDGEGEN_JITTER, EDGEGEN_JITTER);
+static const EdgeStyle edgegen_styles[EDGEGEN_STYLES] = {
+  { .corner = 0.0f, .tabsize = 0.012f, .shape = 0.04f, .reach = 0.35f },  // Classic
+  { .corner = 0.1f, .tabsize = 0.012f, .shape = 0.04f, .reach = 0.45f },  // Irregular
+  { .corner = 0.2f, .tabsize = 0.025f, .shape = 0.06f, .reach = 0.55f },  // Wild
+};
+
+const EdgeStyle * edgegen_style(uint8_t style) {
+  return edgegen_styles + (style < EDGEGEN_STYLES ? style : EDGEGEN_STYLE_CLASSIC);
+}
+
+static void edgegen_random(Rng * r, const EdgeStyle * st, EdgeTab * t) {
+  t->size = EDGEGEN_TABSIZE + rng_range(r, -st->tabsize, st->tabsize);
+  t->a = rng_range(r, -st->shape, st->shape);
+  t->b = rng_range(r, -st->shape, st->shape);
+  t->c = rng_range(r, -st->shape, st->shape);
+  t->d = rng_range(r, -st->shape, st->shape);
+  t->e = rng_range(r, -st->shape, st->shape);
   t->flip = (rng_next(r) & 0x100) ? 1 : -1;
 }
 
-int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, float cornerjitter) {
+// Jitter the inner corners of cell (col, row); border corners only slide along the border
+static void edgegen_corners(EdgeGen * eg, Rng * r, uint16_t col, uint16_t row) {
+  for(int k = 0; k < 4; k++) {
+    uint16_t x = col + (k & 1), y = row + (k >> 1);
+    float * c = eg->corners + 2 * ((size_t)y * (eg->cols + 1) + x);
+    if(x > 0 && x < eg->cols) c[0] = rng_range(r, -eg->style.corner, eg->style.corner);
+    if(y > 0 && y < eg->rows) c[1] = rng_range(r, -eg->style.corner, eg->style.corner);
+  }
+}
+
+// New random edges and corners for one piece (neighbours share them, so they change too)
+static void edgegen_reroll(EdgeGen * eg, uint32_t seed, uint16_t col, uint16_t row, int pass) {
+  uint16_t cols = eg->cols, rows = eg->rows;
+  Rng r;
+  rng_init(&r, seed ^ ((uint32_t)(row * cols + col) * 2654435761u) ^ ((uint32_t)(pass + 1) * 0x9E3779B9u));
+  if(row > 0) edgegen_random(&r, &eg->style, eg->h + (row - 1) * cols + col);
+  if(row + 1 < rows) edgegen_random(&r, &eg->style, eg->h + row * cols + col);
+  if(col > 0) edgegen_random(&r, &eg->style, eg->v + row * (cols - 1) + col - 1);
+  if(col + 1 < cols) edgegen_random(&r, &eg->style, eg->v + row * (cols - 1) + col);
+  if(eg->style.corner > 0) edgegen_corners(eg, &r, col, row);
+}
+
+// Check every piece; reroll the bad ones and recheck around them until all pass.
+// Returns 0 if everything passed.
+static int edgegen_validate(EdgeGen * eg, uint32_t seed) {
+  uint16_t cols = eg->cols, rows = eg->rows;
+  uint8_t * check = malloc((size_t)cols * rows);
+  if(!check) return 1;
+  memset(check, 1, (size_t)cols * rows);
+  int result = 1;
+  for(int pass = 0; pass < EDGEGEN_MAXPASSES; pass++) {
+    // Pieces rerolled this pass; their neighbours (incl. diagonal, via corners) need a recheck
+    int any = 0;
+    for(uint16_t row = 0; row < rows; row++) {
+      for(uint16_t col = 0; col < cols; col++) {
+        uint8_t * c = check + row * cols + col;
+        if(!(*c & 1)) continue;
+        *c &= ~1;
+        if(edgegen_piece_ok(eg, col, row)) continue;
+        edgegen_reroll(eg, seed, col, row, pass);
+        any = 1;
+        for(int dy = -1; dy <= 1; dy++) {
+          for(int dx = -1; dx <= 1; dx++) {
+            int x = col + dx, y = row + dy;
+            if(x >= 0 && y >= 0 && x < cols && y < rows) check[y * cols + x] |= 2;
+          }
+        }
+      }
+    }
+    if(!any) {
+      result = 0;
+      break;
+    }
+    for(size_t i = 0; i < (size_t)cols * rows; i++) check[i] = check[i] >> 1;
+  }
+  free(check);
+  return result;
+}
+
+int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, const EdgeStyle * style) {
   eg->cols = cols;
   eg->rows = rows;
+  eg->style = *style;
   size_t nh = rows > 1 ? (size_t)(rows - 1) * cols : 0;
   size_t nv = cols > 1 ? (size_t)rows * (cols - 1) : 0;
   size_t nc = (size_t)(cols + 1) * (rows + 1);
@@ -35,18 +103,21 @@ int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, floa
   }
   Rng r;
   rng_init(&r, seed);
-  for(size_t i = 0; i < nh; i++) edgegen_random(&r, eg->h + i);
-  for(size_t i = 0; i < nv; i++) edgegen_random(&r, eg->v + i);
+  for(size_t i = 0; i < nh; i++) edgegen_random(&r, style, eg->h + i);
+  for(size_t i = 0; i < nv; i++) edgegen_random(&r, style, eg->v + i);
   // Corners come last so a classic cut (no jitter) is identical to before they existed
-  for(uint16_t y = 0; y <= rows; y++) {
-    for(uint16_t x = 0; x <= cols; x++) {
-      float * c = eg->corners + 2 * ((size_t)y * (cols + 1) + x);
-      c[0] = c[1] = 0;
-      if(cornerjitter <= 0) continue;
-      if(x > 0 && x < cols) c[0] = rng_range(&r, -cornerjitter, cornerjitter);
-      if(y > 0 && y < rows) c[1] = rng_range(&r, -cornerjitter, cornerjitter);
+  memset(eg->corners, 0, sizeof(float) * 2 * nc);
+  if(style->corner > 0) {
+    for(uint16_t y = 0; y <= rows; y++) {
+      for(uint16_t x = 0; x <= cols; x++) {
+        float * c = eg->corners + 2 * ((size_t)y * (cols + 1) + x);
+        if(x > 0 && x < cols) c[0] = rng_range(&r, -style->corner, style->corner);
+        if(y > 0 && y < rows) c[1] = rng_range(&r, -style->corner, style->corner);
+      }
     }
   }
+  // Not converging would only leave an odd looking piece, so it isn't an error
+  edgegen_validate(eg, seed);
   return 0;
 }
 
@@ -139,4 +210,47 @@ int edgegen_outline(const EdgeGen * eg, uint16_t col, uint16_t row, float cell,
   n += edgegen_side(bottom, 1, 0, cell, c[2][0], c[2][1], c[3][0], c[3][1], xy + n * 2);
   n += edgegen_side(left, 1, 1, cell, c[0][0], c[0][1], c[2][0], c[2][1], xy + n * 2);
   return n;
+}
+
+static int edgegen_crosses(const float * a, const float * b, const float * c, const float * d) {
+  float d1 = (d[0] - c[0]) * (a[1] - c[1]) - (d[1] - c[1]) * (a[0] - c[0]);
+  float d2 = (d[0] - c[0]) * (b[1] - c[1]) - (d[1] - c[1]) * (b[0] - c[0]);
+  float d3 = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+  float d4 = (b[0] - a[0]) * (d[1] - a[1]) - (b[1] - a[1]) * (d[0] - a[0]);
+  return ((d1 > 0) != (d2 > 0)) && ((d3 > 0) != (d4 > 0));
+}
+
+// Squared distance from point p to segment ab
+static float edgegen_dist2(const float * p, const float * a, const float * b) {
+  float vx = b[0] - a[0], vy = b[1] - a[1], wx = p[0] - a[0], wy = p[1] - a[1];
+  float l = vx * vx + vy * vy;
+  float t = l > 0 ? (vx * wx + vy * wy) / l : 0;
+  if(t < 0) t = 0;
+  if(t > 1) t = 1;
+  float dx = wx - t * vx, dy = wy - t * vy;
+  return dx * dx + dy * dy;
+}
+
+int edgegen_piece_ok(const EdgeGen * eg, uint16_t col, uint16_t row) {
+  float xy[EDGEGEN_MAXPOINTS * 2];
+  int n = edgegen_outline(eg, col, row, 1.0f, 0, 0, xy);
+  const float lo = -eg->style.reach, hi = 1 + eg->style.reach, cl = EDGEGEN_CLEARANCE;
+  for(int i = 0; i < n; i++) {
+    if(xy[i * 2] < lo || xy[i * 2] > hi || xy[i * 2 + 1] < lo || xy[i * 2 + 1] > hi) return 0;
+  }
+  for(int i = 0; i < n; i++) {
+    const float * a = xy + i * 2, * b = xy + ((i + 1) % n) * 2;
+    for(int j = i + 2; j < n; j++) {
+      if(i == 0 && j == n - 1) continue;  // Shares a point with segment 0
+      const float * c = xy + j * 2, * d = xy + ((j + 1) % n) * 2;
+      // Far apart: can't cross or be too close
+      if(fminf(a[0], b[0]) > fmaxf(c[0], d[0]) + cl || fminf(c[0], d[0]) > fmaxf(a[0], b[0]) + cl ||
+         fminf(a[1], b[1]) > fmaxf(c[1], d[1]) + cl || fminf(c[1], d[1]) > fmaxf(a[1], b[1]) + cl) continue;
+      if(edgegen_crosses(a, b, c, d)) return 0;
+      int gap = j - i;
+      if(gap > n / 2) gap = n - gap;
+      if(gap > EDGEGEN_CLEARSKIP && edgegen_dist2(a, c, d) < cl * cl) return 0;
+    }
+  }
+  return 1;
 }

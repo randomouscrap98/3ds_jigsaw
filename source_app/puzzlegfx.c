@@ -131,8 +131,8 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
   if(cb) cb(udata, "Reading image", 0, 1);
   src = imageload_rgb(imagepath, &sw, &sh, err, errlen);
   if(!src) return 1;
-  float jitter = h->style == PGFX_STYLE_IRREGULAR ? EDGEGEN_IRREGULAR : 0;
-  if(layout_compute(&pg->layout, sw, sh, h->target, PGFX_MAXSIDE, PGFX_MAXPAGES, EDGEGEN_TABREACH + jitter)) {
+  const EdgeStyle * style = edgegen_style(h->style);
+  if(layout_compute(&pg->layout, sw, sh, h->target, PGFX_MAXSIDE, PGFX_MAXPAGES, style->reach)) {
     PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->target);
     goto done;
   }
@@ -151,7 +151,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
   for(int i = 0; i < pg->npages; i++) memset(pg->pages[i].data, 0, pg->pages[i].size);
   memset(pg->preview.data, 0, pg->preview.size);
 
-  if(edgegen_init(&eg, l->cols, l->rows, h->seed, jitter) || piecebake_init(&pb, l->tile)) {
+  if(edgegen_init(&eg, l->cols, l->rows, h->seed, style) || piecebake_init(&pb, l->tile)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }

@@ -1,4 +1,5 @@
 #include "test.h"
+#include "edgegen.h"
 
 #include <string.h>
 
@@ -9,7 +10,10 @@ int test_checks = 0;
 
 int main(int argc, char ** argv) {
   if(argc > 2 && !strcmp(argv[1], "dump")) {
-    test_dump_cut(argv[2], argc > 3 && !strcmp(argv[3], "irregular"));
+    uint8_t style = EDGEGEN_STYLE_CLASSIC;
+    if(argc > 3 && !strcmp(argv[3], "irregular")) style = EDGEGEN_STYLE_IRREGULAR;
+    if(argc > 3 && !strcmp(argv[3], "wild")) style = EDGEGEN_STYLE_WILD;
+    test_dump_cut(argv[2], style);
     return 0;
   }
   RUN(test_board);

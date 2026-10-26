@@ -62,7 +62,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     pm->optact[n++] = PMENU_ACT_CONTINUE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular");
+    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild");
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   for(int i = 0; i < PMENU_NUMCOUNTS && !err; i++) {

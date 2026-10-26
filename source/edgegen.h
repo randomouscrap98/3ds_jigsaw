@@ -21,22 +21,41 @@ typedef struct {
 //   corners: (cols + 1) x (rows + 1) grid corner offsets (dx, dy pairs, in cells).
 //     All zero for a classic straight grid; jittered for an irregular cut. Corners on the
 //     outer border only slide along it, so the puzzle stays a rectangle.
+//   style: how wild the cut is (see EdgeStyle)
+typedef struct {
+  float corner;     // Grid corner jitter (0 = straight grid)
+  float tabsize;    // Tab size jitter
+  float shape;      // Tab shape jitter (position, skew, edge wobble)
+  float reach;      // Pieces never stick out of their cell further than this (enforced)
+} EdgeStyle;
+
 typedef struct {
   EdgeTab * h;
   EdgeTab * v;
   float * corners;
   uint16_t cols, rows;
+  EdgeStyle style;
 } EdgeGen;
 
-// Tabs stick out at most this far (in cells) from their edge line
-#define EDGEGEN_TABREACH 0.35f
-// Corner jitter for irregular cuts, in cells (pass to edgegen_init / layout)
-#define EDGEGEN_IRREGULAR 0.1f
+#define EDGEGEN_STYLE_CLASSIC 0
+#define EDGEGEN_STYLE_IRREGULAR 1
+#define EDGEGEN_STYLE_WILD 2
+#define EDGEGEN_STYLES 3
 
-// cornerjitter = 0 gives a classic straight grid; EDGEGEN_IRREGULAR gives an irregular one.
-// Pieces never extend more than EDGEGEN_TABREACH + cornerjitter cells outside their cell.
-int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, float cornerjitter);
+// Every piece outline is checked after generation: it may not cross itself, come closer
+// than this (in cells) to another part of itself, or stick out past the style's reach.
+// Pieces that fail get their edges and corners rerolled (deterministically from the seed).
+#define EDGEGEN_CLEARANCE 0.06f
+#define EDGEGEN_CLEARSKIP 12    // Outline points this close along the outline aren't checked for clearance
+#define EDGEGEN_MAXPASSES 20
+
+// Settings for EDGEGEN_STYLE_* (unknown values give classic)
+const EdgeStyle * edgegen_style(uint8_t style);
+// The same seed and style always produce the same cut. Returns 0 on success.
+int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, const EdgeStyle * style);
 void edgegen_free(EdgeGen * eg);
+// 1 if the piece's outline passes the checks above
+int edgegen_piece_ok(const EdgeGen * eg, uint16_t col, uint16_t row);
 // Closed outline of piece (col, row), clockwise (y down), in coordinates where the
 // piece's cell spans (ox, oy) to (ox + cell, oy + cell). xy must hold EDGEGEN_MAXPOINTS
 // pairs. Returns number of points. Neighbouring pieces' outlines share edges exactly.
