@@ -72,8 +72,8 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
   for(int i = 0; i < pm->nentries && !err; i++) {
     PuzzleEntry * e = pm->entries + i;
     char name[TUIMENU_MAXNAME];
-    if(e->hassave && e->save.groups <= 1) snprintf(name, sizeof(name), "%s  [done]", e->name);
-    else if(e->hassave) snprintf(name, sizeof(name), "%s  [%lu left]", e->name, (unsigned long)e->save.groups);
+    if(e->hassave && e->save.groups <= 1) snprintf(name, sizeof(name), "%.100s  [done]", e->name);
+    else if(e->hassave) snprintf(name, sizeof(name), "%.100s  [%lu left]", e->name, (unsigned long)e->save.groups);
     else snprintf(name, sizeof(name), "%s", e->name);
     tui_menu_item_data * idata;
     TUIMITEM_SUBMENU(&pm->root, err, name, puzzlemenu_create_options,
