@@ -62,6 +62,18 @@ void test_dump_sfx(const char * dir) {
     snprintf(path, sizeof(path), "%s/merge_%c.wav", dir, 'a' + v);
     test_wav(path, buf, sfxgen_click(buf, max, rate, variants + v), rate, 0);
   }
+  // finish.wav: the last piece's click, then the chime 4 frames later (as main plays them)
+  int16_t * mix = calloc(max, sizeof(int16_t));
+  uint32_t nc = sfxgen_merge(buf, max, rate), off = rate * 4 / 60;
+  memcpy(mix, buf, nc * sizeof(int16_t));
+  uint32_t nm = sfxgen_complete(buf, max - off, rate);
+  for(uint32_t i = 0; i < nm; i++) {
+    int v = mix[off + i] + buf[i];
+    mix[off + i] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
+  }
+  snprintf(path, sizeof(path), "%s/finish.wav", dir);
+  test_wav(path, mix, off + nm, rate, 0);
+  free(mix);
   snprintf(path, sizeof(path), "%s/banner.wav", dir);
   test_wav(path, buf, sfxgen_complete(buf, max, 44100), 44100, 1);
   free(buf);

@@ -19,6 +19,7 @@
 #define MAIN_BG_BOTTOM C2D_Color32(24, 26, 30, 255)
 #define MAIN_REPEAT_DELAY 20
 #define MAIN_REPEAT_INTERVAL 5
+#define MAIN_CHIME_DELAY 4      // Frames between the last piece's click and the completion chime
 
 typedef enum { MODE_MENU, MODE_GAME } MainMode;
 
@@ -128,11 +129,12 @@ int main(int argc, char ** argv) {
       if(choice.name) app_start_game(&app, choice);
     } else {
       int ev = game_update(&app.game, &in);
-      if(ev & GAME_EV_COMPLETE) sfx_play(&app.sfx, SFX_COMPLETE);
-      else if(ev & GAME_EV_MERGE) sfx_play(&app.sfx, SFX_MERGE);
+      if(ev & GAME_EV_MERGE) sfx_play(&app.sfx, SFX_MERGE);
+      if(ev & GAME_EV_COMPLETE) sfx_play_later(&app.sfx, SFX_COMPLETE, MAIN_CHIME_DELAY);
       if(ev & GAME_EV_EXIT) app_end_game(&app);
     }
 
+    sfx_tick(&app.sfx);
     app_frame_begin(&app);
     C2D_SceneBegin(app.top);
     if(app.mode == MODE_MENU) puzzlemenu_render_top(&app.menu, &app.td);

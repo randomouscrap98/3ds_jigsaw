@@ -13,6 +13,7 @@ static u32 sfx_gen_complete(s16 * out, u32 max) {
 
 int sfx_init(Sfx * s) {
   memset(s, 0, sizeof(Sfx));
+  s->later = -1;
   if(R_FAILED(ndspInit())) return 1;
   s->ok = 1;
   ndspSetOutputMode(NDSP_OUTPUT_STEREO);
@@ -54,4 +55,15 @@ void sfx_play(Sfx * s, int id) {
   ndspChnWaveBufClear(id);
   s->wave[id].status = NDSP_WBUF_DONE;
   ndspChnWaveBufAdd(id, &s->wave[id]);
+}
+
+void sfx_play_later(Sfx * s, int id, int frames) {
+  s->later = id;
+  s->laterframes = frames;
+}
+
+void sfx_tick(Sfx * s) {
+  if(s->later < 0 || --s->laterframes > 0) return;
+  sfx_play(s, s->later);
+  s->later = -1;
 }

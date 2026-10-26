@@ -13,11 +13,17 @@
 typedef struct {
   s16 * data[SFX_COUNT];
   ndspWaveBuf wave[SFX_COUNT];
+  int later;          // Sound waiting to play (-1 = none) and frames until it does
+  int laterframes;
   u8 ok;
 } Sfx;
 
 int sfx_init(Sfx * s);
 void sfx_free(Sfx * s);
 void sfx_play(Sfx * s, int id);
+// Play id after this many calls to sfx_tick (one pending sound; a new one replaces it)
+void sfx_play_later(Sfx * s, int id, int frames);
+// Call once per frame
+void sfx_tick(Sfx * s);
 
 #endif
