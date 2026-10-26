@@ -14,7 +14,7 @@ haven't). Without it the game just runs silently.
 
 ## Controls
 
-| | |
+| Input | Action |
 |---|---|
 | Stylus on a piece | Drag it (and anything joined to it) |
 | L or R while dragging | Rotate clockwise |
@@ -41,12 +41,13 @@ puzzle it gets cut and cached, which takes a few seconds; after that it loads qu
   on an Old 3DS.
 - Phone photos may come out sideways, since the game ignores the EXIF rotation.
 
-`tools/resize_images.sh` fixes all of that on your PC: it shrinks every picture in a
-folder to 1024 pixels and applies any rotation. It needs ImageMagick, libvips or ffmpeg.
+The resize scripts in `tools/` fix all of that on your PC: they shrink every picture in a
+folder to 1024 pixels, apply any rotation, and put the results in a `resized` folder
+inside it.
 
-```sh
-tools/resize_images.sh ~/Pictures/puzzles      # writes ~/Pictures/puzzles/resized/
-```
+- Windows: drag the folder onto `resize_images.bat` (keep `resize_images.ps1` next to it).
+- Linux/macOS: `tools/resize_images.sh ~/Pictures/puzzles` (needs ImageMagick, libvips or
+  ffmpeg).
 
 The bundled paintings are copied to the puzzles folder on first launch. Delete any you
 don't want; they won't come back.
