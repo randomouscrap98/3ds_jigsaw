@@ -2,22 +2,22 @@
 
 #include <math.h>
 
-void stick_init(Stick * s, float range, float deadzone, float power) {
+void stick_init(Stick * s, float range, float deadzone, float power, float min) {
   s->range = range;
   s->deadzone = deadzone;
   s->power = power;
+  s->min = min;
 }
 
 int stick_read(const Stick * s, float dx, float dy, float * ox, float * oy) {
   float len = sqrtf(dx * dx + dy * dy);
-  float m = len / s->range;
-  if(m > 1) m = 1;
-  if(len <= 0 || m <= s->deadzone) {
+  if(len <= s->deadzone || s->range <= s->deadzone) {
     *ox = *oy = 0;
     return 0;
   }
-  // Remap so the curve starts from 0 right at the deadzone edge (no jump)
-  float t = powf((m - s->deadzone) / (1 - s->deadzone), s->power);
+  float m = (len - s->deadzone) / (s->range - s->deadzone);
+  if(m > 1) m = 1;
+  float t = s->min + (1 - s->min) * powf(m, s->power);
   *ox = dx / len * t;
   *oy = dy / len * t;
   return 1;

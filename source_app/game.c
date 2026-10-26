@@ -77,8 +77,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     g->dirty = 1;
   }
   camera_init(&g->cam, 320, 240, tw, th, GAME_MAXZOOM);
-  stick_init(&g->stick, 156, GAME_STICK_DEADZONE, GAME_STICK_CURVE);
-  stick_init(&g->cstick, GAME_CSTICK_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE);
+  stick_init(&g->stick, 156, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
+  stick_init(&g->cstick, GAME_CSTICK_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
   camera_set(&g->cam, tw / 2, th / 2, GAME_STARTCELL / l->cell);
   g->lastsave = osGetTime();
   if(!cont) game_save(g, 1);
