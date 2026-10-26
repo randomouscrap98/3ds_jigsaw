@@ -57,3 +57,13 @@ int imgscale_area(const uint8_t * src, uint32_t srcw, uint32_t srch, int comp,
   free(acc);
   return 0;
 }
+
+void imgscale_fit(uint32_t srcw, uint32_t srch, uint32_t maxw, uint32_t maxh, uint16_t * w, uint16_t * h) {
+  float s = (float)maxw / srcw;
+  if((float)maxh / srch < s) s = (float)maxh / srch;
+  if(s > 1) s = 1;
+  *w = srcw * s;
+  *h = srch * s;
+  if(*w < 1) *w = 1;
+  if(*h < 1) *h = 1;
+}

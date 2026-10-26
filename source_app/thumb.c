@@ -1,40 +1,26 @@
 #include "thumb.h"
+#include "imageload.h"
 #include "imgscale.h"
-#include "piecebake.h"
-#include "puzzlegfx.h"
 #include "swizzle.h"
+#include "texutil.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include "stb_image.h"  // Implementation is in puzzlegfx.c
-
 // Decode + shrink + swizzle into a new texture-sized buffer. NULL on any failure.
 static uint32_t * thumb_decode(const char * path, u16 * outw, u16 * outh) {
-  int sw, sh, sc;
-  if(!stbi_info(path, &sw, &sh, &sc) || (u64)sw * sh > PGFX_MAXSRCPIXELS) return NULL;
-  uint8_t * src = stbi_load(path, &sw, &sh, &sc, 3);
+  int sw, sh;
+  uint8_t * src = imageload_rgb(path, &sw, &sh, NULL, 0);
   if(!src) return NULL;
-  float s = (float)THUMB_MAXW / sw;
-  if((float)THUMB_MAXH / sh < s) s = (float)THUMB_MAXH / sh;
-  if(s > 1) s = 1;
-  u16 w = sw * s, h = sh * s;
-  if(w < 1) w = 1;
-  if(h < 1) h = 1;
+  u16 w, h;
+  imgscale_fit(sw, sh, THUMB_MAXW, THUMB_MAXH, &w, &h);
   uint8_t * small = malloc((size_t)w * h * 3);
-  uint32_t * px = malloc(sizeof(uint32_t) * w * h);
   uint32_t * tex = calloc(THUMB_TEXW * THUMB_TEXH, sizeof(uint32_t));
-  int ok = small && px && tex && !imgscale_area(src, sw, sh, 3, 0, 0, sw, sh, small, w, h);
-  stbi_image_free(src);
-  if(ok) {
-    for(uint32_t i = 0; i < (uint32_t)w * h; i++) {
-      px[i] = PIECEBAKE_RGBA(small[i * 3], small[i * 3 + 1], small[i * 3 + 2], 255);
-    }
-    swizzle_copy(tex, THUMB_TEXW, 0, 0, px, w, h, w);
-  }
+  int ok = small && tex && !imgscale_area(src, sw, sh, 3, 0, 0, sw, sh, small, w, h);
+  imageload_free(src);
+  if(ok) swizzle_copy_rgb(tex, THUMB_TEXW, 0, 0, small, w, h);
   free(small);
-  free(px);
   if(!ok) {
     free(tex);
     return NULL;
@@ -83,9 +69,8 @@ int thumb_init(Thumb * t) {
   memset(t, 0, sizeof(Thumb));
   LightLock_Init(&t->lock);
   LightEvent_Init(&t->wake, RESET_ONESHOT);
-  if(!C3D_TexInit(&t->tex, THUMB_TEXW, THUMB_TEXH, GPU_RGBA8)) return 1;
+  if(texutil_init(&t->tex, THUMB_TEXW, THUMB_TEXH, 0)) return 1;
   t->hastex = 1;
-  C3D_TexSetFilter(&t->tex, GPU_LINEAR, GPU_LINEAR);
   // Lower priority than the main thread (bigger number = lower), same core
   s32 prio = 0x30;
   svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
@@ -137,14 +122,7 @@ int thumb_poll(Thumb * t) {
     if(t->result) {
       memcpy(t->tex.data, t->result, t->tex.size);
       C3D_TexFlush(&t->tex);
-      t->sub = (Tex3DS_SubTexture) {
-        .width = t->resultw,
-        .height = t->resulth,
-        .left = 0,
-        .top = 1.0f,
-        .right = (float)t->resultw / THUMB_TEXW,
-        .bottom = 1.0f - (float)t->resulth / THUMB_TEXH,
-      };
+      t->sub = texutil_subtex(0, 0, t->resultw, t->resulth, THUMB_TEXW, THUMB_TEXH);
       free(t->result);
       t->result = NULL;
       t->state = THUMB_READY;

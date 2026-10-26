@@ -1,5 +1,4 @@
 #include "game.h"
-#include "boardsave.h"
 #include "savefile.h"
 #include "rng.h"
 #include "render.h"
@@ -9,29 +8,10 @@
 #include <string.h>
 #include <math.h>
 
-#define GAME_ERR(...) { snprintf(err, errlen, __VA_ARGS__); }
+#define GAME_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
 
 static uint32_t game_cutseed(const char * name, uint32_t target, uint8_t style) {
   return rng_hashstr(name) ^ (target * 2654435761u) ^ (style * 0x9E3779B9u);
-}
-
-static int game_loadsave(Game * g, uint32_t * target, uint8_t * style, uint8_t * table) {
-  char path[STORAGE_MAXPATH];
-  storage_savepath(g->name, path);
-  uint8_t * buf;
-  size_t len;
-  if(storage_readfile(path, &buf, &len)) return 1;
-  SaveHeader sh;
-  int result = savefile_read(buf, len, &sh);
-  if(result == 0) {
-    *target = sh.target;
-    *style = sh.style;
-    *table = sh.table;
-    // Without a board we only wanted the header
-    if(g->board.count) result = boardsave_read(&g->board, buf + sh.size, len - sh.size) ? 1 : 0;
-  }
-  free(buf);
-  return result;
 }
 
 int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveWriter * writer,
@@ -42,26 +22,33 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
   g->writer = writer;
   snprintf(g->name, sizeof(g->name), "%s", name);
   int cont = target == 0;
-  uint8_t table = 0;
+  // Continuing: read the save once. The header picks the cut; the board is restored
+  // after the pieces exist.
+  uint8_t * save = NULL;
+  size_t savelen = 0;
+  SaveHeader hdr;
   if(cont) {
-    int r = game_loadsave(g, &target, &style, &table);
+    char spath[STORAGE_MAXPATH];
+    storage_savepath(name, spath);
+    int r = storage_readfile(spath, &save, &savelen) ? SAVEFILE_BAD : savefile_readheader(save, savelen, &hdr);
     if(r) {
-      if(r == 2) {
-        GAME_ERR("Save is from a newer version of the app");
-      } else {
-        GAME_ERR("Couldn't read the save file");
-      }
+      if(r == SAVEFILE_NEWER) GAME_ERR("Save is from a newer version of the app");
+      else GAME_ERR("Couldn't read the save file");
+      free(save);
       return 1;
     }
+    target = hdr.target;
+    style = hdr.style;
+    g->table = hdr.table;
   }
   g->target = target;
   g->style = style;
-  g->table = table;
   char ipath[STORAGE_MAXPATH], cpath[STORAGE_MAXPATH];
   storage_puzzlepath(name, ipath);
   storage_cachepath(name, target, style, cpath);
   if(puzzlegfx_load(&g->gfx, ipath, cpath, target, game_cutseed(name, target, style), style,
       cb, udata, err, errlen)) {
+    free(save);
     return 1;
   }
   Layout * l = &g->gfx.layout;
@@ -69,12 +56,13 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
   if(board_init(&g->board, l->cols, l->rows, l->cell, tw, th)) {
     GAME_ERR("Out of memory (board)");
     puzzlegfx_free(&g->gfx);
+    free(save);
     return 1;
   }
   if(cont) {
-    uint32_t t2;
-    uint8_t s2, tb2;
-    if(game_loadsave(g, &t2, &s2, &tb2)) {
+    int r = savefile_readboard(save, savelen, &hdr, &g->board);
+    free(save);
+    if(r) {
       GAME_ERR("Save file doesn't match this puzzle; start a new one");
       game_free(g);
       return 1;
@@ -84,8 +72,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     board_scatter(&g->board, (uint32_t)osGetTime() ^ rng_hashstr(name), (tw - sw) / 2, (th - sh) / 2, sw, sh);
     g->dirty = 1;
   }
-  camera_init(&g->cam, 320, 240, tw, th, GAME_MAXZOOM);
-  stick_init(&g->stick, 156, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
+  camera_init(&g->cam, GAME_SCREENW, GAME_SCREENH, tw, th, GAME_MAXZOOM);
+  stick_init(&g->stick, GAME_CIRCLE_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
   stick_init(&g->cstick, GAME_CSTICK_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
   camera_set(&g->cam, tw / 2, th / 2, GAME_STARTCELL / l->cell);
   g->lastsave = osGetTime();
@@ -100,7 +88,7 @@ void game_free(Game * g) {
 }
 
 int game_save(Game * g, int background) {
-  size_t len = SAVEFILE_HEADER + boardsave_size(&g->board);
+  size_t len = savefile_size(&g->board);
   uint8_t * buf = malloc(len);
   if(!buf) return 1;
   SaveHeader sh;
@@ -111,8 +99,7 @@ int game_save(Game * g, int background) {
   sh.style = g->style;
   sh.target = g->target;
   sh.table = g->table;
-  savefile_write(&sh, buf);
-  boardsave_write(&g->board, buf + SAVEFILE_HEADER);
+  savefile_write(&sh, &g->board, buf);
   char path[STORAGE_MAXPATH];
   storage_savepath(g->name, path);
   int r = 0;

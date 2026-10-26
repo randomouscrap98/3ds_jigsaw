@@ -1,6 +1,6 @@
 #include "render.h"
-#include "piecebake.h"
 #include "swizzle.h"
+#include "texutil.h"
 
 #include <citro2d.h>
 #include <math.h>
@@ -25,9 +25,7 @@ static const u32 render_tablecolors[RENDER_TABLECOLORS] = {
 
 int render_init(Render * r) {
   r->hasglow = 0;
-  if(!C3D_TexInit(&r->glowtex, RENDER_GLOW_TEX, RENDER_GLOW_TEX, GPU_RGBA8)) return 1;
-  C3D_TexSetFilter(&r->glowtex, GPU_LINEAR, GPU_LINEAR);
-  C3D_TexSetWrap(&r->glowtex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
+  if(texutil_init(&r->glowtex, RENDER_GLOW_TEX, RENDER_GLOW_TEX, 1)) return 1;
   // White rounded square (superellipse): solid core, then a smooth falloff to fully
   // transparent at the edge
   uint32_t * px = malloc(sizeof(uint32_t) * RENDER_GLOW_TEX * RENDER_GLOW_TEX);
@@ -45,16 +43,13 @@ int render_init(Render * r) {
       if(t < 0) t = 0;
       if(t > 1) t = 1;
       float a = 1 - t * t * (3 - 2 * t);  // smoothstep
-      px[y * RENDER_GLOW_TEX + x] = PIECEBAKE_RGBA(255, 255, 255, (uint8_t)(a * 255));
+      px[y * RENDER_GLOW_TEX + x] = SWIZZLE_RGBA(255, 255, 255, (uint8_t)(a * 255));
     }
   }
   swizzle_copy(r->glowtex.data, RENDER_GLOW_TEX, 0, 0, px, RENDER_GLOW_TEX, RENDER_GLOW_TEX, RENDER_GLOW_TEX);
   free(px);
   C3D_TexFlush(&r->glowtex);
-  r->glowsub = (Tex3DS_SubTexture) {
-    .width = RENDER_GLOW_TEX, .height = RENDER_GLOW_TEX,
-    .left = 0, .top = 1, .right = 1, .bottom = 0,
-  };
+  r->glowsub = texutil_subtex(0, 0, RENDER_GLOW_TEX, RENDER_GLOW_TEX, RENDER_GLOW_TEX, RENDER_GLOW_TEX);
   r->hasglow = 1;
   return 0;
 }

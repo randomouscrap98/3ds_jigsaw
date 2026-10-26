@@ -1,4 +1,5 @@
 #include "piecebake.h"
+#include "swizzle.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -85,7 +86,7 @@ void piecebake_tile(PieceBaker * pb, const float * outline, int npts,
         }
       }
       float shade = 1 - PIECEBAKE_OUTLINE * (c - inner);
-      out[y * tile + x] = PIECEBAKE_RGBA(p[0] * shade, p[1] * shade, p[2] * shade,
+      out[y * tile + x] = SWIZZLE_RGBA(p[0] * shade, p[1] * shade, p[2] * shade,
           (uint8_t)(c * 255 + 0.5f));
     }
   }

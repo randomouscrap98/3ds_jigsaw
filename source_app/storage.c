@@ -1,6 +1,4 @@
 #include "storage.h"
-#include "boardsave.h"
-#include "savefile.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,38 +55,41 @@ int storage_readfile(const char * path, uint8_t ** buf, size_t * len) {
   return 0;
 }
 
-int storage_writefile(const char * path, const uint8_t * buf, size_t len) {
-  char tmp[STORAGE_MAXPATH + 8];
-  snprintf(tmp, sizeof(tmp), "%s.tmp", path);
-  FILE * f = fopen(tmp, "wb");
+int storage_readhead(const char * path, uint8_t * buf, size_t max, size_t * len) {
+  FILE * f = fopen(path, "rb");
   if(!f) return 1;
-  size_t written = fwrite(buf, 1, len, f);
-  if(fclose(f) != 0 || written != len) {
+  *len = fread(buf, 1, max, f);
+  fclose(f);
+  return *len ? 0 : 2;
+}
+
+void storage_tmppath(const char * path, char * out) {
+  snprintf(out, STORAGE_MAXTMP, "%s.tmp", path);
+}
+
+int storage_commit(const char * path, int ok) {
+  char tmp[STORAGE_MAXTMP];
+  storage_tmppath(path, tmp);
+  if(!ok) {
     remove(tmp);
-    return 2;
+    return 1;
   }
   // The 3DS filesystem won't rename over an existing file
   remove(path);
-  if(rename(tmp, path) != 0) return 3;
+  if(rename(tmp, path) != 0) {
+    remove(tmp);
+    return 2;
+  }
   return 0;
 }
 
-int storage_peeksave(const char * name, StorageSaveInfo * info) {
-  char path[STORAGE_MAXPATH];
-  storage_savepath(name, path);
-  FILE * f = fopen(path, "rb");
+int storage_writefile(const char * path, const uint8_t * buf, size_t len) {
+  char tmp[STORAGE_MAXTMP];
+  storage_tmppath(path, tmp);
+  FILE * f = fopen(tmp, "wb");
   if(!f) return 1;
-  uint8_t head[256];  // Room for a bigger header from a later version + the boardsave header
-  size_t len = fread(head, 1, sizeof(head), f);
-  fclose(f);
-  SaveHeader sh;
-  if(savefile_read(head, len, &sh)) return 2;
-  BoardSaveInfo bi;
-  if(boardsave_peek(head + sh.size, len - sh.size, &bi)) return 3;
-  info->target = sh.target;
-  info->style = sh.style;
-  info->table = sh.table;
-  info->pieces = (uint32_t)bi.cols * bi.rows;
-  info->groups = bi.ngroups;
-  return 0;
+  size_t written = fwrite(buf, 1, len, f);
+  int ok = written == len;
+  if(fclose(f) != 0) ok = 0;
+  return storage_commit(path, ok) ? 2 : 0;
 }

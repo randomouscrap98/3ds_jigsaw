@@ -4,6 +4,7 @@
 #include <3ds.h>
 
 #include "littlemenu.h"
+#include "savefile.h"
 #include "storage.h"
 #include "textdraw.h"
 #include "thumb.h"
@@ -16,10 +17,11 @@
 #define PMENU_ACT_NONE 0xFFFFFFFF
 #define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
 #define PMENU_THUMBH THUMB_MAXH  // Bottom screen height used by the picture; controls below
+#define PMENU_PEEKBYTES 256     // Start of a save read to summarize it (header + board header)
 
 typedef struct {
   char name[PMENU_MAXNAME];
-  StorageSaveInfo save;
+  SaveInfo save;
   u8 hassave;
 } PuzzleEntry;
 

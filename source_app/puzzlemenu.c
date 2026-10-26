@@ -8,6 +8,8 @@
 #include <string.h>
 #include <strings.h>
 
+#define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
+
 static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 48, 108, 252, 500 };
 
 static int puzzlemenu_isimage(const char * name) {
@@ -15,6 +17,12 @@ static int puzzlemenu_isimage(const char * name) {
   if(!dot) return 0;
   return !strcasecmp(dot, ".jpg") || !strcasecmp(dot, ".jpeg") ||
          !strcasecmp(dot, ".png") || !strcasecmp(dot, ".bmp");
+}
+
+// Length of a file name without its extension (what the menu shows)
+static int puzzlemenu_namelen(const char * name) {
+  const char * dot = strrchr(name, '.');
+  return dot ? (int)(dot - name) : (int)strlen(name);
 }
 
 static int puzzlemenu_cmp(const void * a, const void * b) {
@@ -78,9 +86,7 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
   for(int i = 0; i < pm->nentries && !err; i++) {
     PuzzleEntry * e = pm->entries + i;
     char name[TUIMENU_MAXNAME];
-    // Show the name without its extension
-    const char * dot = strrchr(e->name, '.');
-    int len = dot ? (int)(dot - e->name) : (int)strlen(e->name);
+    int len = puzzlemenu_namelen(e->name);
     if(len > 100) len = 100;
     if(e->hassave && e->save.groups <= 1) snprintf(name, sizeof(name), "%.*s  [done]", len, e->name);
     else if(e->hassave) snprintf(name, sizeof(name), "%.*s  [%lu left]", len, e->name, (unsigned long)e->save.groups);
@@ -120,7 +126,12 @@ int puzzlemenu_refresh(PuzzleMenu * pm) {
   }
   if(pm->nentries) qsort(pm->entries, pm->nentries, sizeof(PuzzleEntry), puzzlemenu_cmp);
   for(int i = 0; i < pm->nentries; i++) {
-    pm->entries[i].hassave = storage_peeksave(pm->entries[i].name, &pm->entries[i].save) == 0;
+    PuzzleEntry * e = pm->entries + i;
+    char path[STORAGE_MAXPATH];
+    uint8_t head[PMENU_PEEKBYTES];
+    size_t len;
+    storage_savepath(e->name, path);
+    e->hassave = !storage_readhead(path, head, sizeof(head), &len) && savefile_peek(head, len, &e->save) == SAVEFILE_OK;
   }
   puzzlemenu_build_root(pm);
   return 0;
@@ -221,9 +232,7 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   tui_menu * active = puzzlemenu_active(pm);
   const char * heading = active == &pm->root ? "Pick a puzzle" :
       active == &pm->options ? pm->entries[pm->root.current].name : "Erase the saved game?";
-  int hlen = strlen(heading);
-  const char * dot = active == &pm->options ? strrchr(heading, '.') : NULL;
-  if(dot) hlen = dot - heading;
+  int hlen = active == &pm->options ? puzzlemenu_namelen(heading) : (int)strlen(heading);
   textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
   char line[PMENU_WIDTH + 1];
   for(int i = 0; i < PMENU_HEIGHT; i++) {
@@ -248,14 +257,14 @@ void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td) {
     } else if(ts == THUMB_FAILED) {
       textdraw_center(td, 160, PMENU_THUMBH / 2 - 8, 0.6f, dim, "Can't preview");
     }
-    textdraw_print(td, 8, PMENU_THUMBH + 4, 0.5f, dim, "Up/Down: move   A: select   B: back");
+    textdraw_print(td, 8, PMENU_THUMBH + 4, 0.5f, dim, PMENU_HELP_MOVE);
     textdraw_print(td, 8, PMENU_THUMBH + 20, 0.5f, dim, "Left/Right: change option");
     return;
   }
   textdraw_center(td, 160, 20, 0.9f, white, "3DS Jigsaw");
   textdraw_print(td, 12, 70, 0.5f, dim, "Put .jpg/.png images in");
   textdraw_print(td, 12, 86, 0.5f, white, "  sdmc:/3ds/jigsaw/puzzles/");
-  textdraw_print(td, 12, 116, 0.5f, dim, "Up/Down: move   A: select   B: back");
+  textdraw_print(td, 12, 116, 0.5f, dim, PMENU_HELP_MOVE);
   textdraw_print(td, 12, 132, 0.5f, dim, "Left/Right: change option   L/R: page");
   textdraw_print(td, 12, 148, 0.5f, dim, "START: quit");
   if(pm->status[0]) textdraw_print(td, 12, 180, 0.5f, warn, "%s", pm->status);

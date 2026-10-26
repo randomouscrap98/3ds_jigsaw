@@ -169,6 +169,16 @@ void test_imgscale(void) {
   uint8_t g[4] = { 10, 20, 30, 40 }, o[1];
   CHECK(imgscale_area(g, 4, 1, 1, 2, 0, 2, 1, o, 1, 1) == 0);
   CHECK(o[0] == 35);
+  // Fit: shrink to the tighter side, never upscale, never 0
+  uint16_t w, h;
+  imgscale_fit(1000, 500, 320, 200, &w, &h);
+  CHECK(w == 320 && h == 160);
+  imgscale_fit(500, 1000, 320, 200, &w, &h);
+  CHECK(w == 100 && h == 200);
+  imgscale_fit(100, 50, 320, 200, &w, &h);
+  CHECK(w == 100 && h == 50);
+  imgscale_fit(5000, 1, 320, 200, &w, &h);
+  CHECK(w == 320 && h == 1);
 }
 
 void test_swizzle(void) {
@@ -191,6 +201,10 @@ void test_swizzle(void) {
   memset(tex, 0, sizeof(tex));
   swizzle_copy(tex, 16, 9, 3, src, 3, 2, 3);
   CHECK(tex[swizzle_offset(16, 9, 3)] == 1 && tex[swizzle_offset(16, 11, 4)] == 6);
+  uint8_t rgb[2 * 2 * 3] = { 1, 2, 3,  4, 5, 6,  7, 8, 9,  10, 11, 12 };
+  swizzle_copy_rgb(tex, 16, 8, 8, rgb, 2, 2);
+  CHECK(tex[swizzle_offset(16, 8, 8)] == SWIZZLE_RGBA(1, 2, 3, 255));
+  CHECK(tex[swizzle_offset(16, 9, 9)] == SWIZZLE_RGBA(10, 11, 12, 255));
 }
 
 void test_piecebake(void) {

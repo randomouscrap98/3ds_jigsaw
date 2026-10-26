@@ -24,8 +24,8 @@ static void defaults_report(DefaultsCopy * dc, int force) {
 static int defaults_copyfile(DefaultsCopy * dc, const char * src, const char * dst) {
   FILE * in = fopen(src, "rb");
   if(!in) return 1;
-  char tmp[STORAGE_MAXPATH + 8];
-  snprintf(tmp, sizeof(tmp), "%s.tmp", dst);
+  char tmp[STORAGE_MAXTMP];
+  storage_tmppath(dst, tmp);
   FILE * out = fopen(tmp, "wb");
   if(!out) {
     fclose(in);
@@ -40,11 +40,7 @@ static int defaults_copyfile(DefaultsCopy * dc, const char * src, const char * d
   }
   fclose(in);
   if(fclose(out) != 0) ok = 0;
-  if(!ok || rename(tmp, dst) != 0) {
-    remove(tmp);
-    return 3;
-  }
-  return 0;
+  return storage_commit(dst, ok) ? 3 : 0;
 }
 
 int defaults_install(progress_fn cb, void * udata) {

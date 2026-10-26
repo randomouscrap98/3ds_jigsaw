@@ -12,6 +12,8 @@
 #include "storage.h"
 #include "textdraw.h"
 
+#define GAME_SCREENW 320          // Bottom screen, where the table is
+#define GAME_SCREENH 240
 #define GAME_TABLESCALE 3.0f      // Table is this many times the puzzle size each way
 #define GAME_SCATTER 0.67f        // Pieces start spread over this fraction of the table (centered)
 #define GAME_SNAP 0.3f            // Snap distance, in cells
@@ -19,6 +21,7 @@
 #define GAME_STARTCELL 28.0f      // Starting zoom shows a cell this many pixels wide
 #define GAME_ZOOMSTEP 1.15f       // Per D-pad / X / B press or repeat
 #define GAME_STICKZOOM 1.035f     // Per frame zoom factor at full C-stick tilt (New 3DS)
+#define GAME_CIRCLE_RANGE 156     // Circle pad full tilt
 #define GAME_CSTICK_RANGE 146     // C-stick full tilt (guess; values past it just clamp)
 #define GAME_PANSPEED 15.0f       // Pixels per frame at full circle pad
 #define GAME_PANMIN 1.0f          // Pixels per frame just past the deadzone

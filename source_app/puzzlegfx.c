@@ -1,19 +1,16 @@
 #include "puzzlegfx.h"
 #include "edgegen.h"
+#include "imageload.h"
 #include "imgscale.h"
 #include "piecebake.h"
+#include "storage.h"
 #include "swizzle.h"
+#include "texutil.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-
-#define STBI_ONLY_JPEG
-#define STBI_ONLY_PNG
-#define STBI_ONLY_BMP
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 
 // Raw struct on disk; only ever read back by the same build of the same program
 typedef struct {
@@ -28,7 +25,7 @@ typedef struct {
   u16 previeww, previewh;
 } PuzzleCacheHeader;
 
-#define PGFX_ERR(...) { snprintf(err, errlen, __VA_ARGS__); }
+#define PGFX_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
 
 static void puzzlegfx_zero(PuzzleGfx * pg) {
   memset(pg, 0, sizeof(PuzzleGfx));
@@ -43,51 +40,34 @@ void puzzlegfx_free(PuzzleGfx * pg) {
 
 static int puzzlegfx_alloc(PuzzleGfx * pg, char * err, size_t errlen) {
   for(int i = 0; i < pg->layout.pages; i++) {
-    if(!C3D_TexInit(&pg->pages[i], LAYOUT_PAGESIZE, LAYOUT_PAGESIZE, GPU_RGBA8)) {
+    if(texutil_init(&pg->pages[i], LAYOUT_PAGESIZE, LAYOUT_PAGESIZE, 1)) {
       PGFX_ERR("Out of video memory (page %d)", i);
       return 1;
     }
     pg->npages++;
-    C3D_TexSetFilter(&pg->pages[i], GPU_LINEAR, GPU_LINEAR);
-    C3D_TexSetWrap(&pg->pages[i], GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
   }
-  if(!C3D_TexInit(&pg->preview, PGFX_PREVIEW_TEXW, PGFX_PREVIEW_TEXH, GPU_RGBA8)) {
+  if(texutil_init(&pg->preview, PGFX_PREVIEW_TEXW, PGFX_PREVIEW_TEXH, 0)) {
     PGFX_ERR("Out of video memory (preview)");
     return 1;
   }
   pg->haspreview = 1;
-  C3D_TexSetFilter(&pg->preview, GPU_LINEAR, GPU_LINEAR);
   uint32_t count = (uint32_t)pg->layout.cols * pg->layout.rows;
   pg->subs = malloc(sizeof(Tex3DS_SubTexture) * count);
   if(!pg->subs) {
     PGFX_ERR("Out of memory (subtextures)");
     return 1;
   }
-  const float ps = LAYOUT_PAGESIZE;
+  uint16_t tile = pg->layout.tile;
   for(uint32_t i = 0; i < count; i++) {
     uint16_t page, x, y;
     layout_tile(&pg->layout, i, &page, &x, &y);
-    pg->subs[i] = (Tex3DS_SubTexture) {
-      .width = pg->layout.tile,
-      .height = pg->layout.tile,
-      .left = x / ps,
-      .top = 1.0f - y / ps,
-      .right = (x + pg->layout.tile) / ps,
-      .bottom = 1.0f - (y + pg->layout.tile) / ps,
-    };
+    pg->subs[i] = texutil_subtex(x, y, tile, tile, LAYOUT_PAGESIZE, LAYOUT_PAGESIZE);
   }
   return 0;
 }
 
 static void puzzlegfx_setpreview(PuzzleGfx * pg, u16 w, u16 h) {
-  pg->previewsub = (Tex3DS_SubTexture) {
-    .width = w,
-    .height = h,
-    .left = 0,
-    .top = 1.0f,
-    .right = (float)w / PGFX_PREVIEW_TEXW,
-    .bottom = 1.0f - (float)h / PGFX_PREVIEW_TEXH,
-  };
+  pg->previewsub = texutil_subtex(0, 0, w, h, PGFX_PREVIEW_TEXW, PGFX_PREVIEW_TEXH);
 }
 
 static void puzzlegfx_srcinfo(const char * path, u64 * size, u64 * mtime) {
@@ -126,8 +106,8 @@ done:
 
 static void puzzlegfx_writecache(PuzzleGfx * pg, const char * cachepath, PuzzleCacheHeader * h) {
   // Cache failures are not fatal; we just rebuild next time
-  char tmp[600];
-  snprintf(tmp, sizeof(tmp), "%s.tmp", cachepath);
+  char tmp[STORAGE_MAXTMP];
+  storage_tmppath(cachepath, tmp);
   FILE * f = fopen(tmp, "wb");
   if(!f) return;
   int ok = fwrite(h, sizeof(*h), 1, f) == 1;
@@ -136,33 +116,21 @@ static void puzzlegfx_writecache(PuzzleGfx * pg, const char * cachepath, PuzzleC
   }
   if(ok) ok = fwrite(pg->preview.data, 1, pg->preview.size, f) == pg->preview.size;
   if(fclose(f) != 0) ok = 0;
-  remove(cachepath);
-  if(!ok || rename(tmp, cachepath) != 0) remove(tmp);
+  storage_commit(cachepath, ok);
 }
 
 static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHeader * h,
     progress_fn cb, void * udata, char * err, size_t errlen) {
   int result = 1;
   uint8_t * src = NULL, * img = NULL, * prev = NULL;
-  uint32_t * tile = NULL, * prevpx = NULL;
+  uint32_t * tile = NULL;
   EdgeGen eg = {0};
   PieceBaker pb = {0};
-  int sw, sh, sc;
+  int sw, sh;
 
   if(cb) cb(udata, "Reading image", 0, 1);
-  if(!stbi_info(imagepath, &sw, &sh, &sc)) {
-    PGFX_ERR("Can't read image: %s", stbi_failure_reason());
-    return 1;
-  }
-  if((u64)sw * sh > PGFX_MAXSRCPIXELS) {
-    PGFX_ERR("Image too big (%dx%d). Max about %d x %d", sw, sh, 2100, 2100);
-    return 1;
-  }
-  src = stbi_load(imagepath, &sw, &sh, &sc, 3);
-  if(!src) {
-    PGFX_ERR("Can't decode image: %s", stbi_failure_reason());
-    return 1;
-  }
+  src = imageload_rgb(imagepath, &sw, &sh, err, errlen);
+  if(!src) return 1;
   float jitter = h->style == PGFX_STYLE_IRREGULAR ? EDGEGEN_IRREGULAR : 0;
   if(layout_compute(&pg->layout, sw, sh, h->target, PGFX_MAXSIDE, PGFX_MAXPAGES, EDGEGEN_TABREACH + jitter)) {
     PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->target);
@@ -176,7 +144,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
     PGFX_ERR("Out of memory (scaling)");
     goto done;
   }
-  stbi_image_free(src);
+  imageload_free(src);
   src = NULL;
 
   if(puzzlegfx_alloc(pg, err, errlen)) goto done;
@@ -204,22 +172,14 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
   for(int i = 0; i < pg->npages; i++) C3D_TexFlush(&pg->pages[i]);
 
   // Preview: fit in the top screen, never upscale
-  float ps = (float)PGFX_PREVIEW_MAXW / l->width;
-  if((float)PGFX_PREVIEW_MAXH / l->height < ps) ps = (float)PGFX_PREVIEW_MAXH / l->height;
-  if(ps > 1) ps = 1;
-  u16 pw = l->width * ps, ph = l->height * ps;
-  if(pw < 1) pw = 1;
-  if(ph < 1) ph = 1;
+  u16 pw, ph;
+  imgscale_fit(l->width, l->height, PGFX_PREVIEW_MAXW, PGFX_PREVIEW_MAXH, &pw, &ph);
   prev = malloc((size_t)pw * ph * 3);
-  prevpx = malloc(sizeof(uint32_t) * pw * ph);
-  if(!prev || !prevpx || imgscale_area(img, l->width, l->height, 3, 0, 0, l->width, l->height, prev, pw, ph)) {
+  if(!prev || imgscale_area(img, l->width, l->height, 3, 0, 0, l->width, l->height, prev, pw, ph)) {
     PGFX_ERR("Out of memory (preview)");
     goto done;
   }
-  for(uint32_t i = 0; i < (uint32_t)pw * ph; i++) {
-    prevpx[i] = PIECEBAKE_RGBA(prev[i * 3], prev[i * 3 + 1], prev[i * 3 + 2], 255);
-  }
-  swizzle_copy(pg->preview.data, PGFX_PREVIEW_TEXW, 0, 0, prevpx, pw, ph, pw);
+  swizzle_copy_rgb(pg->preview.data, PGFX_PREVIEW_TEXW, 0, 0, prev, pw, ph);
   C3D_TexFlush(&pg->preview);
   puzzlegfx_setpreview(pg, pw, ph);
   h->layout = pg->layout;
@@ -227,10 +187,9 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
   h->previewh = ph;
   result = 0;
 done:
-  if(src) stbi_image_free(src);
+  if(src) imageload_free(src);
   free(img);
   free(prev);
-  free(prevpx);
   free(tile);
   edgegen_free(&eg);
   piecebake_free(&pb);

@@ -9,7 +9,6 @@
 
 #define PGFX_MAXPAGES 2
 #define PGFX_MAXSIDE 1024             // Puzzle image is scaled to fit this
-#define PGFX_MAXSRCPIXELS (2100 * 2100) // Refuse to decode bigger images (memory)
 #define PGFX_PREVIEW_TEXW 512
 #define PGFX_PREVIEW_TEXH 256
 #define PGFX_PREVIEW_MAXW 400
