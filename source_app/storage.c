@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <dirent.h>
 #include <sys/stat.h>
 
 void storage_init(void) {
@@ -25,6 +26,42 @@ void storage_cachepath(const char * name, uint32_t target, uint8_t style, char *
 
 void storage_savepath(const char * name, char * out) {
   snprintf(out, STORAGE_MAXPATH, "%s/%s.sav", STORAGE_SAVES, name);
+}
+
+static const char * storage_digits(const char * s) {
+  if(*s < '0' || *s > '9') return NULL;
+  while(*s >= '0' && *s <= '9') s++;
+  return s;
+}
+
+int storage_iscache(const char * name, const char * file) {
+  size_t n = strlen(name);
+  if(strncmp(file, name, n) || file[n] != '_') return 0;
+  const char * p = storage_digits(file + n + 1);
+  if(p && p[0] == '_' && p[1] == 's') p = storage_digits(p + 2);
+  return p && !strcmp(p, ".bin");
+}
+
+void storage_cleancaches(const char * name, const char * keep) {
+  DIR * d = opendir(STORAGE_CACHE);
+  if(!d) return;
+  // Collect first, then delete, so removing doesn't upset the directory walk
+  char (*doomed)[STORAGE_MAXPATH] = NULL;
+  int count = 0;
+  struct dirent * de;
+  while((de = readdir(d))) {
+    if(!storage_iscache(name, de->d_name)) continue;
+    char path[STORAGE_MAXPATH];
+    snprintf(path, sizeof(path), "%s/%s", STORAGE_CACHE, de->d_name);
+    if(!strcmp(path, keep)) continue;
+    void * more = realloc(doomed, sizeof(*doomed) * (count + 1));
+    if(!more) break;
+    doomed = more;
+    memcpy(doomed[count++], path, STORAGE_MAXPATH);
+  }
+  closedir(d);
+  for(int i = 0; i < count; i++) remove(doomed[i]);
+  free(doomed);
 }
 
 int storage_readfile(const char * path, uint8_t ** buf, size_t * len) {

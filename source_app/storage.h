@@ -15,6 +15,11 @@ void storage_init(void);
 void storage_puzzlepath(const char * name, char * out);
 void storage_cachepath(const char * name, uint32_t target, uint8_t style, char * out);
 void storage_savepath(const char * name, char * out);
+// 1 if file (a name in the cache folder) is one of image name's caches, any count/style:
+// "<name>_<digits>.bin" or "<name>_<digits>_s<digits>.bin"
+int storage_iscache(const char * name, const char * file);
+// Delete every cache of image name except the file at keep (a full cache path)
+void storage_cleancaches(const char * name, const char * keep);
 // Whole file into a malloc'd buffer. Returns 0 on success.
 int storage_readfile(const char * path, uint8_t ** buf, size_t * len);
 // Up to max bytes from the start of a file. Returns 0 if anything was read.

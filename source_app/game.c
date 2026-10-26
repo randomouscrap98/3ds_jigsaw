@@ -52,6 +52,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     free(save);
     return 1;
   }
+  // Only one game per picture, so its caches for other counts/styles are dead weight
+  storage_cleancaches(name, cpath);
   Layout * l = &g->gfx.layout;
   float tw = l->width * GAME_TABLESCALE, th = l->height * GAME_TABLESCALE;
   if(board_init(&g->board, l->cols, l->rows, l->cell, tw, th)) {
@@ -117,6 +119,7 @@ int game_save(Game * g, int background) {
     g->dirty = 0;
     g->lastsave = osGetTime();
   }
+  if(!background) g->savefailed = r != 0;
   return r;
 }
 
@@ -149,8 +152,8 @@ int game_update(Game * g, const GameInput * in) {
 
   if(in->down & KEY_START) {
     ev |= game_release(g);
-    game_save(g, 0);
-    return ev | GAME_EV_EXIT;
+    // Leaving after a failed save would lose the progress, so stay and say so
+    if(game_save(g, 0) == 0) return ev | GAME_EV_EXIT;
   }
   // Hidden: SELECT cycles the table color (saved with the puzzle)
   if(in->down & KEY_SELECT) {
@@ -228,6 +231,14 @@ void game_render_bottom(Game * g, Render * r) {
 void game_render_top(Game * g, TextDraw * td) {
   const u32 white = C2D_Color32(230, 230, 230, 255), dim = C2D_Color32(140, 140, 140, 255);
   render_preview(&g->gfx, 0, 0, 400, 204);
+  const u32 warn = C2D_Color32(255, 110, 100, 255);
+  if(g->savefailed) {
+    C2D_DrawRectSolid(0, 0, 400, 20, 0.7f, C2D_Color32(0, 0, 0, 190));
+    textdraw_center(td, 200, 3, 0.5f, warn, "Couldn't save! Check the SD card, then press START again");
+  } else if(savewriter_failed(g->writer)) {
+    C2D_DrawRectSolid(0, 0, 400, 20, 0.7f, C2D_Color32(0, 0, 0, 190));
+    textdraw_center(td, 200, 3, 0.5f, warn, "Autosave failed! Check the SD card");
+  }
   if(board_complete(&g->board)) {
     textdraw_center(td, 200, 208, 0.7f, C2D_Color32(255, 220, 90, 255), "Complete!  START: menu");
   } else {

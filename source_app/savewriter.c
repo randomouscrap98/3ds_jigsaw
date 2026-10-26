@@ -20,7 +20,7 @@ static void savewriter_thread(void * arg) {
       }
       LightLock_Unlock(&sw->lock);
       if(!buf) break;
-      storage_writefile(path, buf, len);
+      sw->failed = storage_writefile(path, buf, len) != 0;
       free(buf);
       sw->busy = 0;
     }
@@ -42,7 +42,8 @@ int savewriter_init(SaveWriter * sw) {
 
 void savewriter_submit(SaveWriter * sw, const char * path, uint8_t * buf, size_t len) {
   if(!sw || !sw->running) {
-    storage_writefile(path, buf, len);
+    if(sw) sw->failed = storage_writefile(path, buf, len) != 0;
+    else storage_writefile(path, buf, len);
     free(buf);
     return;
   }
@@ -83,4 +84,8 @@ void savewriter_free(SaveWriter * sw) {
   }
   free(sw->pending);
   memset(sw, 0, sizeof(SaveWriter));
+}
+
+int savewriter_failed(SaveWriter * sw) {
+  return sw && sw->failed;
 }

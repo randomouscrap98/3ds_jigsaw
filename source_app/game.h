@@ -63,6 +63,7 @@ typedef struct {
   float lastwx, lastwy;   // World point under the stylus last frame
   float lastsx, lastsy;   // Screen point of the stylus last frame
   u8 dirty;
+  u8 savefailed;          // The last START save failed
   u64 lastsave;
   u64 lastframe;          // osGetTime of the previous update
   u64 playms;             // Play time; stops counting once complete

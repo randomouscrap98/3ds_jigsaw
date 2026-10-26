@@ -19,6 +19,7 @@ typedef struct {
   size_t pendinglen;
   volatile u8 busy;       // Worker is in the middle of a write
   volatile u8 quit;
+  volatile u8 failed;     // The last write failed (cleared by the next good one)
   u8 running;             // Thread was created (otherwise writes happen inline)
 } SaveWriter;
 
@@ -29,5 +30,7 @@ void savewriter_free(SaveWriter * sw);
 void savewriter_submit(SaveWriter * sw, const char * path, uint8_t * buf, size_t len);
 // Block until nothing is queued or being written
 void savewriter_flush(SaveWriter * sw);
+// 1 if the last write failed (SD card full or missing)
+int savewriter_failed(SaveWriter * sw);
 
 #endif
