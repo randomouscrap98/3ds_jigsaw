@@ -20,6 +20,7 @@ int main(int argc, char ** argv) {
   RUN(test_imgscale);
   RUN(test_swizzle);
   RUN(test_piecebake);
+  RUN(test_littlemenu);
   printf("%d checks, %d failures\n", test_checks, test_failures);
   return test_failures ? 1 : 0;
 }

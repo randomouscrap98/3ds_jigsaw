@@ -19,6 +19,7 @@ void test_edgegen(void);
 void test_imgscale(void);
 void test_swizzle(void);
 void test_piecebake(void);
+void test_littlemenu(void);
 void test_dump_cut(const char * path);
 
 #endif
