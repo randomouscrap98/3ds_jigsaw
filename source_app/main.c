@@ -3,11 +3,13 @@
 #include <citro3d.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "defaults.h"
 #include "game.h"
 #include "puzzlemenu.h"
+#include "savewriter.h"
 #include "render.h"
 #include "sfx.h"
 #include "storage.h"
@@ -30,6 +32,7 @@ typedef struct {
   C3D_RenderTarget * bottom;
   TextDraw td;
   Render render;
+  SaveWriter writer;
   PuzzleMenu menu;
   Game game;
   Sfx sfx;
@@ -63,13 +66,16 @@ static void app_hook(APT_HookType type, void * param) {
   App * app = param;
   if(app->mode != MODE_GAME) return;
   if(type == APTHOOK_ONSUSPEND || type == APTHOOK_ONSLEEP || type == APTHOOK_ONEXIT) {
-    if(app->game.dirty) game_save(&app->game);
+    // Synchronous: it must be on the SD before we might be killed
+    if(app->game.dirty) game_save(&app->game, 0);
+    savewriter_flush(&app->writer);
   }
 }
 
 static void app_start_game(App * app, PuzzleChoice choice) {
   char err[256] = "";
-  if(game_init(&app->game, choice.name, choice.target, choice.style, app_progress, app, err, sizeof(err))) {
+  if(game_init(&app->game, choice.name, choice.target, choice.style, &app->writer,
+      app_progress, app, err, sizeof(err))) {
     puzzlemenu_setstatus(&app->menu, err[0] ? err : "Couldn't start the puzzle");
     return;
   }
@@ -79,6 +85,7 @@ static void app_start_game(App * app, PuzzleChoice choice) {
 static void app_end_game(App * app) {
   game_free(&app->game);
   app->mode = MODE_MENU;
+  savewriter_flush(&app->writer);  // The menu reads saves back
   puzzlemenu_refresh(&app->menu);
 }
 
@@ -93,9 +100,10 @@ int main(int argc, char ** argv) {
   app.bottom = C2D_CreateScreenTarget(GFX_BOTTOM, GFX_LEFT);
   hidSetRepeatParameters(MAIN_REPEAT_DELAY, MAIN_REPEAT_INTERVAL);
   textdraw_init(&app.td);
-  render_init(&app.render);  // Without it there's just no glow
+  render_init(&app.render);  // Without it there's just no shadow
   sfx_init(&app.sfx);
   storage_init();
+  savewriter_init(&app.writer);  // On failure, saves are just written inline
   if(R_SUCCEEDED(romfsInit())) {
     // Failure isn't fatal: the menu just shows whatever made it
     defaults_install(app_progress, &app);
@@ -137,10 +145,11 @@ int main(int argc, char ** argv) {
   }
 
   if(app.mode == MODE_GAME) {
-    game_save(&app.game);
+    game_save(&app.game, 0);
     game_free(&app.game);
   }
   aptUnhook(&app.hook);
+  savewriter_free(&app.writer);
   puzzlemenu_free(&app.menu);
   sfx_free(&app.sfx);
   render_free(&app.render);

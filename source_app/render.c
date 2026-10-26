@@ -6,12 +6,30 @@
 #include <math.h>
 #include <stdlib.h>
 
+// Same packing as C2D_Color32 (which is a function, so it can't be used in initializers)
+#define RENDER_RGB(r, g, b) ((u32)(r) | ((u32)(g) << 8) | ((u32)(b) << 16) | 0xFF000000u)
+
+// Natural table colors: felt, wood, cloth. First one is the default.
+static const u32 render_tablecolors[RENDER_TABLECOLORS] = {
+  RENDER_RGB(46, 64, 58),     // Green felt
+  RENDER_RGB(84, 112, 78),    // Moss
+  RENDER_RGB(92, 66, 46),     // Walnut
+  RENDER_RGB(178, 156, 122),  // Oak / tan
+  RENDER_RGB(36, 52, 82),     // Navy
+  RENDER_RGB(124, 148, 170),  // Slate blue
+  RENDER_RGB(98, 38, 42),     // Burgundy
+  RENDER_RGB(74, 56, 96),     // Plum
+  RENDER_RGB(50, 50, 52),     // Charcoal
+  RENDER_RGB(172, 172, 168),  // Light gray
+};
+
 int render_init(Render * r) {
   r->hasglow = 0;
   if(!C3D_TexInit(&r->glowtex, RENDER_GLOW_TEX, RENDER_GLOW_TEX, GPU_RGBA8)) return 1;
   C3D_TexSetFilter(&r->glowtex, GPU_LINEAR, GPU_LINEAR);
   C3D_TexSetWrap(&r->glowtex, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
-  // White disc with a smooth falloff to fully transparent at the edge
+  // White rounded square (superellipse): solid core, then a smooth falloff to fully
+  // transparent at the edge
   uint32_t * px = malloc(sizeof(uint32_t) * RENDER_GLOW_TEX * RENDER_GLOW_TEX);
   if(!px) {
     C3D_TexDelete(&r->glowtex);
@@ -21,8 +39,12 @@ int render_init(Render * r) {
   for(int y = 0; y < RENDER_GLOW_TEX; y++) {
     for(int x = 0; x < RENDER_GLOW_TEX; x++) {
       float dx = (x + 0.5f - half) / half, dy = (y + 0.5f - half) / half;
-      float d = sqrtf(dx * dx + dy * dy);
-      float a = d >= 1 ? 0 : (1 - d) * (1 - d);
+      float d = powf(powf(fabsf(dx), RENDER_GLOW_SQUARE) + powf(fabsf(dy), RENDER_GLOW_SQUARE),
+          1.0f / RENDER_GLOW_SQUARE);
+      float t = (d - RENDER_GLOW_CORE) / (1 - RENDER_GLOW_CORE);
+      if(t < 0) t = 0;
+      if(t > 1) t = 1;
+      float a = 1 - t * t * (3 - 2 * t);  // smoothstep
       px[y * RENDER_GLOW_TEX + x] = PIECEBAKE_RGBA(255, 255, 255, (uint8_t)(a * 255));
     }
   }
@@ -51,10 +73,13 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   C2D_PlainImageTint(&tint, RENDER_COLOR_GLOW, 1.0f);
   float size = RENDER_GLOW_SIZE * b->cell * c->zoom;
   float scale = size / RENDER_GLOW_TEX, half = size / 2;
+  float off = RENDER_GLOW_OFFSET * b->cell * c->zoom;
   for(uint16_t p = b->groups[gid].first; p != BOARD_NONE; p = b->pieces[p].next) {
     float wx, wy, sx, sy;
     board_piece_center(b, p, &wx, &wy);
     camera_to_screen(c, wx, wy, &sx, &sy);
+    sx += off;
+    sy += off;
     if(sx < -half || sy < -half || sx > c->sw + half || sy > c->sh + half) continue;
     C2D_DrawImageAtRotated(img, sx, sy, 0.3f, 0, &tint, scale, scale);
   }
@@ -74,11 +99,11 @@ static void render_group(Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid) {
   }
 }
 
-void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held) {
+void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held, int table) {
   float x0, y0, x1, y1;
   camera_to_screen(c, 0, 0, &x0, &y0);
   camera_to_screen(c, b->width, b->height, &x1, &y1);
-  C2D_DrawRectSolid(x0, y0, 0.1f, x1 - x0, y1 - y0, RENDER_COLOR_TABLE);
+  C2D_DrawRectSolid(x0, y0, 0.1f, x1 - x0, y1 - y0, render_tablecolors[(unsigned)table % RENDER_TABLECOLORS]);
   if(held >= 0) render_glow(r, b, c, held);
   for(uint32_t i = 0; i < b->ngroups; i++) render_group(b, c, pg, b->order[i]);
 }

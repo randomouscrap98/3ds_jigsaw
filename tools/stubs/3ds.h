@@ -40,3 +40,17 @@ void ndspChnSetFormat(int id, u16 format); void ndspChnSetMix(int id, float mix[
 void ndspChnWaveBufClear(int id); void ndspChnWaveBufAdd(int id, ndspWaveBuf * buf);
 #define R_SUCCEEDED(r) ((r) >= 0)
 Result romfsInit(void); Result romfsExit(void);
+typedef struct Thread_tag * Thread;
+typedef void (*ThreadFunc)(void *);
+Thread threadCreate(ThreadFunc entrypoint, void * arg, size_t stack_size, int prio, int core_id, bool detached);
+Result threadJoin(Thread thread, u64 timeout_ns); void threadFree(Thread thread);
+typedef s32 LightLock; void LightLock_Init(LightLock * lock); void LightLock_Lock(LightLock * lock); void LightLock_Unlock(LightLock * lock);
+typedef enum { RESET_ONESHOT, RESET_STICKY, RESET_PULSE } ResetType;
+typedef struct { s32 state; LightLock lock; } LightEvent;
+void LightEvent_Init(LightEvent * event, ResetType reset_type); void LightEvent_Signal(LightEvent * event); void LightEvent_Wait(LightEvent * event);
+typedef u32 Handle;
+#define CUR_THREAD_HANDLE 0xFFFF8000
+Result svcGetThreadPriority(s32 * out, Handle handle); void svcSleepThread(s64 ns);
+#ifndef U64_MAX
+#define U64_MAX UINT64_MAX
+#endif

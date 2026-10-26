@@ -11,9 +11,12 @@
 #define RENDER_ANGLE_SIGN 1
 
 #define RENDER_COLOR_VOID   C2D_Color32(24, 26, 30, 255)
-#define RENDER_COLOR_TABLE  C2D_Color32(46, 64, 58, 255)
-#define RENDER_COLOR_GLOW   C2D_Color32(255, 235, 170, 50)  // Alpha = how strong each blob is
-#define RENDER_GLOW_SIZE    2.4f    // Glow blob diameter, in cells
+#define RENDER_TABLECOLORS  10      // Size of the table color palette (see render.c)
+#define RENDER_COLOR_GLOW   C2D_Color32(0, 0, 0, 70)  // Shadow blob color; alpha = strength per blob
+#define RENDER_GLOW_SIZE    1.9f    // Shadow blob diameter, in cells
+#define RENDER_GLOW_CORE    0.5f    // Fraction of the blob radius that's solid before fading
+#define RENDER_GLOW_SQUARE  4.0f    // Blob shape: 2 = circle, higher = squarer (rounded corners)
+#define RENDER_GLOW_OFFSET  0.15f   // Shadow offset down-right, in cells (scales with zoom)
 #define RENDER_GLOW_TEX     64
 
 // Drawing for the table. Owns the small textures it needs (the soft glow blob).
@@ -26,8 +29,9 @@ typedef struct {
 int render_init(Render * r);
 void render_free(Render * r);
 // Draw the table and every piece as seen through the camera. held is the group being
-// dragged (gets a soft glow on the table underneath everything) or -1.
-void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held);
+// dragged (gets a soft offset shadow on the table, underneath everything) or -1. table
+// is an index into the table color palette (wraps).
+void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held, int table);
 // Draw the preview picture centered in the given box, scaled down to fit if needed
 void render_preview(PuzzleGfx * pg, float x, float y, float w, float h);
 

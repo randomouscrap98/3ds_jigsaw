@@ -14,6 +14,7 @@
 typedef struct {
   uint32_t target;    // Piece count option it was started with
   uint8_t style;      // Cut style (PGFX_STYLE_*)
+  uint8_t table;      // Table color index
   uint32_t pieces;    // Actual pieces (cols * rows)
   uint32_t groups;    // Groups left; 1 = complete
 } StorageSaveInfo;
@@ -27,11 +28,13 @@ void storage_savepath(const char * name, char * out);
 int storage_readfile(const char * path, uint8_t ** buf, size_t * len);
 // Write via temp file + rename so a crash can't leave half a file. Returns 0 on success.
 int storage_writefile(const char * path, const uint8_t * buf, size_t len);
-// Save files start with a u32: target piece count in the low 24 bits, cut style in the
-// high 8 (older saves have 0 there = classic). Then a boardsave blob.
-#define STORAGE_SAVE_TARGET(v) ((v) & 0xFFFFFF)
+// Save files start with a u32: target piece count in bits 0-15, table color in 16-23,
+// cut style in 24-31 (older saves have 0s there = green felt, classic). Then a boardsave blob.
+#define STORAGE_SAVE_TARGET(v) ((v) & 0xFFFF)
+#define STORAGE_SAVE_TABLE(v) (((v) >> 16) & 0xFF)
 #define STORAGE_SAVE_STYLE(v) ((v) >> 24)
-#define STORAGE_SAVE_PREFIX(target, style) (((uint32_t)(style) << 24) | ((target) & 0xFFFFFF))
+#define STORAGE_SAVE_PREFIX(target, style, table) \
+  (((uint32_t)(style) << 24) | (((uint32_t)(table) & 0xFF) << 16) | ((target) & 0xFFFF))
 int storage_peeksave(const char * name, StorageSaveInfo * info);
 
 #endif

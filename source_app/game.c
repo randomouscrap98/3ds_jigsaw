@@ -13,7 +13,7 @@ static uint32_t game_cutseed(const char * name, uint32_t target, uint8_t style) 
   return rng_hashstr(name) ^ (target * 2654435761u) ^ (style * 0x9E3779B9u);
 }
 
-static int game_loadsave(Game * g, uint32_t * target, uint8_t * style) {
+static int game_loadsave(Game * g, uint32_t * target, uint8_t * style, uint8_t * table) {
   char path[STORAGE_MAXPATH];
   storage_savepath(g->name, path);
   uint8_t * buf;
@@ -24,6 +24,7 @@ static int game_loadsave(Game * g, uint32_t * target, uint8_t * style) {
     uint32_t prefix = buf[0] | (buf[1] << 8) | (buf[2] << 16) | ((uint32_t)buf[3] << 24);
     *target = STORAGE_SAVE_TARGET(prefix);
     *style = STORAGE_SAVE_STYLE(prefix);
+    *table = STORAGE_SAVE_TABLE(prefix);
     if(g->board.count) result = boardsave_read(&g->board, buf + 4, len - 4);
     else result = 0;  // Only wanted the target
   }
@@ -31,18 +32,22 @@ static int game_loadsave(Game * g, uint32_t * target, uint8_t * style) {
   return result;
 }
 
-int game_init(Game * g, const char * name, uint32_t target, uint8_t style, progress_fn cb, void * udata,
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveWriter * writer,
+    progress_fn cb, void * udata,
     char * err, size_t errlen) {
   memset(g, 0, sizeof(Game));
   g->held = -1;
+  g->writer = writer;
   snprintf(g->name, sizeof(g->name), "%s", name);
   int cont = target == 0;
-  if(cont && game_loadsave(g, &target, &style)) {
+  uint8_t table = 0;
+  if(cont && game_loadsave(g, &target, &style, &table)) {
     GAME_ERR("Couldn't read the save file");
     return 1;
   }
   g->target = target;
   g->style = style;
+  g->table = table;
   char ipath[STORAGE_MAXPATH], cpath[STORAGE_MAXPATH];
   storage_puzzlepath(name, ipath);
   storage_cachepath(name, target, style, cpath);
@@ -59,8 +64,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, progr
   }
   if(cont) {
     uint32_t t2;
-    uint8_t s2;
-    if(game_loadsave(g, &t2, &s2)) {
+    uint8_t s2, tb2;
+    if(game_loadsave(g, &t2, &s2, &tb2)) {
       GAME_ERR("Save file doesn't match this puzzle; start a new one");
       game_free(g);
       return 1;
@@ -73,7 +78,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, progr
   camera_init(&g->cam, 320, 240, tw, th, GAME_MAXZOOM);
   camera_set(&g->cam, tw / 2, th / 2, GAME_STARTCELL / l->cell);
   g->lastsave = osGetTime();
-  if(!cont) game_save(g);
+  if(!cont) game_save(g, 1);
   return 0;
 }
 
@@ -83,11 +88,11 @@ void game_free(Game * g) {
   g->held = -1;
 }
 
-int game_save(Game * g) {
+int game_save(Game * g, int background) {
   size_t len = 4 + boardsave_size(&g->board);
   uint8_t * buf = malloc(len);
   if(!buf) return 1;
-  uint32_t prefix = STORAGE_SAVE_PREFIX(g->target, g->style);
+  uint32_t prefix = STORAGE_SAVE_PREFIX(g->target, g->style, g->table);
   buf[0] = prefix & 0xFF;
   buf[1] = (prefix >> 8) & 0xFF;
   buf[2] = (prefix >> 16) & 0xFF;
@@ -95,8 +100,14 @@ int game_save(Game * g) {
   boardsave_write(&g->board, buf + 4);
   char path[STORAGE_MAXPATH];
   storage_savepath(g->name, path);
-  int r = storage_writefile(path, buf, len);
-  free(buf);
+  int r = 0;
+  if(background) {
+    savewriter_submit(g->writer, path, buf, len);  // Takes buf
+  } else {
+    savewriter_flush(g->writer);
+    r = storage_writefile(path, buf, len);
+    free(buf);
+  }
   if(r == 0) {
     g->dirty = 0;
     g->lastsave = osGetTime();
@@ -124,8 +135,13 @@ int game_update(Game * g, const GameInput * in) {
 
   if(in->down & KEY_START) {
     ev |= game_release(g);
-    game_save(g);
+    game_save(g, 0);
     return ev | GAME_EV_EXIT;
+  }
+  // Hidden: SELECT cycles the table color (saved with the puzzle)
+  if(in->down & KEY_SELECT) {
+    g->table = (g->table + 1) % RENDER_TABLECOLORS;
+    g->dirty = 1;
   }
   // Zoom: up/down, or X/B for the other hand
   if(in->repeat & (KEY_DUP | KEY_X)) camera_zoom(c, GAME_ZOOMSTEP);
@@ -180,16 +196,16 @@ int game_update(Game * g, const GameInput * in) {
     board_move(&g->board, g->held, wx - g->lastwx, wy - g->lastwy);
     g->lastwx = wx;
     g->lastwy = wy;
-    if(in->down & KEY_L) board_rotate(&g->board, g->held, -1, wx, wy);
-    if(in->down & KEY_R) board_rotate(&g->board, g->held, 1, wx, wy);
+    // Either shoulder turns clockwise, so both hands work the same
+    if(in->down & (KEY_L | KEY_R)) board_rotate(&g->board, g->held, 1, wx, wy);
   }
 
-  if(g->dirty && osGetTime() - g->lastsave > GAME_AUTOSAVE_MS) game_save(g);
+  if(g->dirty && osGetTime() - g->lastsave > GAME_AUTOSAVE_MS) game_save(g, 1);
   return ev;
 }
 
 void game_render_bottom(Game * g, Render * r) {
-  render_table(r, &g->board, &g->cam, &g->gfx, g->held);
+  render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->table);
 }
 
 void game_render_top(Game * g, TextDraw * td) {
@@ -200,6 +216,6 @@ void game_render_top(Game * g, TextDraw * td) {
   } else {
     textdraw_print(td, 6, 208, 0.5f, white, "%lu pieces, %lu groups left",
         (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
-    textdraw_print(td, 6, 224, 0.45f, dim, "L/R rotate held  Up/Down or X/B zoom  START save+menu");
+    textdraw_print(td, 6, 224, 0.45f, dim, "L or R rotate held  Up/Down or X/B zoom  START save+menu");
   }
 }

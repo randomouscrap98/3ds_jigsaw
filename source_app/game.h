@@ -7,6 +7,7 @@
 #include "camera.h"
 #include "puzzlegfx.h"
 #include "render.h"
+#include "savewriter.h"
 #include "storage.h"
 #include "textdraw.h"
 
@@ -41,6 +42,8 @@ typedef struct {
   char name[256];
   uint32_t target;
   uint8_t style;          // Cut style (PGFX_STYLE_*)
+  uint8_t table;          // Table color (palette index in render)
+  SaveWriter * writer;    // Where saves go (NULL = write immediately)
   int32_t held;           // Group being dragged, or -1
   u8 panning;             // Stylus is dragging the table
   float lastwx, lastwy;   // World point under the stylus last frame
@@ -51,13 +54,16 @@ typedef struct {
 
 // Start a puzzle. target = piece count for a new game (cut in the given style), or 0 to
 // continue the save (style then comes from the save).
-int game_init(Game * g, const char * name, uint32_t target, uint8_t style, progress_fn cb, void * udata,
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveWriter * writer,
+    progress_fn cb, void * udata,
     char * err, size_t errlen);
 void game_free(Game * g);
 // Returns GAME_EV_ flags
 int game_update(Game * g, const GameInput * in);
 void game_render_bottom(Game * g, Render * r);
 void game_render_top(Game * g, TextDraw * td);
-int game_save(Game * g);
+// Save the puzzle. background = hand it to the writer thread (autosave); otherwise write it
+// now, after anything already queued so an older autosave can't land on top. 0 = success.
+int game_save(Game * g, int background);
 
 #endif

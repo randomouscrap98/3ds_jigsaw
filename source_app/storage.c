@@ -86,6 +86,7 @@ int storage_peeksave(const char * name, StorageSaveInfo * info) {
   uint32_t prefix = head[0] | (head[1] << 8) | (head[2] << 16) | ((uint32_t)head[3] << 24);
   info->target = STORAGE_SAVE_TARGET(prefix);
   info->style = STORAGE_SAVE_STYLE(prefix);
+  info->table = STORAGE_SAVE_TABLE(prefix);
   info->pieces = (uint32_t)bi.cols * bi.rows;
   info->groups = bi.ngroups;
   return 0;
