@@ -1,0 +1,25 @@
+Default puzzle images
+
+All images are from The Metropolitan Museum of Art's Open Access program
+(https://www.metmuseum.org/about-the-met/policies-and-procedures/image-resource),
+released as public domain under Creative Commons Zero (CC0). Credit is not
+required but is given here anyway. Images were downscaled for the 3DS.
+
+  By the Seashore                   Pierre-Auguste Renoir, 1883          (Met image DP-14936-039)
+  The Gulf Stream                   Winslow Homer, 1899                  (DP-20821-001)
+  Woman beside a Vase of Flowers    Edgar Degas, "A Woman Seated beside
+                                    a Vase of Flowers", 1865             (DP-25460-001)
+  Two Men Contemplating the Moon    Caspar David Friedrich, ca. 1825-30  (DP-31997-001)
+  Madame Charpentier and Children   Pierre-Auguste Renoir, "Madame
+                                    Georges Charpentier and Her
+                                    Children", 1878                      (DP-35674-001)
+  Wheat Field with Cypresses        Vincent van Gogh, 1889               (DP-42549-001)
+  Nichiren Calming the Waves        Utagawa Kuniyoshi, from "Sketches of
+                                    the Life of the Great Teacher"       (DP124477)
+  Wheat Fields                      Jacob van Ruisdael, ca. 1670         (DP145911)
+  Merry Company on a Terrace        Jan Steen, ca. 1670                  (DP146455)
+  The Card Players                  Paul Cezanne, 1890-92                (DP231550)
+  View of Toledo                    El Greco, ca. 1599-1600              (DP349564)
+  Jalais Hill, Pontoise             Camille Pissarro, 1867               (DT1859)
+
+You can delete any of these; they are only copied once, on first launch.

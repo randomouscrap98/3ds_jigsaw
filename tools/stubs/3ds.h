@@ -38,3 +38,5 @@ Result ndspInit(void); void ndspExit(void); void ndspSetOutputMode(int mode);
 void ndspChnReset(int id); void ndspChnSetInterp(int id, int type); void ndspChnSetRate(int id, float rate);
 void ndspChnSetFormat(int id, u16 format); void ndspChnSetMix(int id, float mix[12]);
 void ndspChnWaveBufClear(int id); void ndspChnWaveBufAdd(int id, ndspWaveBuf * buf);
+#define R_SUCCEEDED(r) ((r) >= 0)
+Result romfsInit(void); Result romfsExit(void);

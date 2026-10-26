@@ -47,7 +47,7 @@ typedef struct {
 } Game;
 
 // Start a puzzle. target = piece count for a new game, or 0 to continue the save.
-int game_init(Game * g, const char * name, uint32_t target, pgfx_progress cb, void * udata,
+int game_init(Game * g, const char * name, uint32_t target, progress_fn cb, void * udata,
     char * err, size_t errlen);
 void game_free(Game * g);
 // Returns GAME_EV_ flags

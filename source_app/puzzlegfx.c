@@ -139,7 +139,7 @@ static void puzzlegfx_writecache(PuzzleGfx * pg, const char * cachepath, PuzzleC
 }
 
 static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHeader * h,
-    pgfx_progress cb, void * udata, char * err, size_t errlen) {
+    progress_fn cb, void * udata, char * err, size_t errlen) {
   int result = 1;
   uint8_t * src = NULL, * img = NULL, * prev = NULL;
   uint32_t * tile = NULL, * prevpx = NULL;
@@ -236,7 +236,7 @@ done:
 }
 
 int puzzlegfx_load(PuzzleGfx * pg, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, pgfx_progress cb, void * udata, char * err, size_t errlen) {
+    uint32_t target, uint32_t seed, progress_fn cb, void * udata, char * err, size_t errlen) {
   puzzlegfx_zero(pg);
   err[0] = 0;
   PuzzleCacheHeader h;

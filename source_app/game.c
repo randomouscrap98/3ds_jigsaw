@@ -29,7 +29,7 @@ static int game_loadsave(Game * g, uint32_t * target) {
   return result;
 }
 
-int game_init(Game * g, const char * name, uint32_t target, pgfx_progress cb, void * udata,
+int game_init(Game * g, const char * name, uint32_t target, progress_fn cb, void * udata,
     char * err, size_t errlen) {
   memset(g, 0, sizeof(Game));
   g->held = -1;

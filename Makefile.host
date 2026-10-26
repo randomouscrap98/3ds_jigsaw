@@ -15,3 +15,8 @@ $(OUT): $(SRCS) $(wildcard source/*.h) $(wildcard source_test/*.h)
 
 clean:
 	rm -rf build_host
+
+# Image prescaler for bundled default puzzles (tools/prescale_defaults.sh)
+build_host/prescale: tools/prescale.c source/imgscale.c source/imgscale.h
+	@mkdir -p build_host
+	$(CC) -O2 -Wall -Isource -Isource/external -Itools tools/prescale.c source/imgscale.c -lm -o $@

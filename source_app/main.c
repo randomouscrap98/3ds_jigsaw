@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "defaults.h"
 #include "game.h"
 #include "puzzlemenu.h"
 #include "sfx.h"
@@ -50,7 +51,7 @@ static void app_progress(void * udata, const char * msg, int done, int total) {
   if(total > 1) {
     C2D_DrawRectSolid(80, 136, 0.5f, 240, 10, C2D_Color32(60, 60, 60, 255));
     C2D_DrawRectSolid(80, 136, 0.6f, 240.0f * done / total, 10, C2D_Color32(240, 200, 90, 255));
-    textdraw_center(&app->td, 200, 152, 0.5f, C2D_Color32(160, 160, 160, 255), "%d / %d", done, total);
+    textdraw_center(&app->td, 200, 152, 0.5f, C2D_Color32(160, 160, 160, 255), "%d%%", (int)(100.0f * done / total));
   }
   C2D_SceneBegin(app->bottom);
   C3D_FrameEnd(0);
@@ -92,6 +93,11 @@ int main(int argc, char ** argv) {
   textdraw_init(&app.td);
   sfx_init(&app.sfx);
   storage_init();
+  if(R_SUCCEEDED(romfsInit())) {
+    // Failure isn't fatal: the menu just shows whatever made it
+    defaults_install(app_progress, &app);
+    romfsExit();
+  }
   puzzlemenu_init(&app.menu);
   app.mode = MODE_MENU;
   aptHook(&app.hook, app_hook, &app);

@@ -72,9 +72,13 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
   for(int i = 0; i < pm->nentries && !err; i++) {
     PuzzleEntry * e = pm->entries + i;
     char name[TUIMENU_MAXNAME];
-    if(e->hassave && e->save.groups <= 1) snprintf(name, sizeof(name), "%.100s  [done]", e->name);
-    else if(e->hassave) snprintf(name, sizeof(name), "%.100s  [%lu left]", e->name, (unsigned long)e->save.groups);
-    else snprintf(name, sizeof(name), "%s", e->name);
+    // Show the name without its extension
+    const char * dot = strrchr(e->name, '.');
+    int len = dot ? (int)(dot - e->name) : (int)strlen(e->name);
+    if(len > 100) len = 100;
+    if(e->hassave && e->save.groups <= 1) snprintf(name, sizeof(name), "%.*s  [done]", len, e->name);
+    else if(e->hassave) snprintf(name, sizeof(name), "%.*s  [%lu left]", len, e->name, (unsigned long)e->save.groups);
+    else snprintf(name, sizeof(name), "%.*s", len, e->name);
     tui_menu_item_data * idata;
     TUIMITEM_SUBMENU(&pm->root, err, name, puzzlemenu_create_options,
         tui_menu_submenu_destroy_existing_menu, idata, 0);
@@ -197,7 +201,10 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   tui_menu * active = puzzlemenu_active(pm);
   const char * heading = active == &pm->root ? "Pick a puzzle" :
       active == &pm->options ? pm->entries[pm->root.current].name : "Erase the saved game?";
-  textdraw_print(td, 10, 6, 0.6f, title, "%s", heading);
+  int hlen = strlen(heading);
+  const char * dot = active == &pm->options ? strrchr(heading, '.') : NULL;
+  if(dot) hlen = dot - heading;
+  textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
   char line[PMENU_WIDTH + 1];
   for(int i = 0; i < PMENU_HEIGHT; i++) {
     tui_menu_renderline(&pm->root, line, PMENU_WIDTH, i);
