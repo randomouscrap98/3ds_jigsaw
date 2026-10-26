@@ -15,10 +15,6 @@
 #include "storage.h"
 #include "textdraw.h"
 
-// Piece pages + preview need ~9MB of linear memory; the rest is better spent on the
-// regular heap (image decoding). This is a libctru override hook.
-u32 __ctru_linear_heap_size = 20 * 1024 * 1024;
-
 #define MAIN_BG_TOP    C2D_Color32(30, 32, 38, 255)
 #define MAIN_BG_BOTTOM C2D_Color32(24, 26, 30, 255)
 #define MAIN_REPEAT_DELAY 20
