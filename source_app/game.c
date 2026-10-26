@@ -1,5 +1,6 @@
 #include "game.h"
 #include "boardsave.h"
+#include "savefile.h"
 #include "rng.h"
 #include "render.h"
 
@@ -20,14 +21,14 @@ static int game_loadsave(Game * g, uint32_t * target, uint8_t * style, uint8_t *
   uint8_t * buf;
   size_t len;
   if(storage_readfile(path, &buf, &len)) return 1;
-  int result = 1;
-  if(len > 4) {
-    uint32_t prefix = buf[0] | (buf[1] << 8) | (buf[2] << 16) | ((uint32_t)buf[3] << 24);
-    *target = STORAGE_SAVE_TARGET(prefix);
-    *style = STORAGE_SAVE_STYLE(prefix);
-    *table = STORAGE_SAVE_TABLE(prefix);
-    if(g->board.count) result = boardsave_read(&g->board, buf + 4, len - 4);
-    else result = 0;  // Only wanted the target
+  SaveHeader sh;
+  int result = savefile_read(buf, len, &sh);
+  if(result == 0) {
+    *target = sh.target;
+    *style = sh.style;
+    *table = sh.table;
+    // Without a board we only wanted the header
+    if(g->board.count) result = boardsave_read(&g->board, buf + sh.size, len - sh.size) ? 1 : 0;
   }
   free(buf);
   return result;
@@ -42,9 +43,16 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
   snprintf(g->name, sizeof(g->name), "%s", name);
   int cont = target == 0;
   uint8_t table = 0;
-  if(cont && game_loadsave(g, &target, &style, &table)) {
-    GAME_ERR("Couldn't read the save file");
-    return 1;
+  if(cont) {
+    int r = game_loadsave(g, &target, &style, &table);
+    if(r) {
+      if(r == 2) {
+        GAME_ERR("Save is from a newer version of the app");
+      } else {
+        GAME_ERR("Couldn't read the save file");
+      }
+      return 1;
+    }
   }
   g->target = target;
   g->style = style;
@@ -92,15 +100,19 @@ void game_free(Game * g) {
 }
 
 int game_save(Game * g, int background) {
-  size_t len = 4 + boardsave_size(&g->board);
+  size_t len = SAVEFILE_HEADER + boardsave_size(&g->board);
   uint8_t * buf = malloc(len);
   if(!buf) return 1;
-  uint32_t prefix = STORAGE_SAVE_PREFIX(g->target, g->style, g->table);
-  buf[0] = prefix & 0xFF;
-  buf[1] = (prefix >> 8) & 0xFF;
-  buf[2] = (prefix >> 16) & 0xFF;
-  buf[3] = (prefix >> 24) & 0xFF;
-  boardsave_write(&g->board, buf + 4);
+  SaveHeader sh;
+  savefile_init(&sh);
+  sh.appver[0] = APP_VERSION_MAJOR;
+  sh.appver[1] = APP_VERSION_MINOR;
+  sh.appver[2] = APP_VERSION_MICRO;
+  sh.style = g->style;
+  sh.target = g->target;
+  sh.table = g->table;
+  savefile_write(&sh, buf);
+  boardsave_write(&g->board, buf + SAVEFILE_HEADER);
   char path[STORAGE_MAXPATH];
   storage_savepath(g->name, path);
   int r = 0;

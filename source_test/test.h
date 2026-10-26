@@ -13,6 +13,7 @@ extern int test_checks;
 
 void test_board(void);
 void test_boardsave(void);
+void test_savefile(void);
 void test_camera(void);
 void test_stick(void);
 void test_layout(void);

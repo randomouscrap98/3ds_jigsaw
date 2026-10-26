@@ -28,13 +28,8 @@ void storage_savepath(const char * name, char * out);
 int storage_readfile(const char * path, uint8_t ** buf, size_t * len);
 // Write via temp file + rename so a crash can't leave half a file. Returns 0 on success.
 int storage_writefile(const char * path, const uint8_t * buf, size_t len);
-// Save files start with a u32: target piece count in bits 0-15, table color in 16-23,
-// cut style in 24-31 (older saves have 0s there = green felt, classic). Then a boardsave blob.
-#define STORAGE_SAVE_TARGET(v) ((v) & 0xFFFF)
-#define STORAGE_SAVE_TABLE(v) (((v) >> 16) & 0xFF)
-#define STORAGE_SAVE_STYLE(v) ((v) >> 24)
-#define STORAGE_SAVE_PREFIX(target, style, table) \
-  (((uint32_t)(style) << 24) | (((uint32_t)(table) & 0xFF) << 16) | ((target) & 0xFFFF))
+// Save files are a savefile header + boardsave blob (see savefile.h).
+// Returns 0 if the save is readable by this version.
 int storage_peeksave(const char * name, StorageSaveInfo * info);
 
 #endif

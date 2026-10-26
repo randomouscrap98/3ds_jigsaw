@@ -1,5 +1,6 @@
 #include "storage.h"
 #include "boardsave.h"
+#include "savefile.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,16 +78,16 @@ int storage_peeksave(const char * name, StorageSaveInfo * info) {
   storage_savepath(name, path);
   FILE * f = fopen(path, "rb");
   if(!f) return 1;
-  uint8_t head[64];
+  uint8_t head[256];  // Room for a bigger header from a later version + the boardsave header
   size_t len = fread(head, 1, sizeof(head), f);
   fclose(f);
-  if(len < 4) return 2;
+  SaveHeader sh;
+  if(savefile_read(head, len, &sh)) return 2;
   BoardSaveInfo bi;
-  if(boardsave_peek(head + 4, len - 4, &bi)) return 3;
-  uint32_t prefix = head[0] | (head[1] << 8) | (head[2] << 16) | ((uint32_t)head[3] << 24);
-  info->target = STORAGE_SAVE_TARGET(prefix);
-  info->style = STORAGE_SAVE_STYLE(prefix);
-  info->table = STORAGE_SAVE_TABLE(prefix);
+  if(boardsave_peek(head + sh.size, len - sh.size, &bi)) return 3;
+  info->target = sh.target;
+  info->style = sh.style;
+  info->table = sh.table;
   info->pieces = (uint32_t)bi.cols * bi.rows;
   info->groups = bi.ngroups;
   return 0;

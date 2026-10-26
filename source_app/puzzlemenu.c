@@ -259,4 +259,5 @@ void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td) {
   textdraw_print(td, 12, 132, 0.5f, dim, "Left/Right: change option   L/R: page");
   textdraw_print(td, 12, 148, 0.5f, dim, "START: quit");
   if(pm->status[0]) textdraw_print(td, 12, 180, 0.5f, warn, "%s", pm->status);
+  textdraw_print(td, 270, 222, 0.4f, dim, "v" APP_VERSION_STRING);
 }

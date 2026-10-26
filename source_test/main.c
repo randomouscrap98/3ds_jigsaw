@@ -14,6 +14,7 @@ int main(int argc, char ** argv) {
   }
   RUN(test_board);
   RUN(test_boardsave);
+  RUN(test_savefile);
   RUN(test_camera);
   RUN(test_stick);
   RUN(test_layout);

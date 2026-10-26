@@ -43,6 +43,13 @@ APP_TITLE := 3DS Jigsaw
 APP_DESCRIPTION := Jigsaw puzzles from your own pictures
 APP_AUTHOR := haloopdy
 
+# App version: the only place to change it (shown in the menu, stamped in saves).
+# Not tracked as a dependency: run `make clean` after changing it.
+APP_VERSION_MAJOR := 1
+APP_VERSION_MINOR := 0
+APP_VERSION_MICRO := 0
+APP_VERSION_STRING := $(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_MICRO)
+
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
@@ -52,7 +59,9 @@ CFLAGS	:=	-g -Wall -Wno-undef -O2 -mword-relocations \
 			-ffunction-sections \
 			$(ARCH)
 
-CFLAGS	+=	$(INCLUDE) -D__3DS__ 
+CFLAGS	+=	$(INCLUDE) -D__3DS__ \
+			-DAPP_VERSION_MAJOR=$(APP_VERSION_MAJOR) -DAPP_VERSION_MINOR=$(APP_VERSION_MINOR) -DAPP_VERSION_MICRO=$(APP_VERSION_MICRO) \
+			-DAPP_VERSION_STRING=\"$(APP_VERSION_STRING)\"
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
