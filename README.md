@@ -77,3 +77,10 @@ Tests for the platform independent code run on your PC with `make -f Makefile.ho
 ## License
 
 MIT, see `LICENSE.txt`.
+
+## AI Disclosure
+
+LLM assistance was used in the creation of this app. It was not vibe-coded.
+Art assets (icon, banner) were generated through [code](tools/makeart.c) 
+and are reproducible; they are not AI generated.
+
