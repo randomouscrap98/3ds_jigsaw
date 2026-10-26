@@ -8,7 +8,7 @@
 #define SFX_COMPLETE 1
 #define SFX_COUNT 2
 
-// Tiny sound effects, synthesized at startup (no audio files, no licenses).
+// Tiny sound effects, synthesized at startup by sfxgen (no audio files, no licenses).
 // If the DSP can't start (no dspfirm.cdc dumped), everything is silently a no-op.
 typedef struct {
   s16 * data[SFX_COUNT];

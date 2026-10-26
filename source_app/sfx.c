@@ -1,42 +1,14 @@
 #include "sfx.h"
+#include "sfxgen.h"
 
-#include <math.h>
 #include <string.h>
 
-// A short woody "tock": two decaying sines plus a tiny click of noise
 static u32 sfx_gen_merge(s16 * out, u32 max) {
-  u32 n = SFX_RATE * 0.09f;
-  if(n > max) n = max;
-  u32 noise = 0x1234567;
-  for(u32 i = 0; i < n; i++) {
-    float t = (float)i / SFX_RATE;
-    float env = expf(-t * 55);
-    float v = sinf(2 * M_PI * 820 * t) * 0.6f + sinf(2 * M_PI * 1640 * t) * 0.25f;
-    if(i < SFX_RATE * 0.004f) {
-      noise = noise * 1103515245u + 12345u;
-      v += ((float)((noise >> 16) & 0x7FFF) / 16384.0f - 1) * 0.5f * (1 - i / (SFX_RATE * 0.004f));
-    }
-    out[i] = (s16)(v * env * 0.5f * 32767);
-  }
-  return n;
+  return sfxgen_merge(out, max, SFX_RATE);
 }
 
-// Rising three note chime
 static u32 sfx_gen_complete(s16 * out, u32 max) {
-  const float notes[3] = { 1046.5f, 1318.5f, 1568.0f };
-  const float step = 0.11f;
-  u32 n = SFX_RATE * (step * 2 + 0.5f);
-  if(n > max) n = max;
-  for(u32 i = 0; i < n; i++) {
-    float t = (float)i / SFX_RATE, v = 0;
-    for(int k = 0; k < 3; k++) {
-      float tk = t - k * step;
-      if(tk < 0) continue;
-      v += sinf(2 * M_PI * notes[k] * tk) * expf(-tk * 6) * 0.3f;
-    }
-    out[i] = (s16)(v * 32767 * 0.6f);
-  }
-  return n;
+  return sfxgen_complete(out, max, SFX_RATE);
 }
 
 int sfx_init(Sfx * s) {

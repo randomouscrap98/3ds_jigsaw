@@ -9,6 +9,10 @@ int test_checks = 0;
 #define RUN(fn) do { printf("%s\n", #fn); fn(); } while(0)
 
 int main(int argc, char ** argv) {
+  if(argc > 2 && !strcmp(argv[1], "sfx")) {
+    test_dump_sfx(argv[2]);
+    return 0;
+  }
   if(argc > 2 && !strcmp(argv[1], "dump")) {
     uint8_t style = EDGEGEN_STYLE_CLASSIC;
     if(argc > 3 && !strcmp(argv[3], "irregular")) style = EDGEGEN_STYLE_IRREGULAR;
@@ -19,6 +23,7 @@ int main(int argc, char ** argv) {
   RUN(test_board);
   RUN(test_boardsave);
   RUN(test_savefile);
+  RUN(test_sfxgen);
   RUN(test_camera);
   RUN(test_stick);
   RUN(test_layout);
