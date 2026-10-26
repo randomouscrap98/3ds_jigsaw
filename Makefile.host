@@ -21,7 +21,8 @@ build_host/prescale: tools/prescale.c source/imgscale.c source/imgscale.h
 	@mkdir -p build_host
 	$(CC) -O2 -Wall -Isource -Isource/external -Itools tools/prescale.c source/imgscale.c -lm -o $@
 
-# App icon (icon.png in the project root is picked up by the 3DS Makefile)
-build_host/makeicon: tools/makeicon.c source/edgegen.c source/imgscale.c source/rng.c source/edgegen.h source/imgscale.h
+# App icon + CIA banner (tools/makeart.c). icon.png in the project root is picked up by the
+# 3DS Makefile; meta/banner.png by its cia target.
+build_host/makeart: tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c source/edgegen.h source/imgscale.h
 	@mkdir -p build_host
-	$(CC) -O2 -Wall -Isource -Itools tools/makeicon.c source/edgegen.c source/imgscale.c source/rng.c -lm -o $@
+	$(CC) -O2 -Wall -Isource -Itools tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c -lm -o $@

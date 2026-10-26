@@ -43,12 +43,22 @@ APP_TITLE := 3DS Jigsaw
 APP_DESCRIPTION := Jigsaw puzzles from your own pictures
 APP_AUTHOR := haloopdy
 
-# App version: the only place to change it (shown in the menu, stamped in saves).
-# Not tracked as a dependency: run `make clean` after changing it.
+# App version: the only place to change it (shown in the menu, stamped in saves, CIA
+# version). Objects depend on this Makefile, so changing it rebuilds everything.
 APP_VERSION_MAJOR := 1
 APP_VERSION_MINOR := 0
 APP_VERSION_MICRO := 0
 APP_VERSION_STRING := $(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_MICRO)
+
+#---------------------------------------------------------------------------------
+# CIA build settings (needs bannertool + makerom in the path, see junkdraw's README).
+# Icon: icon.png in the root (tools/makeart.c makes it and the banner image).
+#---------------------------------------------------------------------------------
+PRODUCT_CODE	:=	CTR-HJGS
+UNIQUE_ID		:=	0xBBAF1
+BANNER_AUDIO	:=	meta/banner.wav
+BANNER_IMAGE	:=	meta/banner.png
+RSF_PATH		:=	meta/app.rsf
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -158,7 +168,24 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean 3dsx
+.PHONY: all clean cia 3dsx
+
+#---------------------------------------------------------------------------------
+# CIA tool configuration
+#---------------------------------------------------------------------------------
+MAKEROM			?=	makerom
+BANNERTOOL		?=	bannertool
+
+MAKEROM_ARGS	:=	-elf "$(OUTPUT).elf" -rsf "$(RSF_PATH)" \
+					-banner "$(BUILD)/banner.bnr" -icon "$(BUILD)/icon.icn" \
+					-DAPP_TITLE="$(APP_TITLE)" \
+					-DAPP_PRODUCT_CODE="$(PRODUCT_CODE)" \
+					-DAPP_UNIQUE_ID="$(UNIQUE_ID)" \
+					-DAPP_VERSION_MAJOR="$(APP_VERSION_MAJOR)"
+
+ifneq ($(strip $(ROMFS)),)
+	MAKEROM_ARGS	+=	-DAPP_ROMFS="$(ROMFS)"
+endif
 
 #---------------------------------------------------------------------------------
 all: 3dsx
@@ -169,9 +196,19 @@ all: 3dsx
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
+cia: 3dsx
+	@echo Building CIA...
+	@$(BANNERTOOL) makebanner -i $(BANNER_IMAGE) -a $(BANNER_AUDIO) -o $(BUILD)/banner.bnr
+	@$(BANNERTOOL) makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" \
+		-p "$(APP_AUTHOR)" -i $(APP_ICON) -o $(BUILD)/icon.icn
+	@$(MAKEROM) -f cia -o $(OUTPUT).cia -target t -exefslogo \
+		$(MAKEROM_ARGS) -major $(APP_VERSION_MAJOR) -minor $(APP_VERSION_MINOR) -micro $(APP_VERSION_MICRO)
+	@echo Built $(TARGET).cia
+
+#---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf
+	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf $(TARGET).cia
 
 
 #---------------------------------------------------------------------------------
