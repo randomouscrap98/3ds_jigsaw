@@ -42,3 +42,9 @@ void textdraw_center(TextDraw * td, float x, float y, float scale, u32 color, co
   textdraw_draw(td, x, y, scale, color, 1, fmt, args);
   va_end(args);
 }
+
+void textdraw_fmttime(char * out, size_t len, uint32_t seconds) {
+  unsigned long h = seconds / 3600, m = seconds / 60 % 60, s = seconds % 60;
+  if(h) snprintf(out, len, "%lu:%02lu:%02lu", h, m, s);
+  else snprintf(out, len, "%lu:%02lu", m, s);
+}

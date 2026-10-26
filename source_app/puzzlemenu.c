@@ -51,10 +51,12 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   storage_puzzlepath(e->name, path);
   thumb_request(&pm->thumb, path);
   if(e->hassave) {
+    char time[16];
+    textdraw_fmttime(time, sizeof(time), e->save.header.seconds);
     if(e->save.groups <= 1) {
-      snprintf(name, sizeof(name), "View finished puzzle");
+      snprintf(name, sizeof(name), "View finished puzzle (%s)", time);
     } else {
-      snprintf(name, sizeof(name), "Continue: %lu groups left", (unsigned long)e->save.groups);
+      snprintf(name, sizeof(name), "Continue: %lu left, %s", (unsigned long)e->save.groups, time);
     }
     TUIMITEM_BASIC(&pm->options, err, name, 0);
     pm->optact[n++] = PMENU_ACT_CONTINUE;

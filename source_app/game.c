@@ -40,6 +40,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     target = hdr.target;
     style = hdr.style;
     g->table = hdr.table;
+    g->playms = (u64)hdr.seconds * 1000;
   }
   g->target = target;
   g->style = style;
@@ -77,6 +78,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
   stick_init(&g->cstick, GAME_CSTICK_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
   camera_set(&g->cam, tw / 2, th / 2, GAME_STARTCELL / l->cell);
   g->lastsave = osGetTime();
+  g->lastframe = g->lastsave;
   if(!cont) game_save(g, 1);
   return 0;
 }
@@ -99,6 +101,7 @@ int game_save(Game * g, int background) {
   sh.style = g->style;
   sh.target = g->target;
   sh.table = g->table;
+  sh.seconds = g->playms / 1000;
   savefile_write(&sh, &g->board, buf);
   char path[STORAGE_MAXPATH];
   storage_savepath(g->name, path);
@@ -134,6 +137,15 @@ static int game_release(Game * g) {
 int game_update(Game * g, const GameInput * in) {
   int ev = 0;
   Camera * c = &g->cam;
+  u64 now = osGetTime();
+  u64 dt = now - g->lastframe;
+  if(dt > GAME_MAXFRAME_MS) dt = GAME_MAXFRAME_MS;
+  g->lastframe = now;
+  if(!board_complete(&g->board)) g->playms += dt;
+  // Info overlay fades in while Y is held, out when let go
+  g->overlay += (in->held & KEY_Y ? 1.0f : -1.0f) * dt / GAME_OVERLAY_FADE_MS;
+  if(g->overlay < 0) g->overlay = 0;
+  if(g->overlay > 1) g->overlay = 1;
 
   if(in->down & KEY_START) {
     ev |= game_release(g);
@@ -222,5 +234,15 @@ void game_render_top(Game * g, TextDraw * td) {
     textdraw_print(td, 6, 208, 0.5f, white, "%lu pieces, %lu groups left",
         (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
     textdraw_print(td, 6, 224, 0.45f, dim, "L or R rotate held  Up/Down or X/B zoom  START save+menu");
+  }
+  if(g->overlay > 0) {
+    // Info panel over the middle of the preview (hold Y)
+    u8 a = (u8)(g->overlay * 255);
+    char time[16];
+    textdraw_fmttime(time, sizeof(time), g->playms / 1000);
+    C2D_DrawRectSolid(110, 66, 0.7f, 180, 72, C2D_Color32(16, 16, 20, (u8)(g->overlay * 210)));
+    textdraw_center(td, 200, 74, 0.8f, C2D_Color32(255, 220, 90, a), "%s", time);
+    textdraw_center(td, 200, 108, 0.5f, C2D_Color32(230, 230, 230, a), "%lu pieces, %lu groups left",
+        (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
   }
 }

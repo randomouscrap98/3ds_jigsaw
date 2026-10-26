@@ -9,14 +9,15 @@
 #define SAVEFILE_MAGIC   "3DSJGSAW"
 #define SAVEFILE_VERSION 1
 #define SAVEFILE_HEADER  64      // Header size written by this version
-#define SAVEFILE_MINHEADER 19    // Smallest header we can read (fields below)
+#define SAVEFILE_MINHEADER 23    // Smallest header we can read (fields below)
 
 // A whole save file: this header, then a boardsave blob. Little endian. Header layout:
 //   0  char[8] "3DSJGSAW"
 //   8  u16 save version          10 u16 header size (boardsave starts here)
 //   12 u8[3] app version that wrote it (major, minor, micro)
 //   15 u8 cut style              16 u16 target piece count
-//   18 u8 table color            19.. reserved, zero
+//   18 u8 table color            19 u32 play time, seconds
+//   23.. reserved, zero
 typedef struct {
   uint16_t version;
   uint16_t size;
@@ -24,6 +25,7 @@ typedef struct {
   uint8_t style;
   uint16_t target;
   uint8_t table;
+  uint32_t seconds;   // Play time
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board

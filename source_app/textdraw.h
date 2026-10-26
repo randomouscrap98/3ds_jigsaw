@@ -22,4 +22,7 @@ void textdraw_print(TextDraw * td, float x, float y, float scale, u32 color, con
 void textdraw_center(TextDraw * td, float x, float y, float scale, u32 color, const char * fmt, ...)
   __attribute__((format(printf, 6, 7)));
 
+// Format a duration as m:ss, or h:mm:ss from an hour up
+void textdraw_fmttime(char * out, size_t len, uint32_t seconds);
+
 #endif

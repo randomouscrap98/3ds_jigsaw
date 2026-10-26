@@ -20,7 +20,7 @@
 #define GAME_MAXZOOM 2.0f
 #define GAME_STARTCELL 28.0f      // Starting zoom shows a cell this many pixels wide
 #define GAME_ZOOMSTEP 1.15f       // Per D-pad / X / B press or repeat
-#define GAME_STICKZOOM 1.035f     // Per frame zoom factor at full C-stick tilt (New 3DS)
+#define GAME_STICKZOOM 1.053f     // Per frame zoom factor at full C-stick tilt (New 3DS)
 #define GAME_CIRCLE_RANGE 156     // Circle pad full tilt
 #define GAME_CSTICK_RANGE 146     // C-stick full tilt (guess; values past it just clamp)
 #define GAME_PANSPEED 15.0f       // Pixels per frame at full circle pad
@@ -30,6 +30,8 @@
 #define GAME_EDGEPAN 18           // Dragging this close to the screen edge pans
 #define GAME_EDGEPANSPEED 4.0f
 #define GAME_AUTOSAVE_MS 30000
+#define GAME_MAXFRAME_MS 100      // Longer frames (HOME menu, sleep) only count this much play time
+#define GAME_OVERLAY_FADE_MS 200  // Info overlay (hold Y) fade in / out time
 
 #define GAME_EV_MERGE    (1 << 0)
 #define GAME_EV_COMPLETE (1 << 1)
@@ -62,6 +64,9 @@ typedef struct {
   float lastsx, lastsy;   // Screen point of the stylus last frame
   u8 dirty;
   u64 lastsave;
+  u64 lastframe;          // osGetTime of the previous update
+  u64 playms;             // Play time; stops counting once complete
+  float overlay;          // Info overlay opacity 0..1 (hold Y)
 } Game;
 
 // Start a puzzle. target = piece count for a new game (cut in the given style), or 0 to

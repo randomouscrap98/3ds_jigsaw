@@ -14,6 +14,7 @@ void test_savefile(void) {
   h.style = 1;
   h.target = 500;
   h.table = 7;
+  h.seconds = 0x01020304;
   size_t len = savefile_size(&b);
   uint8_t * buf = malloc(len);
   savefile_write(&h, &b, buf);
@@ -27,7 +28,8 @@ void test_savefile(void) {
   CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK);
   CHECK(r.version == SAVEFILE_VERSION && r.size == SAVEFILE_HEADER);
   CHECK(r.appver[0] == 1 && r.appver[1] == 2 && r.appver[2] == 3);
-  CHECK(r.style == 1 && r.target == 500 && r.table == 7);
+  CHECK(r.style == 1 && r.target == 500 && r.table == 7 && r.seconds == 0x01020304);
+  CHECK(buf[19] == 4 && buf[22] == 1);
 
   // Peek works from just the start of the file, like the menu reads it
   SaveInfo info;

@@ -22,6 +22,7 @@ void savefile_write(const SaveHeader * h, Board * b, uint8_t * buf) {
   buf[15] = h->style;
   buf[16] = h->target & 0xFF; buf[17] = h->target >> 8;
   buf[18] = h->table;
+  for(int i = 0; i < 4; i++) buf[19 + i] = (h->seconds >> (8 * i)) & 0xFF;
   boardsave_write(b, buf + SAVEFILE_HEADER);
 }
 
@@ -36,6 +37,7 @@ int savefile_readheader(const uint8_t * buf, size_t len, SaveHeader * h) {
   h->style = buf[15];
   h->target = buf[16] | (buf[17] << 8);
   h->table = buf[18];
+  for(int i = 0; i < 4; i++) h->seconds |= (uint32_t)buf[19 + i] << (8 * i);
   return SAVEFILE_OK;
 }
 
