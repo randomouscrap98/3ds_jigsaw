@@ -1,0 +1,8 @@
+#!/bin/sh
+# Syntax/type check the 3DS code with host gcc against stub headers (tools/stubs).
+# Catches typos and type errors only; the stubs are not the real libctru/citro2d.
+cd "$(dirname "$0")/.." || exit 1
+for f in source/*.c source/external/*.c source_app/*.c; do
+  gcc -fsyntax-only -std=gnu11 -Wall -Wextra -Wno-unused-parameter -Wno-sign-compare \
+    -D__3DS__ -Itools/stubs -Isource -Isource/external -Isource_app "$f" || echo "FAILED: $f"
+done

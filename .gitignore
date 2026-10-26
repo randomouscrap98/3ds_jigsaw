@@ -1,1 +1,10 @@
-/ignore
+build/
+build_host/
+CLAUDE.local.md
+*.3dsx
+*.elf
+*.smdh
+*.lst
+*.map
+ignore/
+notes/

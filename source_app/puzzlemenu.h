@@ -1,0 +1,49 @@
+#ifndef __HEADER_JIGSAW_PUZZLEMENU__
+#define __HEADER_JIGSAW_PUZZLEMENU__
+
+#include <3ds.h>
+
+#include "littlemenu.h"
+#include "storage.h"
+#include "textdraw.h"
+
+#define PMENU_HEIGHT 12
+#define PMENU_WIDTH 46
+#define PMENU_MAXNAME 128
+#define PMENU_NUMCOUNTS 4
+#define PMENU_ACT_CONTINUE 0
+
+typedef struct {
+  char name[PMENU_MAXNAME];
+  StorageSaveInfo save;
+  u8 hassave;
+} PuzzleEntry;
+
+// What the player picked
+typedef struct {
+  const char * name;    // NULL = nothing picked yet
+  uint32_t target;      // Piece count for a new game, 0 = continue
+  u8 quit;
+} PuzzleChoice;
+
+// Puzzle list -> options (continue / new N pieces) -> confirm overwrite, using littlemenu.
+typedef struct {
+  tui_menu root;
+  tui_menu options;
+  tui_menu confirm;
+  PuzzleEntry * entries;
+  int nentries;
+  uint32_t optact[PMENU_NUMCOUNTS + 1];  // Action for each options item
+  char status[128];                      // Shown under the menu (errors etc.)
+} PuzzleMenu;
+
+int puzzlemenu_init(PuzzleMenu * pm);
+void puzzlemenu_free(PuzzleMenu * pm);
+// Rescan the puzzles folder and saves; keeps the cursor where it was
+int puzzlemenu_refresh(PuzzleMenu * pm);
+void puzzlemenu_setstatus(PuzzleMenu * pm, const char * msg);
+PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat);
+void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td);
+void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td);
+
+#endif
