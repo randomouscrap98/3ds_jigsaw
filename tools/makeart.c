@@ -16,6 +16,8 @@
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
 
 // ---- Icon ----
 #define ICON_SIZE 48
@@ -49,6 +51,20 @@
 #define BANNER_LOOSE_BLUR 1.3f
 #define BANNER_LOOSE_ALPHA 0.5f
 #define BANNER_PREVIEW_SCALE 3
+// Brass nameplate on the bottom of the frame
+#define PLATE_TEXT "3DS Jigsaw"
+#define PLATE_FONT "tools/fonts/Cinzel-Bold.ttf"   // OFL, see tools/fonts/OFL.txt
+#define PLATE_W 84.0f
+#define PLATE_H 15.0f
+#define PLATE_BOTTOM 126.0f             // Bottom edge of the plate (banner pixels)
+#define PLATE_RADIUS 2.5f               // Corner rounding
+#define PLATE_BEVEL 1.6f
+#define PLATE_TEXT_H 7.5f               // Cap height of the lettering
+#define PLATE_SCREW_IN 5.0f             // Screw heads, this far in from each end
+#define PLATE_SCREW_R 1.1f
+#define PLATE_SHADOW_OFF 0.8f
+#define PLATE_SHADOW_BLUR 0.8f
+#define PLATE_SHADOW_ALPHA 0.55f
 
 // Pieces not yet placed: grid cell, where it lies (center, banner pixels), angle (degrees).
 // Any missing cell not listed here is just not on the table.
@@ -58,7 +74,7 @@ static const LoosePiece banner_loose[] = {
   { 5, 2, 205, 52, -63 },
   { 6, 1, 183, 82, 141 },
   { 3, 2, 222, 96, 12 },
-  { 5, 1, 152, 104, -22 },
+  // { 5, 1, 156, 97, -22 },        // Removed: crowded the nameplate
   { 4, 2, 229, 26, 77 },
 };
 static const int banner_missing[][2] = { { 4, 1 }, { 5, 1 }, { 6, 1 }, { 4, 2 }, { 5, 2 }, { 3, 2 }, { 6, 2 } };
@@ -66,6 +82,7 @@ static const int banner_missing[][2] = { { 4, 1 }, { 5, 1 }, { 6, 1 }, { 4, 2 },
 static const float felt[3] = { 46, 64, 58 };   // Same as the game's green felt (render.c)
 static const float gold[3] = { 212, 168, 58 };
 static const float wood[3] = { 120, 80, 46 };
+static const float engrave[3] = { 74, 50, 18 };
 
 static float clampf(float v, float lo, float hi) { return v < lo ? lo : v > hi ? hi : v; }
 
@@ -365,6 +382,115 @@ static void draw_frame(uint8_t * out, int w, int h, int f) {
   }
 }
 
+// Rounded rectangle outline, clockwise (y down), npts points per corner
+static int rounded_rect(float x0, float y0, float x1, float y1, float r, int npts, float * xy) {
+  const float cx[4] = { x1 - r, x1 - r, x0 + r, x0 + r }, cy[4] = { y0 + r, y1 - r, y1 - r, y0 + r };
+  int n = 0;
+  for(int c = 0; c < 4; c++) {
+    for(int i = 0; i < npts; i++) {
+      float a = (-90 + c * 90 + 90.0f * i / (npts - 1)) * 3.14159265f / 180;
+      xy[n * 2] = cx[c] + r * cosf(a);
+      xy[n * 2 + 1] = cy[c] + r * sinf(a);
+      n++;
+    }
+  }
+  return n;
+}
+
+// Text coverage (0..1) into a w x h buffer, cap height capk pixels, centered on (cx, cy)
+static int text_coverage(float * cov, int w, int h, const char * text, float capk, float cx, float cy) {
+  FILE * f = fopen(PLATE_FONT, "rb");
+  if(!f) {
+    fprintf(stderr, "can't open %s\n", PLATE_FONT);
+    return 1;
+  }
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  unsigned char * ttf = malloc(size);
+  if(fread(ttf, 1, size, f) != (size_t)size) return 1;
+  fclose(f);
+  stbtt_fontinfo font;
+  if(!stbtt_InitFont(&font, ttf, 0)) return 1;
+  int hx0, hy0, hx1, hy1;
+  stbtt_GetCodepointBox(&font, 'H', &hx0, &hy0, &hx1, &hy1);
+  float scale = capk / hy1;
+  // Width with kerning, to center
+  float width = 0;
+  for(const char * c = text; *c; c++) {
+    int adv, lsb;
+    stbtt_GetCodepointHMetrics(&font, *c, &adv, &lsb);
+    width += adv * scale;
+    if(c[1]) width += stbtt_GetCodepointKernAdvance(&font, c[0], c[1]) * scale;
+  }
+  float pen = cx - width / 2, base = cy + capk / 2;
+  for(const char * c = text; *c; c++) {
+    int adv, lsb, gw, gh, gx, gy;
+    stbtt_GetCodepointHMetrics(&font, *c, &adv, &lsb);
+    float fx = pen - floorf(pen), fy = base - floorf(base);
+    unsigned char * g = stbtt_GetCodepointBitmapSubpixel(&font, scale, scale, fx, fy, *c, &gw, &gh, &gx, &gy);
+    for(int y = 0; y < gh; y++) for(int x = 0; x < gw; x++) {
+      int X = (int)floorf(pen) + gx + x, Y = (int)floorf(base) + gy + y;
+      if(X >= 0 && Y >= 0 && X < w && Y < h) cov[Y * w + X] = fmaxf(cov[Y * w + X], g[y * gw + x] / 255.0f);
+    }
+    stbtt_FreeBitmap(g, NULL);
+    pen += adv * scale;
+    if(c[1]) pen += stbtt_GetCodepointKernAdvance(&font, c[0], c[1]) * scale;
+  }
+  free(ttf);
+  return 0;
+}
+
+// Brass nameplate with engraved lettering and two screw heads, drawn over the frame
+static int draw_plate(uint8_t * out) {
+  const int S = BANNER_SS, W = BANNER_W * S, H = BANNER_H * S;
+  float x0 = (BANNER_W - PLATE_W) / 2 * S, x1 = (BANNER_W + PLATE_W) / 2 * S;
+  float y1 = PLATE_BOTTOM * S, y0 = y1 - PLATE_H * S;
+  float xy[4 * 12 * 2];
+  int n = rounded_rect(x0, y0, x1, y1, PLATE_RADIUS * S, 12, xy);
+  Layer l;
+  layer_init(&l, W, H);
+  float * outlines[1] = { xy };
+  layer_shadow(&l, outlines, &n, 1, (int)(PLATE_SHADOW_OFF * S), (int)(PLATE_SHADOW_BLUR * S), PLATE_SHADOW_ALPHA);
+  layer_piece(&l, xy, n, PLATE_BEVEL * S, S * 0.6f, x0, y0, x1 - x0, y1 - y0);
+  // Engraving: letters darkened; their lower right walls catch the light (a light lip
+  // where the letter shifted up-left isn't), the upper left ones are in shadow
+  float * cov = calloc((size_t)W * H, sizeof(float));
+  float cy = (y0 + y1) / 2;
+  if(text_coverage(cov, W, H, PLATE_TEXT, PLATE_TEXT_H * S, (x0 + x1) / 2, cy)) return 1;
+  const int sh = S * 3 / 4;
+  for(int y = (int)y0; y < (int)y1; y++) {
+    for(int x = (int)x0; x < (int)x1; x++) {
+      size_t i = (size_t)y * W + x;
+      if(l.alpha[i] <= 0) continue;
+      float c = cov[i];
+      float lip = fmaxf(0, cov[(size_t)(y - sh) * W + x - sh] - c);   // just below/right of a stroke
+      for(int k = 0; k < 3; k++) {
+        float v = l.rgb[i * 3 + k] * (1 - c) + engrave[k] * c;
+        l.rgb[i * 3 + k] = clampf(v + 70 * lip, 0, 255);
+      }
+    }
+  }
+  // Screw heads: small domes with a slot
+  for(int s = 0; s < 2; s++) {
+    float sx = s ? x1 - PLATE_SCREW_IN * S : x0 + PLATE_SCREW_IN * S, r = PLATE_SCREW_R * S;
+    for(int y = (int)(cy - r - 1); y <= cy + r + 1; y++) for(int x = (int)(sx - r - 1); x <= sx + r + 1; x++) {
+      float dx = x + 0.5f - sx, dy = y + 0.5f - cy, d = sqrtf(dx * dx + dy * dy);
+      if(d > r) continue;
+      size_t i = (size_t)y * W + x;
+      float lit = 0.75f - 0.35f * (dx + dy) / r;           // Brighter toward the top left
+      int slot = fabsf(dx - dy) < S * 0.35f;              // Diagonal slot
+      for(int k = 0; k < 3; k++) l.rgb[i * 3 + k] = clampf(slot ? engrave[k] : gold[k] * lit, 0, 255);
+    }
+  }
+  free(cov);
+  uint8_t * small = layer_resolve(&l, BANNER_W, BANNER_H);
+  layer_free(&l);
+  composite(out, small, BANNER_W, BANNER_H);
+  free(small);
+  return 0;
+}
+
 static int make_banner(const char * path, const char * preview) {
   const int S = BANNER_SS, W = BANNER_W * S, H = BANNER_H * S;
   const float cell = BANNER_CELL * S;
@@ -427,6 +553,7 @@ static int make_banner(const char * path, const char * preview) {
   draw_felt(out, BANNER_W, 0, 0, BANNER_W, BANNER_H);
   composite(out, small, BANNER_W, BANNER_H);
   draw_frame(out, BANNER_W, BANNER_H, BANNER_FRAME);
+  if(draw_plate(out)) return 1;
   int r = write_png(path, out, BANNER_W, BANNER_H, preview, BANNER_PREVIEW_SCALE);
   free(small);
   free(out);

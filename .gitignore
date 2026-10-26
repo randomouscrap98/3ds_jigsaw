@@ -6,5 +6,6 @@ CLAUDE.local.md
 *.smdh
 *.lst
 *.map
+*.cia
 ignore/
 notes/
