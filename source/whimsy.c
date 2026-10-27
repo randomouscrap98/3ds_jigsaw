@@ -11,6 +11,11 @@
 #define WH_CLEARANCE 0.06f    // Body clearance for pieces around a whimsy (cells)
 #define WH_GRIDNEAR 0.45f     // Grid edges this close to a whimsy get new tabs
 #define WH_TABEDGE 0.5f       // A piece next to a whimsy needs an inner edge this long
+#ifndef WH_MINTHICK
+#define WH_MINTHICK 0.25f     // Pieces next to a whimsy: thickest inside circle at least this
+#endif
+#define WH_THICKSTEP 0.05f    // Sampling grid for that (cells)
+#define WH_HEARTTIP 3.5f      // Heart tip rounding distance (heart is ~34 units wide)
 
 // ---- Shapes ----
 
@@ -66,29 +71,60 @@ static float whimsy_ray(float t, float cx, float cy, float r) {
 // and softened where circles meet. petals > 0: that many circles of radius r at distance d
 // around a middle circle; petals = 0: a cloud.
 static uint32_t whimsy_circles(float * xy, uint32_t m, uint32_t petals, float d, float r, const float * unused) {
+  // Puffs all round: a big middle, puffs on top, sides and bottom
   static const float cloud[][3] = {
-    { 0, 0.1f, 0.62f }, { -0.75f, 0.2f, 0.45f }, { 0.75f, 0.2f, 0.45f },
-    { -0.35f, -0.3f, 0.5f }, { 0.4f, -0.35f, 0.48f }, { -1.1f, 0.32f, 0.3f }, { 1.1f, 0.32f, 0.3f },
+    { 0, 0, 0.6f }, { -0.38f, -0.32f, 0.45f }, { 0.4f, -0.36f, 0.42f },
+    { -0.85f, 0.05f, 0.4f }, { 0.85f, 0.02f, 0.4f },
+    { -0.45f, 0.36f, 0.38f }, { 0.42f, 0.38f, 0.36f },
   };
   float tmp[WHIMSY_MAXSHAPE * 2];
   uint32_t half = m / 2;
   for(uint32_t i = 0; i < half; i++) {
     float t = 2 * WH_PI * i / half, best = 0;
     if(petals) {
-      best = whimsy_ray(t, 0, 0, d * 0.75f);
+      best = whimsy_ray(t, 0, 0, d * 0.7f);
       for(uint32_t k = 0; k < petals; k++) {
         float a = 2 * WH_PI * k / petals - WH_PI / 2;
         best = fmaxf(best, whimsy_ray(t, d * cosf(a), d * sinf(a), r));
       }
     } else {
       for(uint32_t k = 0; k < sizeof(cloud) / sizeof(cloud[0]); k++) best = fmaxf(best, whimsy_ray(t, cloud[k][0], cloud[k][1], cloud[k][2]));
-      // Flatten the bottom (y down)
-      if(sinf(t) > 0 && best * sinf(t) > 0.45f) best = 0.45f / sinf(t);
     }
     tmp[2 * i] = best * cosf(t);
     tmp[2 * i + 1] = best * sinf(t);
   }
   return whimsy_chaikin(tmp, half, xy);
+}
+
+// Round off corner c of a closed outline: the points within distance d of it are replaced
+// by a quadratic curve from where the outline leaves that distance on one side to where it
+// comes back on the other, with the corner as control point (so it meets both sides
+// smoothly). xy must have room for WH_FILLETPTS more points. Returns the new point count.
+#define WH_FILLETPTS 9
+static uint32_t whimsy_fillet(float * xy, uint32_t n, uint32_t c, float d) {
+  float tx = xy[2 * c], ty = xy[2 * c + 1];
+  float out[(WHIMSY_MAXSHAPE + WH_FILLETPTS) * 2];
+  uint32_t k = 0;
+  // Points after the corner, in order, that are farther than d (the corner region is the
+  // run at both ends of this walk)
+  for(uint32_t i = 1; i < n; i++) {
+    uint32_t j = (c + i) % n;
+    float dx = xy[2 * j] - tx, dy = xy[2 * j + 1] - ty;
+    if(dx * dx + dy * dy <= d * d) continue;
+    out[2 * k] = xy[2 * j];
+    out[2 * k + 1] = xy[2 * j + 1];
+    k++;
+  }
+  // Curve from the last kept point (before the corner) round to the first kept one
+  float ax = out[2 * k - 2], ay = out[2 * k - 1], bx = out[0], by = out[1];
+  for(uint32_t i = 1; i < WH_FILLETPTS; i++) {
+    float t = (float)i / WH_FILLETPTS, u = 1 - t;
+    out[2 * k] = u * u * ax + 2 * u * t * tx + t * t * bx;
+    out[2 * k + 1] = u * u * ay + 2 * u * t * ty + t * t * by;
+    k++;
+  }
+  memcpy(xy, out, sizeof(float) * 2 * k);
+  return k;
 }
 
 uint32_t whimsy_setsize(uint8_t set) {
@@ -99,14 +135,16 @@ uint32_t whimsy_shape(uint8_t set, uint32_t shape, float * xy) {
   float tmp[WHIMSY_MAXSHAPE * 2];
   uint32_t n = 0;
   switch(shape % 4) {
-    case 0: {   // Heart: the classic parametric heart, corners softened
-      const uint32_t m = 56;
+    case 0: {   // Heart: the classic parametric heart, the bottom point filleted (a cut
+                // piece wouldn't come to a needle point), then softened
+      const uint32_t m = 48;
       for(uint32_t i = 0; i < m; i++) {
         float t = 2 * WH_PI * i / m, s = sinf(t);
         tmp[2 * i] = 16 * s * s * s;
         tmp[2 * i + 1] = -(13 * cosf(t) - 5 * cosf(2 * t) - 2 * cosf(3 * t) - cosf(4 * t));
       }
-      n = whimsy_chaikin(tmp, m, xy);
+      uint32_t k = whimsy_fillet(tmp, m, m / 2, WH_HEARTTIP);
+      n = whimsy_chaikin(tmp, k, xy);
       break;
     }
     case 1: {   // Five point star, tips and valleys rounded
@@ -122,7 +160,7 @@ uint32_t whimsy_shape(uint8_t set, uint32_t shape, float * xy) {
       break;
     }
     case 2:     // Six fat petals around a middle
-      n = whimsy_circles(xy, 96, 6, 0.62f, 0.4f, NULL);
+      n = whimsy_circles(xy, 96, 6, 0.66f, 0.34f, NULL);
       break;
     default:    // Cloud: round bumps on top of a flat-ish base
       n = whimsy_circles(xy, 96, 0, 0, 0, NULL);
@@ -282,6 +320,30 @@ static int whimsy_walks(CutGraph * g) {
   free(walk);
   free(used);
   return err;
+}
+
+// Roughly how thick a polygon is: the radius of the largest circle that fits inside,
+// sampled on a WH_THICKSTEP grid. Stops early once it finds min.
+static float whimsy_thick(const float * xy, uint32_t n, float min) {
+  float x0 = xy[0], y0 = xy[1], x1 = xy[0], y1 = xy[1];
+  for(uint32_t i = 1; i < n; i++) {
+    x0 = fminf(x0, xy[2 * i]); x1 = fmaxf(x1, xy[2 * i]);
+    y0 = fminf(y0, xy[2 * i + 1]); y1 = fmaxf(y1, xy[2 * i + 1]);
+  }
+  float best = 0, min2 = min * min;
+  for(float y = y0 + WH_THICKSTEP / 2; y < y1; y += WH_THICKSTEP) {
+    for(float x = x0 + WH_THICKSTEP / 2; x < x1; x += WH_THICKSTEP) {
+      if(!whimsy_inside(xy, n, x, y)) continue;
+      float dmin = 1e30f;
+      for(uint32_t i = 0, j = n - 1; i < n && dmin > best; j = i++) {
+        float d = whimsy_pointseg(x, y, xy[2 * j], xy[2 * j + 1], xy[2 * i], xy[2 * i + 1]);
+        if(d * d < dmin) dmin = d * d;
+      }
+      if(dmin > best) best = dmin;
+      if(best >= min2) return sqrtf(best);
+    }
+  }
+  return sqrtf(best);
 }
 
 // A piece next to a whimsy still needs a tab: a grid tab far enough away to keep, or an
@@ -453,6 +515,7 @@ int whimsy_insert(CutGraph * g, const float * xy, uint32_t n) {
         if(sides[s] != w && whimsy_area(body, bn) < WH_HOSTAREA) bad = 1;
         if(!edgegen_shape_ok(body, bn, WH_CLEARANCE)) bad = 1;
         if(sides[s] != w && !whimsy_cantab(g, sides[s])) bad = 1;
+        if(!bad && sides[s] != w && whimsy_thick(body, bn, WH_MINTHICK) < WH_MINTHICK) bad = 1;
       }
     }
     free(body);

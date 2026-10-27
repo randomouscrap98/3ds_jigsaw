@@ -78,6 +78,107 @@ static void render(const Cutter * c, float cell, const uint8_t * img, uint32_t W
   free(boxes);
 }
 
+// Thickness of a polygon: radius of the largest circle that fits inside (sampled)
+static float inradius(const float * xy, uint32_t n) {
+  float x0 = xy[0], y0 = xy[1], x1 = xy[0], y1 = xy[1];
+  for(uint32_t i = 1; i < n; i++) {
+    x0 = fminf(x0, xy[2 * i]); x1 = fmaxf(x1, xy[2 * i]);
+    y0 = fminf(y0, xy[2 * i + 1]); y1 = fmaxf(y1, xy[2 * i + 1]);
+  }
+  float best = 0;
+  for(float y = y0; y <= y1; y += 0.02f) {
+    for(float x = x0; x <= x1; x += 0.02f) {
+      int in = 0;
+      float dmin = 1e9f;
+      for(uint32_t i = 0, j = n - 1; i < n; j = i++) {
+        float xi = xy[2 * i], yi = xy[2 * i + 1], xj = xy[2 * j], yj = xy[2 * j + 1];
+        if((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in = !in;
+        float vx = xj - xi, vy = yj - yi, wx = x - xi, wy = y - yi, l = vx * vx + vy * vy;
+        float t = l > 0 ? (vx * wx + vy * wy) / l : 0;
+        t = t < 0 ? 0 : t > 1 ? 1 : t;
+        float dx = wx - t * vx, dy = wy - t * vy;
+        dmin = fminf(dmin, dx * dx + dy * dy);
+      }
+      if(in && dmin > best) best = dmin;
+    }
+  }
+  return sqrtf(best);
+}
+
+typedef struct { float r; uint32_t p; } Thin;
+static int thincmp(const void * a, const void * b) {
+  float x = ((const Thin *)a)->r, y = ((const Thin *)b)->r;
+  return x < y ? -1 : x > y;
+}
+
+// The thinnest pieces next to whimsies, each on its own (whimsy neighbours faint pink)
+static void thinsheet(const Cutter * c, const char * path, const char * name) {
+  const CutGraph * g = &c->g;
+  float * body = malloc(sizeof(float) * 2 * c->maxpoints);
+  Thin * list = malloc(sizeof(Thin) * g->count);
+  uint32_t nl = 0;
+  float normal = 0;
+  uint32_t nnormal = 0;
+  for(uint32_t p = 0; p < g->count; p++) {
+    if(cutgraph_iswhimsy(g, p)) continue;
+    int near = 0;
+    for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) near |= (g->e[g->pedge[k] >> 1].flags & CUTEDGE_WHIMSY) != 0;
+    uint32_t n = cutgraph_body(g, p, 1, 0, 0, body);
+    float r = inradius(body, n);
+    if(near) list[nl++] = (Thin) { r, p };
+    else if(nnormal < 60) { normal += r; nnormal++; }
+  }
+  qsort(list, nl, sizeof(Thin), thincmp);
+  printf("  %s: %u pieces next to whimsies; ordinary piece thickness (inradius) ~%.2f; thinnest:", name, nl, normal / nnormal);
+  uint32_t show = nl < 10 ? nl : 10, S = 300;
+  const float scale = 100;
+  uint32_t W = S * show, H = S;
+  uint8_t * canvas = malloc(W * H * 3);
+  memset(canvas, 235, W * H * 3);
+  uint8_t * grey = malloc(S * S * 3), * pink = malloc(S * S * 3);
+  memset(grey, 200, S * S * 3);
+  for(uint32_t i = 0; i < S * S; i++) { pink[3 * i] = 245; pink[3 * i + 1] = 205; pink[3 * i + 2] = 215; }
+  PieceBaker pb;
+  piecebake_init(&pb, S, S);
+  uint32_t * out = malloc(sizeof(uint32_t) * S * S);
+  float * xy = malloc(sizeof(float) * 2 * c->maxpoints);
+  for(uint32_t i = 0; i < show; i++) {
+    uint32_t p = list[i].p;
+    printf(" %.2f", list[i].r);
+    uint32_t n = cutter_outline(c, p, scale, 0, 0, xy);
+    float cx = 0, cy = 0;
+    for(uint32_t k = 0; k < n; k++) { cx += xy[2 * k]; cy += xy[2 * k + 1]; }
+    cx /= n; cy /= n;
+    float ox = S / 2.0f - cx, oy = S / 2.0f - cy;
+    // Whimsy neighbours first, faint
+    for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
+      const CutEdge * e = g->e + (g->pedge[k] >> 1);
+      if(!(e->flags & CUTEDGE_WHIMSY)) continue;
+      uint32_t w = e->left == (int32_t)p ? e->right : e->left;
+      uint32_t m = cutter_outline(c, w, scale, ox, oy, xy);
+      piecebake_tile(&pb, xy, m, pink, S, S, 0, 0, S, S, out);
+      for(uint32_t y = 0; y < S; y++) for(uint32_t x = 0; x < S; x++) {
+        uint32_t px = out[y * S + x];
+        float al = (px & 0xFF) / 255.0f * 0.6f;
+        uint8_t * d = canvas + (y * W + i * S + x) * 3;
+        for(int q = 0; q < 3; q++) d[q] = d[q] * (1 - al) + ((px >> (24 - 8 * q)) & 0xFF) * al;
+      }
+    }
+    n = cutter_outline(c, p, scale, ox, oy, xy);
+    piecebake_tile(&pb, xy, n, grey, S, S, 0, 0, S, S, out);
+    for(uint32_t y = 0; y < S; y++) for(uint32_t x = 0; x < S; x++) {
+      uint32_t px = out[y * S + x];
+      float al = (px & 0xFF) / 255.0f;
+      uint8_t * d = canvas + (y * W + i * S + x) * 3;
+      for(int q = 0; q < 3; q++) d[q] = d[q] * (1 - al) + ((px >> (24 - 8 * q)) & 0xFF) * al;
+    }
+  }
+  printf("\n");
+  stbi_write_png(path, W, H, 3, canvas, W * 3);
+  piecebake_free(&pb);
+  free(out); free(grey); free(pink); free(canvas); free(xy); free(body); free(list);
+}
+
 // The set's shapes side by side
 static void shapes(const char * dir) {
   uint32_t ns = whimsy_setsize(WHIMSY_SET_CUTE), S = 220;
@@ -152,6 +253,12 @@ int main(int argc, char ** argv) {
         render(&c, cell, grey, W, H, 0, 1, path);
         snprintf(path, sizeof path, "%s/%s_%s_%u_pieces.png", argv[1], stylenames[styles[si]], whimnames[wh], targets[t]);
         render(&c, cell, img, W, H, GAP, 0, path);
+        if(wh == WHIMSY_MANY) {
+          char name[64];
+          snprintf(name, sizeof name, "%s_%u", stylenames[styles[si]], targets[t]);
+          snprintf(path, sizeof path, "%s/thin_%s.png", argv[1], name);
+          thinsheet(&c, path, name);
+        }
         free(img);
         free(grey);
         cutter_free(&c);

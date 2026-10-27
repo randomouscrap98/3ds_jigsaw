@@ -17,8 +17,10 @@
 #define WHIMSY_SET_CUTE 0     // Heart, star, flower, cloud
 #define WHIMSY_SETS 1
 
-#define WHIMSY_MAXSHAPE 128   // Points in one shape outline
-#define WHIMSY_AREA 2.0f      // Typical whimsy area (cells^2)
+#define WHIMSY_MAXSHAPE 192   // Points in one shape outline
+#ifndef WHIMSY_AREA
+#define WHIMSY_AREA 1.6f      // Typical whimsy area (cells^2)
+#endif
 #define WHIMSY_JITTER 0.15f   // How far a whimsy center strays from the corner it is placed on
 #define WHIMSY_BORDER 0.3f    // Closest a whimsy gets to the puzzle border (cells)
 #define WHIMSY_GAP 0.6f       // Closest two whimsies get (cells)
