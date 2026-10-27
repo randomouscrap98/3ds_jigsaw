@@ -1,16 +1,16 @@
 # 3DS Jigsaw
 
 Jigsaw puzzles on the 3DS, made from your own pictures. Pick a picture, choose 50 to 500
-pieces and a cut style, and put it together on the touch screen. A dozen paintings come
-with it to get you started.
+pieces and a cut style, and put it together on the touch screen, with your own music
+playing if you like. A dozen paintings come with it to get you started.
 
 ## Installing
 
 Install `jigsaw.cia` with FBI, or put `jigsaw.3dsx` in `sdmc:/3ds/` and run it from the
 Homebrew Launcher.
 
-Sound needs the DSP firmware dumped to `sdmc:/3ds/dspfirm.cdc` (run DSP1 once if you
-haven't). Without it the game just runs silently.
+Sound and music need the DSP firmware dumped to `sdmc:/3ds/dspfirm.cdc` (run DSP1 once if
+you haven't). Without it the game just runs silently.
 
 ## Controls
 
@@ -21,15 +21,36 @@ haven't). Without it the game just runs silently.
 | Stylus on the table, Circle Pad | Move around |
 | D-Pad Up/Down, or X/B | Zoom in/out |
 | C-Stick (New 3DS) | Smooth zoom |
-| Hold Y | Show your time and progress |
+| Hold A or D-Pad Left + drag the stylus | Select every piece in a box |
+| Hold A or D-Pad Left + tap a piece | Add it to, or remove it from, the selection |
+| Stylus on a selected piece | Move the whole selection (L/R turns it as one) |
+| Hold Y | Show your time, progress, CPU use and the song playing |
+| Y + X | Next song |
+| Y + A | Music: off, in order, shuffled (saved with the puzzle) |
 | SELECT | Change felt (saved with puzzle) |
 | START | Save and go back to the menu |
+
+While Y is held, the other buttons do nothing except D-Pad zoom, so you can't rotate or
+leave by accident. The stylus and sticks still work.
+
+A moved selection never snaps to anything; it goes exactly where you put it. Touch the
+table or any unselected piece to clear the selection.
 
 Pieces snap together when you drop them close to a matching neighbour with the same
 rotation. The puzzle is done once every piece is joined, wherever it ends up on the table.
 
 Your progress saves automatically, and when you press START, go to the HOME menu, or
 close the lid.
+
+## Music
+
+Copy MP3, FLAC or Ogg Vorbis files into `sdmc:/3ds/jigsaw/music/` (created on first
+launch). Music plays while a puzzle is open and fades out when you go back to the menu.
+Each new puzzle has a Music option (Off, In order, Shuffled; In order by default), and it's
+saved with the puzzle. Songs are streamed from the SD card, so long files are fine.
+
+Decoding takes a little CPU (hold Y to see how much). If a puzzle ever feels slow, try it
+with the music off.
 
 ## Adding pictures
 
