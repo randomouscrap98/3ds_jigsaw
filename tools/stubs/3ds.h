@@ -59,3 +59,11 @@ Result svcGetThreadPriority(s32 * out, Handle handle); void svcSleepThread(s64 n
 #define U64_MAX UINT64_MAX
 #endif
 void hidCstickRead(circlePosition * pos);
+typedef struct { int dummy; } SwkbdState;
+typedef enum { SWKBD_TYPE_NORMAL = 0 } SwkbdType;
+typedef enum { SWKBD_ANYTHING = 0, SWKBD_NOTEMPTY, SWKBD_NOTEMPTY_NOTBLANK } SwkbdValidInput;
+typedef enum { SWKBD_BUTTON_LEFT = 0, SWKBD_BUTTON_MIDDLE, SWKBD_BUTTON_RIGHT, SWKBD_BUTTON_CONFIRM = SWKBD_BUTTON_RIGHT } SwkbdButton;
+void swkbdInit(SwkbdState * swkbd, SwkbdType type, int numButtons, int maxTextLength);
+void swkbdSetInitialText(SwkbdState * swkbd, const char * text); void swkbdSetHintText(SwkbdState * swkbd, const char * text);
+void swkbdSetValidation(SwkbdState * swkbd, SwkbdValidInput validInput, u32 filterFlags, int maxDigits);
+SwkbdButton swkbdInputText(SwkbdState * swkbd, char * buf, size_t bufsize);

@@ -16,9 +16,10 @@
 #define PMENU_PIECES_NAMES "50\n100\n250\n500"  // Same as pmenu_counts in puzzlemenu.c
 #define PMENU_PIECES_DEFAULT 1                  // 100
 #define PMENU_FIRST 1        // List items before the puzzles ("Add pictures over Wi-Fi")
-#define PMENU_MAXOPTS 6      // Continue, Pieces, Piece style, Whimsies, Music, Start new puzzle
+#define PMENU_MAXOPTS 7      // Continue, Pieces, Piece style, Whimsies, Music, Start new puzzle, Rename
 #define PMENU_ACT_CONTINUE 0
 #define PMENU_ACT_NEW 0xFFFFFFFE
+#define PMENU_ACT_RENAME 0xFFFFFFFD
 #define PMENU_ACT_NONE 0xFFFFFFFF
 #define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
 #define PMENU_VALUEX 200     // Pixel x of that value column (top screen)
@@ -42,6 +43,7 @@ typedef struct {
   uint8_t whimsyset;    // Whimsy shapes for a new game (WHIMSY_SET_*)
   uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
   u8 upload;            // "Add pictures over Wi-Fi" was picked
+  u8 rename;            // "Rename picture" was picked (name is the picture)
   u8 quit;
 } PuzzleChoice;
 
@@ -67,6 +69,8 @@ void puzzlemenu_free(PuzzleMenu * pm);
 // Rescan the puzzles folder and saves; keeps the cursor where it was
 int puzzlemenu_refresh(PuzzleMenu * pm);
 void puzzlemenu_setstatus(PuzzleMenu * pm, const char * msg);
+// Put the cursor on the puzzle with this file name (if it's there)
+void puzzlemenu_select(PuzzleMenu * pm, const char * name);
 // Wait for the thumbnail worker to finish (its decode memory is needed to load a game).
 // Can take a second or two on an Old 3DS, so show something first.
 void puzzlemenu_waitidle(PuzzleMenu * pm);

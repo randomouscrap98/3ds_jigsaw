@@ -93,6 +93,10 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     if(!err) idata->ptr = pm;
     pm->optact[n++] = PMENU_ACT_NEW;
   }
+  if(!err) {
+    TUIMITEM_BASIC(&pm->options, err, "Rename picture", 0);
+    pm->optact[n++] = PMENU_ACT_RENAME;
+  }
   return err ? NULL : &pm->options;
 }
 
@@ -197,6 +201,15 @@ void puzzlemenu_setstatus(PuzzleMenu * pm, const char * msg) {
   snprintf(pm->status, sizeof(pm->status), "%s", msg ? msg : "");
 }
 
+void puzzlemenu_select(PuzzleMenu * pm, const char * name) {
+  for(int i = 0; i < pm->nentries; i++) {
+    if(strcmp(pm->entries[i].name, name)) continue;
+    tui_menu_reset(&pm->root);
+    tui_menu_run(&pm->root, (tui_menu_action) { .action = TUIMENU_ACTION_POSITION, .offset = i + PMENU_FIRST });
+    return;
+  }
+}
+
 // The menu that currently has the cursor
 static tui_menu * puzzlemenu_active(PuzzleMenu * pm) {
   tui_menu * m = &pm->root;
@@ -251,6 +264,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   if(active == &pm->options || (active == &pm->confirm && pm->confirm.current == 1)) {
     if(opt < 0 || opt >= pm->options.numitems || pm->optact[opt] == PMENU_ACT_NONE) return choice;
     choice.name = pm->entries[ent].name;
+    choice.rename = pm->optact[opt] == PMENU_ACT_RENAME;
     choice.target = pm->optact[opt] == PMENU_ACT_NEW ? pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS] : 0;
     choice.style = pm->style;
     choice.whimsy = (unsigned)pm->whimsy % WHIMSY_LEVELS;

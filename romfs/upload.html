@@ -14,6 +14,8 @@
   input { background: #e6e6e6; color: #222; }
   button { background: #f0c85a; color: #222; font-weight: bold; cursor: pointer; }
   button:disabled { filter: grayscale(1) brightness(0.7); cursor: default; }
+  #names { display: flex; flex-direction: column; gap: 0.4em; }
+  #names label { display: flex; flex-direction: column; gap: 0.2em; font-size: 0.85em; color: #aaa; overflow-wrap: anywhere; }
   #log { list-style: none; margin: 0; padding: 0; font-size: 0.9em; }
   #log li { padding: 0.3em 0.5em; border-radius: 0.3em; margin-top: 0.3em; background: #1e2026; overflow-wrap: anywhere; }
   .ok { color: #8fd88f; } .bad { color: #ff8c78; }
@@ -23,7 +25,8 @@
 <div id="main">
   <h2>Add pictures to 3DS Jigsaw</h2>
   <p>Pictures are shrunk to 1024 pixels on the long side before they're sent.</p>
-  <input type="file" id="files" multiple accept="image/*">
+  <input type="file" id="files" multiple accept="image/*" onchange="showNames()">
+  <div id="names"></div>
   <button id="send" onclick="sendAll()">Send to 3DS</button>
   <ul id="log"></ul>
 </div>
@@ -65,19 +68,44 @@ async function shrink(file) {
     b => b ? resolve(b) : reject(new Error("couldn't make a JPEG")), 'image/jpeg', QUALITY));
 }
 
+// The name each picture gets on the 3DS (editable; the 3DS keeps letters, digits, spaces
+// and - _ ( ) ' , and adds .jpg)
+function baseName(name) {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+function showNames() {
+  const box = document.getElementById('names');
+  box.textContent = '';
+  for(const file of document.getElementById('files').files) {
+    const label = document.createElement('label');
+    label.textContent = file.name;
+    const input = document.createElement('input');
+    input.value = baseName(file.name);
+    input.maxLength = 60;
+    label.appendChild(input);
+    box.appendChild(label);
+  }
+}
+
 async function sendAll() {
   const files = document.getElementById('files').files;
   const button = document.getElementById('send');
   if(!files.length) { line('Pick some pictures first', 'bad'); return; }
   button.disabled = true;
   let saved = 0;
+  const names = document.querySelectorAll('#names input');
   // One at a time: the 3DS takes one upload at a time
-  for(const file of files) {
+  for(let i = 0; i < files.length; i++) {
+    const file = files[i];
+    // Sent with .jpg so the 3DS's "drop the extension" step doesn't eat part of a typed name
+    const name = ((names[i] && names[i].value.trim()) || baseName(file.name)) + '.jpg';
     const li = line(file.name + ': shrinking...');
     try {
       const jpeg = await shrink(file);
       li.textContent = file.name + ': sending ' + Math.round(jpeg.size / 1024) + ' KB...';
-      const r = await fetch('/upload?name=' + encodeURIComponent(file.name),
+      const r = await fetch('/upload?name=' + encodeURIComponent(name),
         { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg });
       const text = await r.text();
       if(!r.ok) throw new Error(text || ('error ' + r.status));

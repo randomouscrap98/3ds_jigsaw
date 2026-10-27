@@ -29,6 +29,8 @@ int storage_iscachetmp(const char * name, const char * file);
 // ("picture" if nothing usable is left)
 #define STORAGE_MAXBASE 60
 void storage_cleanname(const char * raw, char * out, size_t outlen);
+// Same rules for a typed base name: nothing is cut off (a dot becomes _)
+void storage_cleanbase(const char * raw, char * out, size_t outlen);
 // A file name in dir not yet taken: "<base><ext>", else "<base> (2)<ext>", "<base> (3)<ext>"...
 // Returns 0 on success, 1 if none is free (after 999).
 int storage_freename(const char * dir, const char * base, const char * ext, char * name, size_t namelen);

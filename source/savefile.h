@@ -25,7 +25,9 @@
 //   24 u8 whimsy level (WHIMSY_*; 1.2, 0 = none)
 //   25 u8 whimsy shape set (WHIMSY_SET_*; 1.2, 0 = cute)
 //   26 u32 cut hash (cutter_hash of the cut the board was saved with; 1.2, 0 = unknown)
-//   30.. reserved, zero
+//   30 u32 cut seed (1.2, 0 = unknown: savefile_cutseed of the picture's name). Kept so a
+//      renamed picture still cuts the same way.
+//   34.. reserved, zero
 typedef struct {
   uint16_t version;
   uint16_t size;
@@ -38,6 +40,7 @@ typedef struct {
   uint8_t whimsy;     // WHIMSY_* level
   uint8_t whimsyset;  // WHIMSY_SET_*
   uint32_t cuthash;   // The cut's fingerprint (0 = unknown, from before 1.2)
+  uint32_t seed;      // The cut's seed (0 = unknown: savefile_cutseed of the name)
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board
@@ -52,6 +55,13 @@ typedef struct {
 #define SAVEFILE_BAD 1     // Not a save we understand (or cut short)
 #define SAVEFILE_NEWER 2   // Written by a newer save version
 
+// Cut seed for a new puzzle of picture name (file name with extension)
+uint32_t savefile_cutseed(const char * name, uint32_t target, uint8_t style);
+// Seed a puzzle loaded from this header uses: its own, else the one from name
+uint32_t savefile_seedfor(const SaveHeader * h, const char * name);
+// Copy of a save (len bytes, header already read into h) with the seed field set; the
+// header grows to SAVEFILE_HEADER if it's too short to hold it. malloc'd, NULL if out of memory.
+uint8_t * savefile_withseed(const uint8_t * buf, size_t len, const SaveHeader * h, uint32_t seed, size_t * outlen);
 // Fill in the current version + header size and zero everything else
 void savefile_init(SaveHeader * h);
 // Bytes needed to save this board

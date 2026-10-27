@@ -59,10 +59,13 @@ with the music off.
 
 The easy way: pick **+ Add pictures over Wi-Fi** at the top of the puzzle list. With the 3DS
 on Wi-Fi, open the address it shows (or scan the QR code) in a browser on a phone or
-computer on the same network, choose pictures and press Send. The page shrinks them to
+computer on the same network, choose pictures (you can change their names) and press Send. The page shrinks them to
 1024 pixels and turns them into JPGs before sending, and they show up in the list when you
 press B. Only one picture travels at a time; anyone on your network could reach the page
 while that screen is open.
+
+To rename a picture later, pick it and choose **Rename picture**; its saved game and progress
+come along.
 
 Or copy JPG, PNG or BMP files into `sdmc:/3ds/jigsaw/puzzles/` yourself. The first time you start a
 puzzle it gets cut and cached, which takes a few seconds; after that it loads quickly.

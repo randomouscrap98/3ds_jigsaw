@@ -40,6 +40,7 @@ int main(int argc, char ** argv) {
   RUN(test_sfxgen);
   RUN(test_storage);
   RUN(test_webup);
+  RUN(test_picrename);
   RUN(test_camera);
   RUN(test_stick);
   RUN(test_layout);

@@ -65,6 +65,40 @@ void test_savefile(void) {
   buf[8] = SAVEFILE_VERSION + 1;
   CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_NEWER);
   CHECK(savefile_peek(buf, len, &info) == SAVEFILE_NEWER);
+  buf[8] = SAVEFILE_VERSION;
+
+  // Cut seed: 0 means "from the name"; a stored one wins (a renamed picture keeps its cut)
+  CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.seed == 0);
+  CHECK(savefile_seedfor(&r, "Cat.jpg") == savefile_cutseed("Cat.jpg", 500, 1));
+  CHECK(savefile_cutseed("Cat.jpg", 500, 1) != savefile_cutseed("Dog.jpg", 500, 1));
+  size_t slen;
+  uint8_t * sbuf = savefile_withseed(buf, len, &r, 0xA1B2C3D4, &slen);
+  CHECK(sbuf && slen == len && savefile_readheader(sbuf, slen, &r) == SAVEFILE_OK && r.seed == 0xA1B2C3D4);
+  CHECK(savefile_seedfor(&r, "Dog.jpg") == 0xA1B2C3D4 && r.target == 500 && r.music == SAVEFILE_MUSIC_SHUFFLE);
+  CHECK(test_board_grid(&c, 6, 5, 20, 400, 300) == 0);
+  CHECK(savefile_readboard(sbuf, slen, &r, &c) == SAVEFILE_OK);
+  test_board_free(&c);
+  free(sbuf);
+  // A header too short for the seed grows to the full size, board intact
+  size_t shortlen = len - (SAVEFILE_HEADER - 30);
+  uint8_t * shortbuf = malloc(shortlen);
+  memcpy(shortbuf, buf, 30);
+  memcpy(shortbuf + 30, buf + SAVEFILE_HEADER, len - SAVEFILE_HEADER);
+  shortbuf[10] = 30;
+  CHECK(savefile_readheader(shortbuf, shortlen, &r) == SAVEFILE_OK && r.size == 30 && r.seed == 0);
+  sbuf = savefile_withseed(shortbuf, shortlen, &r, 77, &slen);
+  CHECK(sbuf && slen == len && savefile_readheader(sbuf, slen, &r) == SAVEFILE_OK);
+  CHECK(r.size == SAVEFILE_HEADER && r.seed == 77 && r.seconds == 0x01020304);
+  CHECK(test_board_grid(&c, 6, 5, 20, 400, 300) == 0);
+  CHECK(savefile_readboard(sbuf, slen, &r, &c) == SAVEFILE_OK);
+  test_board_free(&c);
+  free(sbuf);
+  free(shortbuf);
+  // Written and read back
+  h.seed = 0x12345678;
+  savefile_write(&h, &b, buf);
+  CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.seed == 0x12345678 && buf[30] == 0x78);
+
   // Old format (u32 prefix + "JIGS") isn't a save
   uint8_t old[32] = { 0xF4, 0x01, 0, 0, 'J', 'I', 'G', 'S' };
   CHECK(savefile_readheader(old, sizeof(old), &r) == SAVEFILE_BAD);

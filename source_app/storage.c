@@ -50,18 +50,8 @@ int storage_iscache(const char * name, const char * file) {
   return p && !strcmp(p, ".bin");
 }
 
-void storage_cleanname(const char * raw, char * out, size_t outlen) {
-  // Last path part only (browsers send just the name, but don't trust it)
-  const char * start = raw;
-  for(const char * p = raw; *p; p++) if(*p == '/' || *p == '\\') start = p + 1;
-  // Drop the extension
-  const char * end = start + strlen(start);
-  for(const char * p = end; p > start; p--) {
-    if(p[-1] == '.') {
-      end = p - 1;
-      break;
-    }
-  }
+// Safe-character copy of [start, end) (see storage_cleanname)
+static void storage_cleanspan(const char * start, const char * end, char * out, size_t outlen) {
   size_t n = 0, max = outlen - 1 < STORAGE_MAXBASE ? outlen - 1 : STORAGE_MAXBASE;
   for(const char * p = start; p < end && n < max; p++) {
     char c = *p;
@@ -77,6 +67,25 @@ void storage_cleanname(const char * raw, char * out, size_t outlen) {
   n -= lead;
   out[n] = 0;
   if(!n) snprintf(out, outlen, "picture");
+}
+
+void storage_cleanname(const char * raw, char * out, size_t outlen) {
+  // Last path part only (browsers send just the name, but don't trust it)
+  const char * start = raw;
+  for(const char * p = raw; *p; p++) if(*p == '/' || *p == '\\') start = p + 1;
+  // Drop the extension
+  const char * end = start + strlen(start);
+  for(const char * p = end; p > start; p--) {
+    if(p[-1] == '.') {
+      end = p - 1;
+      break;
+    }
+  }
+  storage_cleanspan(start, end, out, outlen);
+}
+
+void storage_cleanbase(const char * raw, char * out, size_t outlen) {
+  storage_cleanspan(raw, raw + strlen(raw), out, outlen);
 }
 
 int storage_freename(const char * dir, const char * base, const char * ext, char * name, size_t namelen) {

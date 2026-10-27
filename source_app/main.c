@@ -9,6 +9,7 @@
 #include "defaults.h"
 #include "game.h"
 #include "music.h"
+#include "picrename.h"
 #include "puzzlemenu.h"
 #include "savewriter.h"
 #include "render.h"
@@ -108,6 +109,29 @@ static void app_start_game(App * app, PuzzleChoice choice) {
   app_music(app);
 }
 
+// Rename a picture (and its save and caches) to what's typed on the system keyboard
+static void app_rename(App * app, const char * name) {
+  char old[PMENU_MAXNAME], typed[STORAGE_MAXBASE * 4 + 1], base[STORAGE_MAXBASE + 1], newname[PMENU_MAXNAME];
+  snprintf(old, sizeof(old), "%s", name);   // name is in the menu's list, which refresh frees
+  puzzlemenu_waitidle(&app->menu);          // The thumbnail thread may be reading the picture
+  savewriter_flush(&app->writer);
+  const char * dot = strrchr(old, '.');
+  snprintf(base, sizeof(base), "%.*s", dot ? (int)(dot - old) : (int)strlen(old), old);
+  SwkbdState kb;
+  swkbdInit(&kb, SWKBD_TYPE_NORMAL, 2, STORAGE_MAXBASE);
+  swkbdSetInitialText(&kb, base);
+  swkbdSetHintText(&kb, "New name for the picture");
+  swkbdSetValidation(&kb, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
+  if(swkbdInputText(&kb, typed, sizeof(typed)) != SWKBD_BUTTON_CONFIRM) return;
+  storage_cleanbase(typed, base, sizeof(base));
+  PicDirs dirs = { STORAGE_PUZZLES, STORAGE_SAVES, STORAGE_CACHE };
+  int r = picrename(&dirs, old, base, newname, sizeof(newname));
+  puzzlemenu_refresh(&app->menu);
+  puzzlemenu_select(&app->menu, r == PICRENAME_OK ? newname : old);
+  if(r == PICRENAME_TAKEN) puzzlemenu_setstatus(&app->menu, "There's already a picture with that name");
+  else if(r) puzzlemenu_setstatus(&app->menu, "Couldn't rename the picture");
+}
+
 static void app_end_game(App * app) {
   music_setmode(&app->music, MUSIC_OFF);  // Fades out; the thread frees the decoder within a DSP frame (~5 ms)
   game_free(&app->game);
@@ -164,7 +188,8 @@ int main(int argc, char ** argv) {
         upload_open(&app.upload);
         app.mode = MODE_UPLOAD;
       }
-      if(choice.name) app_start_game(&app, choice);
+      if(choice.name && choice.rename) app_rename(&app, choice.name);
+      else if(choice.name) app_start_game(&app, choice);
     } else if(app.mode == MODE_UPLOAD) {
       if(upload_update(&app.upload, in.down)) {
         upload_close(&app.upload);

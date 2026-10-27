@@ -85,6 +85,7 @@ typedef struct {
   PuzzleGfx gfx;
   char name[256];
   uint32_t target;
+  uint32_t seed;          // Cut seed (from the save, so a renamed picture cuts the same)
   uint8_t style;          // Cut style (CUT_STYLE_*)
   uint8_t whimsy;         // Whimsy level (WHIMSY_*)
   uint8_t whimsyset;      // Whimsy shapes (WHIMSY_SET_*)

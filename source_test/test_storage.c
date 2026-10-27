@@ -26,6 +26,11 @@ static void test_storage_names(void) {
   longname[sizeof(longname) - 1] = 0;
   storage_cleanname(longname, out, sizeof(out));
   CHECK(strlen(out) == STORAGE_MAXBASE);
+  // Typed names keep everything (a dot is just another unsafe character)
+  storage_cleanbase(" my.pic: v2 ", out, sizeof(out));
+  CHECK(!strcmp(out, "my_pic_ v2"));
+  storage_cleanbase("", out, sizeof(out));
+  CHECK(!strcmp(out, "picture"));
   // Free names in a scratch folder
   char dir[] = "/tmp/jigsaw_test_XXXXXX";
   CHECK(mkdtemp(dir) != NULL);
