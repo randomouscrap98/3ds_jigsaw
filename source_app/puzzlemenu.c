@@ -1,4 +1,5 @@
 #include "puzzlemenu.h"
+#include "cutter.h"
 
 #include <citro2d.h>
 #include <ctype.h>
@@ -11,7 +12,7 @@
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
 
 static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
-static const char * const pmenu_styles[] = { "Classic", "Irregular", "Wild" };  // EDGEGEN_STYLE_*
+static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random" };  // CUT_STYLE_*
 
 static int puzzlemenu_isimage(const char * name) {
   const char * dot = strrchr(name, '.');
@@ -38,7 +39,7 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
   if(sel < 0 || sel >= pm->nentries || !pm->entries[sel].hassave) return NULL;
   // Say what's about to start, since the settings aren't on the line that was pressed
   snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s",
-      (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], pmenu_styles[(unsigned)pm->style % 3]);
+      (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], pmenu_styles[(unsigned)pm->style % CUT_STYLES]);
   tui_menu_reset_ui(&pm->confirm);
   return &pm->confirm;
 }
@@ -71,7 +72,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild");
+    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild\nRandom");
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {

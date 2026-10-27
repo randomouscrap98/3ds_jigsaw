@@ -9,6 +9,13 @@
 // Check d against the board: every piece once; pieces of different groups whose boxes
 // overlap keep board order; the top ntop groups come after everything else.
 // Returns texture page switches along the list.
+// Page of every piece as the old fixed grid packing had it (piece / perpage)
+static uint8_t * test_pages(Board * b, uint32_t perpage) {
+  static uint8_t page[0x10000];
+  for(uint32_t p = 0; p < b->count; p++) page[p] = p / perpage;
+  return page;
+}
+
 static uint32_t check_list(DrawList * d, Board * b, float pad, uint32_t perpage, uint32_t ntop) {
   uint32_t * pos = malloc(sizeof(uint32_t) * b->count);     // group slot -> order index
   uint32_t * at = malloc(sizeof(uint32_t) * b->count);      // piece -> list index
@@ -49,11 +56,11 @@ static uint32_t check_list(DrawList * d, Board * b, float pad, uint32_t perpage,
 static void check_grid_same(DrawList * d, Board * b, float pad, uint32_t perpage, uint32_t ntop) {
   uint16_t * want = malloc(sizeof(uint16_t) * b->count);
   d->nogrid = 1;
-  drawlist_build(d, b, pad, perpage, ntop);
+  drawlist_build(d, b, pad, test_pages(b, perpage), (b->count + perpage - 1) / perpage, ntop);
   for(uint32_t i = 0; i < b->count; i++) want[i] = d->pieces[i];
   uint32_t layers = d->layers;
   d->nogrid = 0;
-  drawlist_build(d, b, pad, perpage, ntop);
+  drawlist_build(d, b, pad, test_pages(b, perpage), (b->count + perpage - 1) / perpage, ntop);
   int same = d->layers == layers;
   for(uint32_t i = 0; i < b->count; i++) same &= want[i] == d->pieces[i];
   CHECK(same);
@@ -63,7 +70,7 @@ static void check_grid_same(DrawList * d, Board * b, float pad, uint32_t perpage
 static double build_ms(DrawList * d, Board * b, float pad, uint32_t perpage, int nogrid) {
   d->nogrid = nogrid;
   clock_t t = clock();
-  for(int i = 0; i < 100; i++) drawlist_build(d, b, pad, perpage, 0);
+  for(int i = 0; i < 100; i++) drawlist_build(d, b, pad, test_pages(b, perpage), (b->count + perpage - 1) / perpage, 0);
   d->nogrid = 0;
   return (double)(clock() - t) * 1000 / CLOCKS_PER_SEC / 100;
 }
@@ -88,7 +95,7 @@ void test_drawlist(void) {
   CHECK(test_board_grid(&b, 22, 23, cell, 22 * cell * 3, 23 * cell * 3) == 0);
   CHECK(drawlist_init(&d, b.count) == 0);
   board_scatter(&b, 99, b.width * 0.165f, b.height * 0.165f, b.width * 0.67f, b.height * 0.67f);
-  drawlist_build(&d, &b, pad, perpage, 0);
+  drawlist_build(&d, &b, pad, test_pages(&b, perpage), (b.count + perpage - 1) / perpage, 0);
   uint32_t sw = check_list(&d, &b, pad, perpage, 0);
   check_grid_same(&d, &b, pad, perpage, 0);
   check_grid_same(&d, &b, pad, perpage, 30);
@@ -116,7 +123,7 @@ void test_drawlist(void) {
     board_raise(&b, gid);
   }
   for(uint32_t ntop = 0; ntop <= 5; ntop += 5) {
-    drawlist_build(&d, &b, pad, perpage, ntop);
+    drawlist_build(&d, &b, pad, test_pages(&b, perpage), (b.count + perpage - 1) / perpage, ntop);
     sw = check_list(&d, &b, pad, perpage, ntop);
     check_grid_same(&d, &b, pad, perpage, ntop);
     printf("  merged + pile, %lu on top: %lu groups, %lu layers, %lu switches (board order: %lu)\n",

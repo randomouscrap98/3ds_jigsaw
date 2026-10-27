@@ -351,7 +351,8 @@ int game_update(Game * g, const GameInput * gin) {
 
   if(g->dldirty) {
     u64 t = svcGetSystemTick();
-    drawlist_build(&g->dl, &g->board, g->gfx.layout.tile / 2.0f, g->gfx.layout.perpage, g->ntop);
+    Layout * l = &g->gfx.layout;
+    drawlist_build(&g->dl, &g->board, (l->maxw > l->maxh ? l->maxw : l->maxh) / 2.0f, g->gfx.pageof, l->pages, g->ntop);
     g->perf.build = (svcGetSystemTick() - t) / (SYSCLOCK_ARM11 / 1000.0f);
     g->perf.layers = g->dl.layers;
     g->dldirty = 0;

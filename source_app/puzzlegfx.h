@@ -14,7 +14,8 @@
 #define PGFX_PREVIEW_TEXH 256
 #define PGFX_PREVIEW_MAXW 400
 #define PGFX_PREVIEW_MAXH 240
-#define PGFX_CACHE_VERSION 4     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo
+#define PGFX_CACHE_VERSION 5     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
+                                 // 5: packed tiles (table in the cache), Random style
 #define PGFX_MAXGEO (4 << 20)    // Sanity limit on the cached PieceGeo size
 
 
@@ -22,6 +23,9 @@
 // whole picture. Built from the source image on first use and cached to SD after.
 typedef struct {
   Layout layout;
+  uint32_t count;               // Pieces
+  LayoutTile * tiles;           // One per piece
+  uint8_t * pageof;             // Texture page of each piece (for drawlist)
   C3D_Tex pages[PGFX_MAXPAGES];
   C3D_Tex preview;
   Tex3DS_SubTexture * subs;     // One per piece
@@ -31,7 +35,7 @@ typedef struct {
 } PuzzleGfx;
 
 // Load (from cache if valid, otherwise build + write cache). seed picks the cut, style is
-// EDGEGEN_STYLE_*. The cut's piece geometry goes to geo (cached with the textures; the
+// CUT_STYLE_*. The cut's piece geometry goes to geo (cached with the textures; the
 // caller frees it). On failure, a human readable reason is written to err and geo is left
 // empty. Returns 0 on success.
 int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,

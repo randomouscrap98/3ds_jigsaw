@@ -5,9 +5,10 @@
 #include <string.h>
 #include <math.h>
 
-int piecebake_init(PieceBaker * pb, uint16_t tile) {
-  pb->tile = tile;
-  pb->cover = malloc(sizeof(float) * tile * tile);
+int piecebake_init(PieceBaker * pb, uint16_t maxw, uint16_t maxh) {
+  pb->maxw = maxw;
+  pb->maxh = maxh;
+  pb->cover = malloc(sizeof(float) * maxw * maxh);
   return pb->cover ? 0 : 1;
 }
 
@@ -18,13 +19,12 @@ void piecebake_free(PieceBaker * pb) {
 
 // Even-odd scanline fill with PIECEBAKE_SUBROWS samples per pixel row and exact
 // horizontal coverage.
-static void piecebake_cover(PieceBaker * pb, const float * xy, int npts) {
-  int tile = pb->tile;
-  memset(pb->cover, 0, sizeof(float) * tile * tile);
+static void piecebake_cover(PieceBaker * pb, const float * xy, int npts, int w, int h) {
+  memset(pb->cover, 0, sizeof(float) * w * h);
   float cross[PIECEBAKE_MAXCROSS];
   const float weight = 1.0f / PIECEBAKE_SUBROWS;
-  for(int py = 0; py < tile; py++) {
-    float * row = pb->cover + py * tile;
+  for(int py = 0; py < h; py++) {
+    float * row = pb->cover + py * w;
     for(int s = 0; s < PIECEBAKE_SUBROWS; s++) {
       float sy = py + (s + 0.5f) * weight;
       int nc = 0;
@@ -46,10 +46,10 @@ static void piecebake_cover(PieceBaker * pb, const float * xy, int npts) {
       }
       for(int i = 0; i + 1 < nc; i += 2) {
         float xa = cross[i] < 0 ? 0 : cross[i];
-        float xb = cross[i + 1] > tile ? tile : cross[i + 1];
+        float xb = cross[i + 1] > w ? w : cross[i + 1];
         if(xb <= xa) continue;
         int ia = (int)xa, ib = (int)xb;
-        if(ib >= tile) ib = tile - 1;
+        if(ib >= w) ib = w - 1;
         for(int ix = ia; ix <= ib; ix++) {
           float lo = ix > xa ? ix : xa;
           float hi = ix + 1 < xb ? ix + 1 : xb;
@@ -61,19 +61,21 @@ static void piecebake_cover(PieceBaker * pb, const float * xy, int npts) {
 }
 
 void piecebake_tile(PieceBaker * pb, const float * outline, int npts,
-    const uint8_t * img, uint32_t imgw, uint32_t imgh, int32_t ox, int32_t oy, uint32_t * out) {
-  piecebake_cover(pb, outline, npts);
-  int tile = pb->tile;
-  for(int y = 0; y < tile; y++) {
+    const uint8_t * img, uint32_t imgw, uint32_t imgh, int32_t ox, int32_t oy, uint16_t w, uint16_t h,
+    uint32_t * out) {
+  if(w > pb->maxw) w = pb->maxw;
+  if(h > pb->maxh) h = pb->maxh;
+  piecebake_cover(pb, outline, npts, w, h);
+  for(int y = 0; y < h; y++) {
     int32_t iy = oy + y;
     if(iy < 0) iy = 0;
     if(iy >= (int32_t)imgh) iy = imgh - 1;
-    for(int x = 0; x < tile; x++) {
+    for(int x = 0; x < w; x++) {
       int32_t ix = ox + x;
       if(ix < 0) ix = 0;
       if(ix >= (int32_t)imgw) ix = imgw - 1;
       const uint8_t * p = img + ((size_t)iy * imgw + ix) * 3;
-      float c = pb->cover[y * tile + x];
+      float c = pb->cover[y * w + x];
       if(c > 1) c = 1;
       // Outline: how much of this pixel is near the boundary = coverage minus the
       // smallest coverage around it (outside the tile counts as empty)
@@ -81,12 +83,12 @@ void piecebake_tile(PieceBaker * pb, const float * outline, int npts,
       for(int dy = -1; dy <= 1; dy++) {
         for(int dx = -1; dx <= 1; dx++) {
           int nx = x + dx, ny = y + dy;
-          float n = (nx < 0 || ny < 0 || nx >= tile || ny >= tile) ? 0 : pb->cover[ny * tile + nx];
+          float n = (nx < 0 || ny < 0 || nx >= w || ny >= h) ? 0 : pb->cover[ny * w + nx];
           if(n < inner) inner = n;
         }
       }
       float shade = 1 - PIECEBAKE_OUTLINE * (c - inner);
-      out[y * tile + x] = SWIZZLE_RGBA(p[0] * shade, p[1] * shade, p[2] * shade,
+      out[y * w + x] = SWIZZLE_RGBA(p[0] * shade, p[1] * shade, p[2] * shade,
           (uint8_t)(c * 255 + 0.5f));
     }
   }

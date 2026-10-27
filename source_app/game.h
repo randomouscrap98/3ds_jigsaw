@@ -84,7 +84,7 @@ typedef struct {
   PuzzleGfx gfx;
   char name[256];
   uint32_t target;
-  uint8_t style;          // Cut style (EDGEGEN_STYLE_*)
+  uint8_t style;          // Cut style (CUT_STYLE_*)
   uint8_t table;          // Table color (palette index in render)
   uint8_t music;          // Music mode (SAVEFILE_MUSIC_*), saved with the puzzle
   SaveWriter * writer;    // Where saves go (NULL = write immediately)

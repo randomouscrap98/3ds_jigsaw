@@ -29,7 +29,7 @@ typedef struct {
 int drawlist_init(DrawList * d, uint32_t count);
 void drawlist_free(DrawList * d);
 // pad = how far a piece's drawing reaches from its center (half the sprite size), world
-// units. perpage = pieces per texture page (page = piece / perpage).
-void drawlist_build(DrawList * d, Board * b, float pad, uint32_t perpage, uint32_t ntop);
+// units. page = texture page of every piece (each < pages).
+void drawlist_build(DrawList * d, Board * b, float pad, const uint8_t * page, uint32_t pages, uint32_t ntop);
 
 #endif

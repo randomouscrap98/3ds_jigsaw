@@ -100,7 +100,7 @@ void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, Puzzle
   C2D_ImageTint seltint;
   C2D_PlainImageTint(&seltint, RENDER_COLOR_SELECT, RENDER_SELECT_BLEND);
   float zoom = c->zoom;
-  float half = pg->layout.tile * zoom * 0.75f;  // Generous: rotated tile corner reach
+  float half = (pg->layout.maxw > pg->layout.maxh ? pg->layout.maxw : pg->layout.maxh) * zoom * 0.75f;  // Generous: rotated tile corner reach
   for(uint32_t i = 0; i < dl->count; i++) {
     uint16_t p = dl->pieces[i];
     uint16_t gid = b->pieces[p].group;

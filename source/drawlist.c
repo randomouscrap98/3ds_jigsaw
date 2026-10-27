@@ -122,7 +122,7 @@ static int32_t drawlist_layers(DrawList * d, Board * b, DrawGrid * g, uint32_t f
   return drawlist_layers_all(d, b, from, to, base);
 }
 
-void drawlist_build(DrawList * d, Board * b, float pad, uint32_t perpage, uint32_t ntop) {
+void drawlist_build(DrawList * d, Board * b, float pad, const uint8_t * page, uint32_t pages, uint32_t ntop) {
   if(ntop > b->ngroups) ntop = b->ngroups;
   // Group bounding boxes from piece centers
   for(uint32_t i = 0; i < b->ngroups; i++) {
@@ -164,7 +164,7 @@ void drawlist_build(DrawList * d, Board * b, float pad, uint32_t perpage, uint32
   free(g.ent);
   d->layers = top + 1;
   // Counting sort of pieces by (layer, page)
-  uint32_t pages = (b->count + perpage - 1) / perpage;
+  if(pages == 0) pages = 1;
   uint32_t nkeys = d->layers * pages;
   uint32_t * start = calloc(nkeys + 1, sizeof(uint32_t));
   if(!start) {
@@ -176,7 +176,7 @@ void drawlist_build(DrawList * d, Board * b, float pad, uint32_t perpage, uint32
     return;
   }
   for(uint32_t p = 0; p < b->count; p++) {
-    d->key[p] = d->layer[b->pieces[p].group] * pages + p / perpage;
+    d->key[p] = d->layer[b->pieces[p].group] * pages + (page[p] < pages ? page[p] : pages - 1);
     start[d->key[p] + 1]++;
   }
   for(uint32_t k = 0; k < nkeys; k++) start[k + 1] += start[k];

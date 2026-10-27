@@ -36,7 +36,7 @@ typedef struct {
 typedef struct {
   const char * name;    // NULL = nothing picked yet
   uint32_t target;      // Piece count for a new game, 0 = continue
-  uint8_t style;        // Cut style for a new game (EDGEGEN_STYLE_*)
+  uint8_t style;        // Cut style for a new game (CUT_STYLE_*)
   uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
   u8 quit;
 } PuzzleChoice;

@@ -343,7 +343,10 @@ static void randcut_rolltabs(const RandCut * c, const RandCutStyle * st, RandCut
     float len = slot;
     if(len > st->maxtab) len = st->maxtab;
     e->len[k] = len;
-    e->pos[k] = (k + 0.5f) * slot + rng_range(r, -0.4f, 0.4f) * (slot - len);
+    float pos = (k + 0.5f) * slot + rng_range(r, -0.4f, 0.4f) * (slot - len);
+    if(pos < len / 2) pos = len / 2;
+    if(pos > L - len / 2) pos = L - len / 2;
+    e->pos[k] = pos;
     edgegen_randomtab(r, es, e->tab + k);
   }
 }
@@ -388,10 +391,16 @@ uint32_t randcut_maxpoints(const RandCut * c) {
   return best;
 }
 
-// Append a point unless it repeats the previous one (a tab spanning a whole edge starts
-// on its corner; repeated points look like crossings to edgegen_shape_ok)
-static void randcut_emit(float * xy, uint32_t * n, float x, float y) {
-  if(*n && xy[*n * 2 - 2] == x && xy[*n * 2 - 1] == y) return;
+// Append a point unless it (nearly) repeats the previous one: a tab spanning a whole edge
+// starts on its corner, and rounding can put it a hair to either side, which folds the
+// outline back on itself (edgegen_shape_ok sees a crossing)
+#define RC_SAMEPOINT 1e-4f   // Cells
+static int randcut_same(const float * a, float x, float y, float tol) {
+  return fabsf(a[0] - x) <= tol && fabsf(a[1] - y) <= tol;
+}
+
+static void randcut_emit(float * xy, uint32_t * n, float x, float y, float tol) {
+  if(*n && randcut_same(xy + *n * 2 - 2, x, y, tol)) return;
   xy[*n * 2] = x;
   xy[*n * 2 + 1] = y;
   (*n)++;
@@ -399,6 +408,7 @@ static void randcut_emit(float * xy, uint32_t * n, float x, float y) {
 
 uint32_t randcut_outline(const RandCut * c, uint32_t p, float cell, float ox, float oy, float * xy) {
   uint32_t n = 0;
+  float tol = RC_SAMEPOINT * cell;
   float buf[(2 * (3 * EDGEGEN_SEGMENTS + 1) + 1) * 2];
   for(uint32_t k = c->pstart[p]; k < c->pstart[p + 1]; k++) {
     const RandCutEdge * e = c->e + (c->pedge[k] >> 1);
@@ -406,13 +416,13 @@ uint32_t randcut_outline(const RandCut * c, uint32_t p, float cell, float ox, fl
     if(c->pedge[k] & 1) {
       // Walking b -> a: start at b, then the edge's points backwards, stopping before a
       const RandCutVert * b = c->v + e->b;
-      randcut_emit(xy, &n, ox + b->x * cell, oy + b->y * cell);
-      for(uint32_t i = m - 1; i > 0; i--) randcut_emit(xy, &n, ox + buf[i * 2] * cell, oy + buf[i * 2 + 1] * cell);
+      randcut_emit(xy, &n, ox + b->x * cell, oy + b->y * cell, tol);
+      for(uint32_t i = m - 1; i > 0; i--) randcut_emit(xy, &n, ox + buf[i * 2] * cell, oy + buf[i * 2 + 1] * cell, tol);
     } else {
-      for(uint32_t i = 0; i < m; i++) randcut_emit(xy, &n, ox + buf[i * 2] * cell, oy + buf[i * 2 + 1] * cell);
+      for(uint32_t i = 0; i < m; i++) randcut_emit(xy, &n, ox + buf[i * 2] * cell, oy + buf[i * 2 + 1] * cell, tol);
     }
   }
-  while(n > 1 && xy[n * 2 - 2] == xy[0] && xy[n * 2 - 1] == xy[1]) n--;
+  while(n > 1 && randcut_same(xy + n * 2 - 2, xy[0], xy[1], tol)) n--;
   return n;
 }
 

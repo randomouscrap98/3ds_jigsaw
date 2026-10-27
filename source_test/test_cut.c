@@ -1,12 +1,18 @@
 #include "test.h"
 #include "layout.h"
 #include "edgegen.h"
+#include "cutter.h"
 #include "imgscale.h"
 #include "piecebake.h"
 #include "swizzle.h"
 
 #include <stdlib.h>
 #include <string.h>
+
+#define PINNED_CLASSIC 0x6371022Fu     // Same as 1.0-1.1 edgegen
+#define PINNED_IRREGULAR 0x0CB062D3u
+#define PINNED_WILD 0x6CE7D16Fu
+#define PINNED_RANDOM 0xB45D299Bu      // 1.2
 
 void test_layout(void) {
   uint16_t c, r;
@@ -18,28 +24,86 @@ void test_layout(void) {
   layout_grid(1000, 1000, 108, &c, &r);
   CHECK(c == r || abs(c - r) == 1);
 
-  uint32_t targets[4] = { 48, 108, 252, 500 };
-  uint32_t sizes[3][2] = { { 4000, 3000 }, { 1024, 1024 }, { 600, 1400 } };
-  for(int s = 0; s < 3; s++) {
+  // Every cut style packs into 3 pages at every count, with no overlaps, never upscaling
+  uint32_t targets[4] = { 50, 100, 250, 500 };
+  uint32_t sizes[4][2] = { { 4000, 3000 }, { 1024, 1024 }, { 600, 1400 }, { 1024, 768 } };
+  const char * names[CUT_STYLES] = { "classic", "irregular", "wild", "random" };
+  for(int s = 0; s < 4; s++) {
     for(int t = 0; t < 4; t++) {
-      Layout l;
-      CHECK(layout_compute(&l, sizes[s][0], sizes[s][1], targets[t], 1024, 2, edgegen_style(EDGEGEN_STYLE_CLASSIC)->reach) == 0);
-      CHECK(l.pages <= 2);
-      CHECK(l.width <= 1024 && l.height <= 1024);
-      CHECK(l.width <= l.cropw + 0.01f && l.height <= l.croph + 0.01f);  // never upscale
-      CHECK(l.cropx + l.cropw <= sizes[s][0] + 0.01f && l.cropy + l.croph <= sizes[s][1] + 0.01f);
-      CHECK(l.tile == l.cell + 2 * l.margin);
-      // Last tile fits in its page
-      uint16_t pg, x, y;
-      layout_tile(&l, l.cols * l.rows - 1, &pg, &x, &y);
-      CHECK(pg < l.pages && x + l.tile <= LAYOUT_PAGESIZE && y + l.tile <= LAYOUT_PAGESIZE);
-      printf("  %4ux%-4u %3u -> %2ux%-2u cell %3u tile %3u pages %u\n", sizes[s][0], sizes[s][1],
-          targets[t], l.cols, l.rows, l.cell, l.tile, l.pages);
+      printf("  %4ux%-4u %3u:", sizes[s][0], sizes[s][1], targets[t]);
+      for(uint8_t st = 0; st < CUT_STYLES; st++) {
+        Layout l;
+        CHECK(layout_crop(&l, sizes[s][0], sizes[s][1], targets[t]) == 0);
+        Cutter cut;
+        CHECK(cutter_init(&cut, st, l.cols, l.rows, 1000 + t) == 0);
+        float * boxes = malloc(sizeof(float) * 4 * cut.count);
+        LayoutTile * tiles = malloc(sizeof(LayoutTile) * cut.count);
+        LayoutTile * again = malloc(sizeof(LayoutTile) * cut.count);
+        CHECK(cutter_bounds(&cut, boxes) == 0);
+        CHECK(layout_fit(&l, boxes, cut.count, 1024, 3, tiles) == 0);
+        Layout l2 = l;
+        CHECK(layout_fit(&l2, boxes, cut.count, 1024, 3, again) == 0);
+        CHECK(!memcmp(tiles, again, sizeof(LayoutTile) * cut.count) && l2.cell == l.cell);
+        CHECK(l.pages >= 1 && l.pages <= 3);
+        CHECK(l.width <= 1024 && l.height <= 1024);
+        CHECK(l.width <= l.cropw + 0.01f && l.height <= l.croph + 0.01f);  // never upscale
+        CHECK(l.cropx + l.cropw <= sizes[s][0] + 0.01f && l.cropy + l.croph <= sizes[s][1] + 0.01f);
+        int inside = 1, covers = 1, overlap = 0, maxok = 1;
+        for(uint32_t p = 0; p < cut.count; p++) {
+          const LayoutTile * a = tiles + p;
+          const float * b = boxes + 4 * p;
+          inside &= a->page < l.pages && a->x + a->w <= LAYOUT_PAGESIZE && a->y + a->h <= LAYOUT_PAGESIZE;
+          covers &= a->ox <= b[0] * l.cell - LAYOUT_PAD + 0.01f && a->oy <= b[1] * l.cell - LAYOUT_PAD + 0.01f &&
+              a->ox + a->w >= b[2] * l.cell + LAYOUT_PAD - 0.01f && a->oy + a->h >= b[3] * l.cell + LAYOUT_PAD - 0.01f;
+          maxok &= a->w <= l.maxw && a->h <= l.maxh;
+          for(uint32_t q = p + 1; q < cut.count; q++) {
+            const LayoutTile * c = tiles + q;
+            overlap += a->page == c->page && a->x < c->x + c->w && c->x < a->x + a->w &&
+                a->y < c->y + c->h && c->y < a->y + a->h;
+          }
+        }
+        CHECK(inside && covers && overlap == 0 && maxok);
+        printf("  %s %3u/%u", names[st], l.cell, l.pages);
+        free(boxes); free(tiles); free(again);
+        cutter_free(&cut);
+      }
+      printf("  (cell/pages)\n");
     }
   }
   Layout l;
-  CHECK(layout_compute(&l, 0, 100, 48, 1024, 2, edgegen_style(EDGEGEN_STYLE_CLASSIC)->reach) != 0);
-  CHECK(layout_compute(&l, 20, 20, 500, 1024, 2, edgegen_style(EDGEGEN_STYLE_CLASSIC)->reach) != 0);  // too small to cut that many
+  CHECK(layout_crop(&l, 0, 100, 48) != 0);
+  // Too small to cut that many: fails cleanly (a 20x20 image can't give 500 pieces >= 8 px)
+  CHECK(layout_crop(&l, 20, 20, 500) == 0);
+  float box[4] = { 0, 0, 1, 1 };
+  LayoutTile one;
+  CHECK(layout_fit(&l, box, 1, 1024, 3, &one) == 2);
+}
+
+// Pinned output: saves only store group positions, so if a generator's output changes,
+// existing saves for that style no longer fit their pieces. These hashes catch accidental
+// changes; update them only together with a deliberate, versioned change.
+static uint32_t cut_hash(uint8_t style, uint16_t cols, uint16_t rows, uint32_t seed) {
+  Cutter cut;
+  if(cutter_init(&cut, style, cols, rows, seed)) return 0;
+  float * xy = malloc(sizeof(float) * 2 * cut.maxpoints);
+  uint32_t h = 2166136261u;
+  for(uint32_t p = 0; p < cut.count; p++) {
+    uint32_t n = cutter_outline(&cut, p, 1, 0, 0, xy);
+    h = (h ^ n) * 16777619u;
+    for(uint32_t i = 0; i < 2 * n; i++) h = (h ^ (uint32_t)(int32_t)lroundf(xy[i] * 1000)) * 16777619u;
+  }
+  free(xy);
+  cutter_free(&cut);
+  return h;
+}
+
+void test_cut_pinned(void) {
+  const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM };
+  for(uint8_t st = 0; st < CUT_STYLES; st++) {
+    uint32_t h = cut_hash(st, 13, 9, 4242);
+    if(h != want[st]) printf("  style %u hash %08lX\n", st, (unsigned long)h);
+    CHECK(h == want[st]);
+  }
 }
 
 void test_edgegen(void) {
@@ -233,12 +297,12 @@ void test_swizzle(void) {
 void test_piecebake(void) {
   // Square outline covering exactly pixels [2,6) x [2,6) of an 8x8 tile
   PieceBaker pb;
-  CHECK(piecebake_init(&pb, 8) == 0);
+  CHECK(piecebake_init(&pb, 8, 8) == 0);
   float sq[8] = { 2, 2, 6, 2, 6, 6, 2, 6 };
   uint8_t img[8 * 8 * 3];
   for(int i = 0; i < 64; i++) { img[i*3] = 200; img[i*3+1] = 100; img[i*3+2] = i; }
   uint32_t out[64];
-  piecebake_tile(&pb, sq, 4, img, 8, 8, 0, 0, out);
+  piecebake_tile(&pb, sq, 4, img, 8, 8, 0, 0, 8, 8, out);
   CHECK((out[3 * 8 + 3] & 0xFF) == 255);   // inside
   CHECK((out[0] & 0xFF) == 0);             // outside
   CHECK((out[1 * 8 + 3] & 0xFF) == 0);
@@ -247,7 +311,7 @@ void test_piecebake(void) {
   CHECK(((out[4 * 8 + 4] >> 8) & 0xFF) == 36);  // blue channel = pixel index from image
   // Half-pixel edge gives half coverage
   float half[8] = { 2.5f, 2, 6, 2, 6, 6, 2.5f, 6 };
-  piecebake_tile(&pb, half, 4, img, 8, 8, 0, 0, out);
+  piecebake_tile(&pb, half, 4, img, 8, 8, 0, 0, 8, 8, out);
   int a = out[3 * 8 + 2] & 0xFF;
   CHECK(a > 120 && a < 135);
   piecebake_free(&pb);
@@ -256,31 +320,37 @@ void test_piecebake(void) {
 // Not a check: renders a whole small puzzle, pieces pulled slightly apart, to a PPM
 // so the shapes can be looked at.
 void test_dump_cut(const char * path, uint8_t stylenum) {
-  const int cols = 6, rows = 4;
-  const EdgeStyle * style = edgegen_style(stylenum);
   Layout l;
-  layout_compute(&l, 600, 400, cols * rows, 1024, 2, style->reach);
+  layout_crop(&l, 600, 400, 24);
+  Cutter cut;
+  cutter_init(&cut, stylenum, l.cols, l.rows, 7);
+  float * boxes = malloc(sizeof(float) * 4 * cut.count);
+  LayoutTile * tiles = malloc(sizeof(LayoutTile) * cut.count);
+  cutter_bounds(&cut, boxes);
+  layout_fit(&l, boxes, cut.count, 1024, 3, tiles);
   uint8_t * img = malloc(l.width * l.height * 3);
   for(uint32_t y = 0; y < l.height; y++) for(uint32_t x = 0; x < l.width; x++) {
     uint8_t * p = img + (y * l.width + x) * 3;
     p[0] = x * 255 / l.width; p[1] = y * 255 / l.height; p[2] = ((x / 20 + y / 20) & 1) ? 200 : 90;
   }
-  EdgeGen eg;
-  edgegen_init(&eg, l.cols, l.rows, 7, style);
   PieceBaker pb;
-  piecebake_init(&pb, l.tile);
-  uint32_t * tile = malloc(sizeof(uint32_t) * l.tile * l.tile);
-  int gap = l.cell / 6;
-  uint32_t W = l.cols * (l.cell + gap) + 2 * l.margin, H = l.rows * (l.cell + gap) + 2 * l.margin;
+  piecebake_init(&pb, l.maxw, l.maxh);
+  uint32_t * tile = malloc(sizeof(uint32_t) * l.maxw * l.maxh);
+  float * xy = malloc(sizeof(float) * 2 * cut.maxpoints);
+  // Pieces pulled apart: each tile center moves out from the puzzle's top-left by 1/6
+  const float spread = 1 / 6.0f;
+  uint32_t W = l.width * (1 + spread) + l.maxw, H = l.height * (1 + spread) + l.maxh;
   uint8_t * canvas = malloc(W * H * 3);
   memset(canvas, 40, W * H * 3);
-  float xy[EDGEGEN_MAXPOINTS * 2];
-  for(int r = 0; r < l.rows; r++) for(int c = 0; c < l.cols; c++) {
-    int n = edgegen_outline(&eg, c, r, l.cell, l.margin, l.margin, xy);
-    piecebake_tile(&pb, xy, n, img, l.width, l.height, c * l.cell - l.margin, r * l.cell - l.margin, tile);
-    int bx = c * (l.cell + gap), by = r * (l.cell + gap);
-    for(int y = 0; y < l.tile; y++) for(int x = 0; x < l.tile; x++) {
-      uint32_t px = tile[y * l.tile + x];
+  for(uint32_t i = 0; i < cut.count; i++) {
+    const LayoutTile * t = tiles + i;
+    uint32_t n = cutter_outline(&cut, i, l.cell, -t->ox, -t->oy, xy);
+    piecebake_tile(&pb, xy, n, img, l.width, l.height, t->ox, t->oy, t->w, t->h, tile);
+    float cx = t->ox + t->w / 2.0f, cy = t->oy + t->h / 2.0f;
+    int bx = (int)(cx * (1 + spread) - t->w / 2.0f + l.maxw / 2), by = (int)(cy * (1 + spread) - t->h / 2.0f + l.maxh / 2);
+    for(int y = 0; y < t->h; y++) for(int x = 0; x < t->w; x++) {
+      if(bx + x < 0 || by + y < 0 || bx + x >= (int)W || by + y >= (int)H) continue;
+      uint32_t px = tile[y * t->w + x];
       float al = (px & 0xFF) / 255.0f;
       uint8_t * d = canvas + ((by + y) * W + bx + x) * 3;
       d[0] = d[0] * (1 - al) + (px >> 24) * al;
@@ -294,7 +364,7 @@ void test_dump_cut(const char * path, uint8_t stylenum) {
     fwrite(canvas, 1, W * H * 3, f);
     fclose(f);
   }
-  free(canvas); free(tile); free(img);
+  free(canvas); free(tile); free(img); free(xy); free(boxes); free(tiles);
   piecebake_free(&pb);
-  edgegen_free(&eg);
+  cutter_free(&cut);
 }

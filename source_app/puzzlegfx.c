@@ -1,5 +1,5 @@
 #include "puzzlegfx.h"
-#include "edgegen.h"
+#include "cutter.h"
 #include "imageload.h"
 #include "imgscale.h"
 #include "piecebake.h"
@@ -23,6 +23,7 @@ typedef struct {
   u32 style;
   Layout layout;
   u16 previeww, previewh;
+  u32 count;              // Pieces: a LayoutTile table of this many follows the header
   u32 geosize;            // PieceGeo blob after the preview (piecegeo_write)
 } PuzzleCacheHeader;
 
@@ -36,9 +37,12 @@ void puzzlegfx_free(PuzzleGfx * pg) {
   for(int i = 0; i < pg->npages; i++) C3D_TexDelete(&pg->pages[i]);
   if(pg->haspreview) C3D_TexDelete(&pg->preview);
   free(pg->subs);
+  free(pg->tiles);
+  free(pg->pageof);
   puzzlegfx_zero(pg);
 }
 
+// Textures and subtextures for pg->layout and pg->tiles (count of them)
 static int puzzlegfx_alloc(PuzzleGfx * pg, char * err, size_t errlen) {
   for(int i = 0; i < pg->layout.pages; i++) {
     if(texutil_init(&pg->pages[i], LAYOUT_PAGESIZE, LAYOUT_PAGESIZE, 1)) {
@@ -52,17 +56,16 @@ static int puzzlegfx_alloc(PuzzleGfx * pg, char * err, size_t errlen) {
     return 1;
   }
   pg->haspreview = 1;
-  uint32_t count = (uint32_t)pg->layout.cols * pg->layout.rows;
-  pg->subs = malloc(sizeof(Tex3DS_SubTexture) * count);
-  if(!pg->subs) {
+  pg->subs = malloc(sizeof(Tex3DS_SubTexture) * pg->count);
+  pg->pageof = malloc(pg->count);
+  if(!pg->subs || !pg->pageof) {
     PGFX_ERR("Out of memory (subtextures)");
     return 1;
   }
-  uint16_t tile = pg->layout.tile;
-  for(uint32_t i = 0; i < count; i++) {
-    uint16_t page, x, y;
-    layout_tile(&pg->layout, i, &page, &x, &y);
-    pg->subs[i] = texutil_subtex(x, y, tile, tile, LAYOUT_PAGESIZE, LAYOUT_PAGESIZE);
+  for(uint32_t i = 0; i < pg->count; i++) {
+    const LayoutTile * t = pg->tiles + i;
+    pg->subs[i] = texutil_subtex(t->x, t->y, t->w, t->h, LAYOUT_PAGESIZE, LAYOUT_PAGESIZE);
+    pg->pageof[i] = t->page;
   }
   return 0;
 }
@@ -89,8 +92,18 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.srcsize != want->srcsize ||
      h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed ||
      h.style != want->style) goto done;
-  if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO) goto done;
+  if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO ||
+     h.count == 0 || h.count > 0xFFF0) goto done;
   pg->layout = h.layout;
+  pg->count = h.count;
+  pg->tiles = malloc(sizeof(LayoutTile) * h.count);
+  if(!pg->tiles) { PGFX_ERR("Out of memory (tiles)"); result = 2; goto done; }
+  if(fread(pg->tiles, sizeof(LayoutTile), h.count, f) != h.count) goto done;
+  for(uint32_t i = 0; i < h.count; i++) {
+    const LayoutTile * t = pg->tiles + i;
+    if(t->page >= h.layout.pages || t->w == 0 || t->h == 0 || t->x + t->w > LAYOUT_PAGESIZE ||
+       t->y + t->h > LAYOUT_PAGESIZE) goto done;
+  }
   if(puzzlegfx_alloc(pg, err, errlen)) { result = 2; goto done; }
   for(int i = 0; i < pg->npages; i++) {
     if(fread(pg->pages[i].data, 1, pg->pages[i].size, f) != pg->pages[i].size) goto done;
@@ -102,8 +115,7 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   gbuf = malloc(h.geosize);
   if(!gbuf) { PGFX_ERR("Out of memory (piece geometry)"); result = 2; goto done; }
   if(fread(gbuf, 1, h.geosize, f) != h.geosize || piecegeo_read(geo, gbuf, h.geosize)) goto done;
-  // The textures have one tile per grid cell
-  if(geo->count != (uint32_t)h.layout.cols * h.layout.rows) goto done;
+  if(geo->count != h.count) goto done;
   result = 0;
 done:
   fclose(f);
@@ -129,6 +141,7 @@ static void puzzlegfx_writecache(PuzzleGfx * pg, const PieceGeo * geo, const cha
     return;
   }
   int ok = fwrite(h, sizeof(*h), 1, f) == 1;
+  if(ok) ok = fwrite(pg->tiles, sizeof(LayoutTile), pg->count, f) == pg->count;
   for(int i = 0; ok && i < pg->npages; i++) {
     ok = fwrite(pg->pages[i].data, 1, pg->pages[i].size, f) == pg->pages[i].size;
   }
@@ -144,19 +157,41 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   int result = 1;
   uint8_t * src = NULL, * img = NULL, * prev = NULL;
   uint32_t * tile = NULL;
-  EdgeGen eg = {0};
+  float * boxes = NULL, * outline = NULL;
+  Cutter cut;
+  int hascut = 0;
   PieceBaker pb = {0};
   int sw, sh;
 
   if(cb) cb(udata, "Reading image", 0, 1);
   src = imageload_rgb(imagepath, &sw, &sh, err, errlen);
   if(!src) return 1;
-  const EdgeStyle * style = edgegen_style(h->style);
-  if(layout_compute(&pg->layout, sw, sh, h->target, PGFX_MAXSIDE, PGFX_MAXPAGES, style->reach)) {
+  Layout * l = &pg->layout;
+  if(layout_crop(l, sw, sh, h->target)) {
     PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->target);
     goto done;
   }
-  Layout * l = &pg->layout;
+  // Cut first (in cells), then pick the piece size whose tiles fit the pages
+  if(cb) cb(udata, "Cutting pieces", 0, 1);
+  if(cutter_init(&cut, h->style, l->cols, l->rows, h->seed)) {
+    PGFX_ERR("Out of memory (cutter)");
+    goto done;
+  }
+  hascut = 1;
+  pg->count = cut.count;
+  boxes = malloc(sizeof(float) * 4 * cut.count);
+  pg->tiles = malloc(sizeof(LayoutTile) * cut.count);
+  outline = malloc(sizeof(float) * 2 * cut.maxpoints);
+  if(!boxes || !pg->tiles || !outline || cutter_bounds(&cut, boxes)) {
+    PGFX_ERR("Out of memory (tiles)");
+    goto done;
+  }
+  int r = layout_fit(l, boxes, cut.count, PGFX_MAXSIDE, PGFX_MAXPAGES, pg->tiles);
+  if(r) {
+    if(r == 1) PGFX_ERR("Out of memory (tiles)");
+    else PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->target);
+    goto done;
+  }
   if(cb) cb(udata, "Scaling image", 0, 1);
   img = malloc((size_t)l->width * l->height * 3);
   if(!img) { PGFX_ERR("Out of memory (image)"); goto done; }
@@ -170,25 +205,23 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   if(puzzlegfx_alloc(pg, err, errlen)) goto done;
   for(int i = 0; i < pg->npages; i++) memset(pg->pages[i].data, 0, pg->pages[i].size);
   memset(pg->preview.data, 0, pg->preview.size);
-
-  if(edgegen_init(&eg, l->cols, l->rows, h->seed, style) || piecebake_init(&pb, l->tile) ||
-     piecegeo_grid(geo, l->cols, l->rows, l->cell, eg.corners)) {
+  // Geometry at this cell size; each piece's home center is its tile's center
+  if(cutter_geo(&cut, l->cell, geo) || piecebake_init(&pb, l->maxw, l->maxh)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }
-  tile = malloc(sizeof(uint32_t) * l->tile * l->tile);
+  for(uint32_t i = 0; i < cut.count; i++) {
+    geo->center[i * 2] = pg->tiles[i].ox + pg->tiles[i].w / 2.0f;
+    geo->center[i * 2 + 1] = pg->tiles[i].oy + pg->tiles[i].h / 2.0f;
+  }
+  tile = malloc(sizeof(uint32_t) * l->maxw * l->maxh);
   if(!tile) { PGFX_ERR("Out of memory (tile)"); goto done; }
-  uint32_t count = (uint32_t)l->cols * l->rows;
-  float outline[EDGEGEN_MAXPOINTS * 2];
-  for(uint32_t i = 0; i < count; i++) {
-    if(cb && (i % 8) == 0) cb(udata, "Cutting pieces", i, count);
-    uint16_t col = i % l->cols, row = i / l->cols;
-    int n = edgegen_outline(&eg, col, row, l->cell, l->margin, l->margin, outline);
-    piecebake_tile(&pb, outline, n, img, l->width, l->height,
-        (int32_t)col * l->cell - l->margin, (int32_t)row * l->cell - l->margin, tile);
-    uint16_t page, x, y;
-    layout_tile(l, i, &page, &x, &y);
-    swizzle_copy(pg->pages[page].data, LAYOUT_PAGESIZE, x, y, tile, l->tile, l->tile, l->tile);
+  for(uint32_t i = 0; i < cut.count; i++) {
+    if(cb && (i % 8) == 0) cb(udata, "Cutting pieces", i, cut.count);
+    const LayoutTile * t = pg->tiles + i;
+    uint32_t n = cutter_outline(&cut, i, l->cell, -t->ox, -t->oy, outline);
+    piecebake_tile(&pb, outline, n, img, l->width, l->height, t->ox, t->oy, t->w, t->h, tile);
+    swizzle_copy(pg->pages[t->page].data, LAYOUT_PAGESIZE, t->x, t->y, tile, t->w, t->h, t->w);
   }
   for(int i = 0; i < pg->npages; i++) C3D_TexFlush(&pg->pages[i]);
 
@@ -206,13 +239,16 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   h->layout = pg->layout;
   h->previeww = pw;
   h->previewh = ph;
+  h->count = pg->count;
   result = 0;
 done:
   if(src) imageload_free(src);
   free(img);
   free(prev);
   free(tile);
-  edgegen_free(&eg);
+  free(boxes);
+  free(outline);
+  if(hascut) cutter_free(&cut);
   piecebake_free(&pb);
   if(result) {
     puzzlegfx_free(pg);
@@ -249,9 +285,7 @@ int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const
 }
 
 C2D_Image puzzlegfx_piece(PuzzleGfx * pg, uint32_t piece) {
-  uint16_t page, x, y;
-  layout_tile(&pg->layout, piece, &page, &x, &y);
-  return (C2D_Image) { .tex = &pg->pages[page], .subtex = &pg->subs[piece] };
+  return (C2D_Image) { .tex = &pg->pages[pg->tiles[piece].page], .subtex = &pg->subs[piece] };
 }
 
 C2D_Image puzzlegfx_preview(PuzzleGfx * pg) {

@@ -1,5 +1,6 @@
 #include "test.h"
 #include "edgegen.h"
+#include "cutter.h"
 
 #include <string.h>
 
@@ -22,6 +23,7 @@ int main(int argc, char ** argv) {
     uint8_t style = EDGEGEN_STYLE_CLASSIC;
     if(argc > 3 && !strcmp(argv[3], "irregular")) style = EDGEGEN_STYLE_IRREGULAR;
     if(argc > 3 && !strcmp(argv[3], "wild")) style = EDGEGEN_STYLE_WILD;
+    if(argc > 3 && !strcmp(argv[3], "random")) style = CUT_STYLE_RANDOM;
     test_dump_cut(argv[2], style);
     return 0;
   }
@@ -38,6 +40,7 @@ int main(int argc, char ** argv) {
   RUN(test_stick);
   RUN(test_layout);
   RUN(test_edgegen);
+  RUN(test_cut_pinned);
   RUN(test_edgegen_irregular);
   RUN(test_imgscale);
   RUN(test_swizzle);

@@ -58,12 +58,12 @@ static void render(const RandCut * c, const PieceGeo * g, float cell, const uint
   memset(canvas, 235, CW * CH * 3);
   uint32_t * out = malloc(sizeof(uint32_t) * tile * tile);
   PieceBaker pb;
-  piecebake_init(&pb, tile);
+  piecebake_init(&pb, tile, tile);
   for(uint32_t p = 0; p < c->count; p++) {
     float cx = g->center[p * 2], cy = g->center[p * 2 + 1];
     int32_t ox = (int32_t)floorf(cx - tile / 2.0f), oy = (int32_t)floorf(cy - tile / 2.0f);
     uint32_t n = randcut_outline(c, p, cell, -ox, -oy, xy);
-    piecebake_tile(&pb, xy, n, img, W, H, ox, oy, out);
+    piecebake_tile(&pb, xy, n, img, W, H, ox, oy, tile, tile, out);
     int32_t dx = (int32_t)(cx * (1 + spread)) - (cx - ox) + tile / 2, dy = (int32_t)(cy * (1 + spread)) - (cy - oy) + tile / 2;
     for(int y = 0; y < tile; y++) for(int x = 0; x < tile; x++) {
       int32_t X = dx + x, Y = dy + y;

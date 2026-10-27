@@ -33,11 +33,12 @@ void test_camera(void);
 void test_stick(void);
 void test_layout(void);
 void test_edgegen(void);
+void test_cut_pinned(void);
 void test_edgegen_irregular(void);
 void test_imgscale(void);
 void test_swizzle(void);
 void test_piecebake(void);
 void test_littlemenu(void);
-void test_dump_cut(const char * path, uint8_t style);  // EDGEGEN_STYLE_*
+void test_dump_cut(const char * path, uint8_t style);  // CUT_STYLE_*
 
 #endif
