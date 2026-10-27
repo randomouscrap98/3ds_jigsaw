@@ -17,6 +17,12 @@ void test_storage(void) {
   CHECK(!storage_iscache(n, "Wheat Field.jpeg_48.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jp_48.bin"));
   CHECK(storage_iscache(n, "Wheat Field.jpg_500_s3_w2.bin"));
+  CHECK(storage_iscachetmp(n, "Wheat Field.jpg_500_s3_w2.bin.tmp"));
+  CHECK(storage_iscachetmp(n, "Wheat Field.jpg_48.bin.tmp"));
+  CHECK(!storage_iscachetmp(n, "Wheat Field.jpg_48.bin"));
+  CHECK(!storage_iscachetmp(n, "Wheat Field.jpg.sav.tmp"));
+  CHECK(!storage_iscachetmp(n, "Other.jpg_48.bin.tmp"));
+  CHECK(!storage_iscachetmp(n, ".tmp"));
   CHECK(storage_iscache(n, "Wheat Field.jpg_100_w1_g1.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jpg_100_g1.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jpg_100_w.bin"));

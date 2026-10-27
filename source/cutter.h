@@ -43,6 +43,10 @@ void cutter_free(Cutter * c);
 uint32_t cutter_outline(const Cutter * c, uint32_t p, float cell, float ox, float oy, float * xy);
 // Bounds of every piece's outline in cells: count x (x0, y0, x1, y1). Returns 0 on success.
 int cutter_bounds(const Cutter * c, float * boxes);
+// Fingerprint of the cut: every outline in cells, rounded to 1/1000 (so it doesn't depend on
+// the piece size in pixels or tiny float differences). Saves keep it to notice a cut that
+// changed under them; tests pin it per style. Never 0.
+uint32_t cutter_hash(const Cutter * c);
 // Piece geometry at cell size cell (home centers = cell/region centers; callers that pack
 // tiles move them to the tile centers). Returns 0 on success.
 int cutter_geo(const Cutter * c, float cell, PieceGeo * g);

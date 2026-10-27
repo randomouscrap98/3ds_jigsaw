@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed) {
   memset(c, 0, sizeof(Cutter));
@@ -101,4 +102,17 @@ int cutter_geo(const Cutter * c, float cell, PieceGeo * g) {
   g->cols = c->cols;
   g->rows = c->rows;
   return 0;
+}
+
+uint32_t cutter_hash(const Cutter * c) {
+  float * xy = malloc(sizeof(float) * 2 * c->maxpoints);
+  if(!xy) return 1;
+  uint32_t h = 2166136261u;   // FNV-1a over point counts and rounded coordinates
+  for(uint32_t p = 0; p < c->count; p++) {
+    uint32_t n = cutter_outline(c, p, 1, 0, 0, xy);
+    h = (h ^ n) * 16777619u;
+    for(uint32_t i = 0; i < 2 * n; i++) h = (h ^ (uint32_t)(int32_t)lroundf(xy[i] * 1000)) * 16777619u;
+  }
+  free(xy);
+  return h ? h : 1;
 }

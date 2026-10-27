@@ -1,4 +1,5 @@
 #include "test.h"
+#include "geom.h"
 #include "piecegeo.h"
 #include "edgegen.h"
 #include "rng.h"
@@ -6,15 +7,6 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-
-static int inside(const float * h, uint32_t n, float x, float y) {
-  int in = 0;
-  for(uint32_t i = 0, j = n - 1; i < n; j = i++) {
-    float xi = h[2 * i], yi = h[2 * i + 1], xj = h[2 * j], yj = h[2 * j + 1];
-    if((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in = !in;
-  }
-  return in;
-}
 
 // Jittered corners (wild cut): hitboxes are the corner quads, cover the puzzle with no
 // gaps or overlaps, and the lookup grid agrees with a brute force search
@@ -37,7 +29,7 @@ static void test_piecegeo_corners(void) {
     float x = rng_range(&r, 0, g.width), y = rng_range(&r, 0, g.height);
     int32_t found = -1, hits = 0;
     for(uint32_t q = 0; q < g.count; q++) {
-      if(inside(g.hb + 2 * g.hbstart[q], g.hbstart[q + 1] - g.hbstart[q], x, y)) {
+      if(geom_inside(g.hb + 2 * g.hbstart[q], g.hbstart[q + 1] - g.hbstart[q], x, y)) {
         found = q;
         hits++;
       }

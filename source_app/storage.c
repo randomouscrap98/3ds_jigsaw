@@ -50,6 +50,15 @@ int storage_iscache(const char * name, const char * file) {
   return p && !strcmp(p, ".bin");
 }
 
+int storage_iscachetmp(const char * name, const char * file) {
+  size_t n = strlen(file);
+  if(n < 4 || strcmp(file + n - 4, ".tmp") || n - 4 >= STORAGE_MAXPATH) return 0;
+  char base[STORAGE_MAXPATH];
+  memcpy(base, file, n - 4);
+  base[n - 4] = 0;
+  return storage_iscache(name, base);
+}
+
 void storage_cleancaches(const char * name, const char * keep) {
   DIR * d = opendir(STORAGE_CACHE);
   if(!d) return;
@@ -58,10 +67,11 @@ void storage_cleancaches(const char * name, const char * keep) {
   int count = 0;
   struct dirent * de;
   while((de = readdir(d))) {
-    if(!storage_iscache(name, de->d_name)) continue;
+    int tmp = storage_iscachetmp(name, de->d_name);
+    if(!tmp && !storage_iscache(name, de->d_name)) continue;
     char path[STORAGE_MAXPATH];
     snprintf(path, sizeof(path), "%s/%s", STORAGE_CACHE, de->d_name);
-    if(!strcmp(path, keep)) continue;
+    if(!tmp && !strcmp(path, keep)) continue;
     void * more = realloc(doomed, sizeof(*doomed) * (count + 1));
     if(!more) break;
     doomed = more;

@@ -81,9 +81,16 @@ float cutgraph_edgelen(const CutGraph * g, const CutEdge * e);
 // pieces whose outline fails edgegen_shape_ok until all pass. Same seed = same tabs.
 // Returns 0 on success.
 int cutgraph_tabs(CutGraph * g, const CutTabStyle * st, uint32_t seed);
+// Per vertex: 1 if a whimsy's outline ends there (malloc'd; NULL = out of memory)
+uint8_t * cutgraph_whimsyverts(const CutGraph * g);
 // 1 if edge e may get a tab under st: between two pieces, straight, not part of a whimsy,
-// long enough (whimsytab if an end touches a whimsy, else mintab)
-int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min);
+// at least min long, and at least st->whimsytab if an end is a whimsy vertex (wv from
+// cutgraph_whimsyverts; NULL when there are no whimsies)
+int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min, const uint8_t * wv);
+// Rebuild every piece's walk from the edges' left/right sides (after edges changed).
+// Returns 0 if every piece is one closed loop; 1 if one is split, pinched or gone (g's
+// walks are then unchanged), -1 out of memory.
+int cutgraph_rewalk(CutGraph * g);
 // Pieces that are whimsies (every edge WHIMSY) are exempt from needing a tab
 int cutgraph_iswhimsy(const CutGraph * g, uint32_t p);
 uint32_t cutgraph_maxpoints(const CutGraph * g);

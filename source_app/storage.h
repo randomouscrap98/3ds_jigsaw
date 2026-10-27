@@ -21,7 +21,11 @@ void storage_savepath(const char * name, char * out);
 // 1 if file (a name in the cache folder) is one of image name's caches, any count/style/
 // whimsies: "<name>_<digits>[_s<digits>][_w<digits>[_g<digits>]].bin"
 int storage_iscache(const char * name, const char * file);
-// Delete every cache of image name except the file at keep (a full cache path)
+// 1 if file is a leftover temp file of one of image name's caches ("<cache>.bin.tmp": a
+// cache write cut short by a crash or power off)
+int storage_iscachetmp(const char * name, const char * file);
+// Delete every cache of image name except the file at keep (a full cache path), and any
+// leftover cache temp files of it
 void storage_cleancaches(const char * name, const char * keep);
 // Whole file into a malloc'd buffer. Returns 0 on success.
 int storage_readfile(const char * path, uint8_t ** buf, size_t * len);

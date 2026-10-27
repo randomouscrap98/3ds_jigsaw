@@ -1,5 +1,6 @@
 #include "randcut.h"
 #include "rng.h"
+#include "geom.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -82,23 +83,6 @@ static int randcut_cell(const RcPt * sites, uint32_t count, uint32_t i, float w,
     memcpy(poly, tmp, sizeof(RcPt) * n);
   }
   return n;
-}
-
-static float randcut_area(const RcPt * p, int n, float * cx, float * cy) {
-  double a = 0, x = 0, y = 0;
-  for(int i = 0; i < n; i++) {
-    const RcPt * u = p + i, * v = p + (i + 1) % n;
-    double c = (double)u->x * v->y - (double)v->x * u->y;
-    a += c;
-    x += (u->x + v->x) * c;
-    y += (u->y + v->y) * c;
-  }
-  a /= 2;
-  if(cx && a != 0) {
-    *cx = x / (6 * a);
-    *cy = y / (6 * a);
-  }
-  return a;
 }
 
 // ---- Topology: shared vertices, collapsed short edges, edges with two sides ----
@@ -254,7 +238,7 @@ static int randcut_topology(CutGraph * c, RcWork * w) {
       uint32_t n = c->pstart[i + 1] - c->pstart[i];
       if(n > RC_MAXCELL) { err = 1; break; }
       for(uint32_t k = 0; k < n; k++) p[k] = (RcPt) { c->v[walk[c->pstart[i] + k]].x, c->v[walk[c->pstart[i] + k]].y };
-      if(randcut_area(p, n, NULL, NULL) < RC_MINAREA) err = 1;
+      if(geom_area((const float *)(p), n, NULL, NULL) < RC_MINAREA) err = 1;
     }
     // Edges: sort half-edges by vertex pair; each pair is used by one or two pieces
     for(uint32_t i = 0; i < count && !err; i++) {
@@ -349,7 +333,7 @@ int randcut_graph(CutGraph * c, float w, float h, uint32_t count, uint32_t seed,
       if(err || pass == st->relax) break;
       for(uint32_t i = 0; i < count; i++) {
         uint32_t s = wk.cstart[i];
-        randcut_area(wk.cell + s, wk.cstart[i + 1] - s, &sites[i].x, &sites[i].y);
+        geom_area((const float *)(wk.cell + s), wk.cstart[i + 1] - s, &sites[i].x, &sites[i].y);
       }
     }
   }

@@ -170,22 +170,87 @@ static int cutgraph_inner(const CutEdge * e) {
   return e->left >= 0 && e->right >= 0 && e->npts == 0 && !(e->flags & CUTEDGE_WHIMSY);
 }
 
-// Does a whimsy's outline end at vertex v? (Only whimsy outline edges have polylines or
-// the WHIMSY flag, and they always meet straight edges at crossing vertices.)
-static int cutgraph_whimsyvert(const CutGraph * g, uint32_t v) {
+uint8_t * cutgraph_whimsyverts(const CutGraph * g) {
+  uint8_t * wv = calloc(g->nv ? g->nv : 1, 1);
+  if(!wv) return NULL;
   for(uint32_t i = 0; i < g->ne; i++) {
     const CutEdge * e = g->e + i;
-    if((e->flags & CUTEDGE_WHIMSY) && (e->a == v || e->b == v)) return 1;
+    if(e->flags & CUTEDGE_WHIMSY) wv[e->a] = wv[e->b] = 1;
   }
-  return 0;
+  return wv;
 }
 
-int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min) {
+int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min, const uint8_t * wv) {
   if(!cutgraph_inner(e)) return 0;
   float L = cutgraph_edgelen(g, e);
   if(L < min) return 0;
-  if(st->whimsytab > min && L < st->whimsytab && (cutgraph_whimsyvert(g, e->a) || cutgraph_whimsyvert(g, e->b))) return 0;
+  if(wv && L < st->whimsytab && (wv[e->a] || wv[e->b])) return 0;
   return 1;
+}
+
+int cutgraph_rewalk(CutGraph * g) {
+  uint32_t count = g->count;
+  uint32_t total = 0;
+  for(uint32_t i = 0; i < g->ne; i++) total += (g->e[i].left >= 0) + (g->e[i].right >= 0);
+  // Half-edges bucketed by piece: piece p walks half[start[p]..start[p+1])
+  uint32_t * start = calloc(count + 1, sizeof(uint32_t));
+  uint32_t * fill = malloc(sizeof(uint32_t) * (count ? count : 1));
+  uint32_t * half = malloc(sizeof(uint32_t) * (total ? total : 1));
+  uint32_t * walk = malloc(sizeof(uint32_t) * (total ? total : 1));
+  uint8_t * used = calloc(total ? total : 1, 1);
+  int err = !start || !fill || !half || !walk || !used ? -1 : 0;
+  if(!err) {
+    for(uint32_t i = 0; i < g->ne; i++) {
+      if(g->e[i].left >= 0) start[g->e[i].left + 1]++;
+      if(g->e[i].right >= 0) start[g->e[i].right + 1]++;
+    }
+    for(uint32_t p = 0; p < count; p++) start[p + 1] += start[p];
+    memcpy(fill, start, sizeof(uint32_t) * count);
+    for(uint32_t i = 0; i < g->ne; i++) {
+      if(g->e[i].left >= 0) half[fill[g->e[i].left]++] = i * 2;
+      if(g->e[i].right >= 0) half[fill[g->e[i].right]++] = i * 2 + 1;
+    }
+    uint32_t nw = 0;
+    for(uint32_t p = 0; p < count && !err; p++) {
+      uint32_t s = start[p], n = start[p + 1] - s;
+      if(n < 2) { err = 1; break; }
+      // Chain: each half-edge's end is exactly one other half-edge's start
+      uint32_t cur = 0;
+      for(uint32_t k = 0; k < n && !err; k++) {
+        uint32_t h = half[s + cur];
+        used[s + cur] = 1;
+        walk[nw++] = h;
+        const CutEdge * e = g->e + (h >> 1);
+        uint32_t end = (h & 1) ? e->a : e->b;
+        int32_t next = -1;
+        for(uint32_t j = 0; j < n; j++) {
+          uint32_t hj = half[s + j];
+          const CutEdge * f = g->e + (hj >> 1);
+          if(((hj & 1) ? f->b : f->a) != end) continue;
+          if(next >= 0) err = 1;   // Pinched: two ways on
+          next = j;
+        }
+        if(next < 0) err = 1;
+        else if(k + 1 < n) {
+          if(used[s + next]) err = 1;   // Closed early: the piece is in two parts
+          cur = next;
+        } else if(next != 0) err = 1;
+      }
+    }
+    if(!err) {
+      free(g->pstart);
+      free(g->pedge);
+      g->pstart = start;
+      g->pedge = walk;
+      start = walk = NULL;
+    }
+  }
+  free(start);
+  free(fill);
+  free(half);
+  free(walk);
+  free(used);
+  return err;
 }
 
 // Canonical (a -> b) points of an edge in cell units, a included, b excluded
@@ -280,14 +345,24 @@ uint32_t cutgraph_body(const CutGraph * g, uint32_t p, float cell, float ox, flo
   return cutgraph_walk(g, p, 0, cell, ox, oy, xy);
 }
 
+static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed, const uint8_t * wv);
+
 int cutgraph_tabs(CutGraph * g, const CutTabStyle * st, uint32_t seed) {
+  uint8_t * wv = NULL;
+  if(st->whimsytab > 0 && !(wv = cutgraph_whimsyverts(g))) return 1;
+  int result = cutgraph_givetabs(g, st, seed, wv);
+  free(wv);
+  return result;
+}
+
+static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed, const uint8_t * wv) {
   Rng r;
   rng_init(&r, seed ^ 0x7AB5u);
   for(uint32_t i = 0; i < g->ne; i++) {
     CutEdge * e = g->e + i;
     if(e->flags & (CUTEDGE_GRID | CUTEDGE_WHIMSY)) continue;
     float L = cutgraph_edgelen(g, e);
-    e->ntabs = !cutgraph_tabbable(g, st, e, st->mintab) ? 0 : L >= st->twotab ? 2 : 1;
+    e->ntabs = !cutgraph_tabbable(g, st, e, st->mintab, wv) ? 0 : L >= st->twotab ? 2 : 1;
     cutgraph_rolltabs(g, st, e, &r);
   }
   // Every piece but a whimsy needs a tab or blank: give tabless pieces one on their longest
@@ -298,7 +373,7 @@ int cutgraph_tabs(CutGraph * g, const CutTabStyle * st, uint32_t seed) {
     float bestlen = 0;
     for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
       CutEdge * e = g->e + (g->pedge[k] >> 1);
-      if(!cutgraph_tabbable(g, st, e, st->mintab * 0.6f)) continue;
+      if(!cutgraph_tabbable(g, st, e, st->mintab * 0.6f, wv)) continue;
       float L = cutgraph_edgelen(g, e);
       if(L > bestlen) { bestlen = L; best = g->pedge[k] >> 1; }
     }

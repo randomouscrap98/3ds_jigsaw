@@ -12,10 +12,12 @@
 #include <string.h>
 #include <sys/stat.h>
 
-// Raw struct on disk; only ever read back by the same build of the same program
+// Raw struct on disk; only ever read back by the same build of the same program. The
+// struct sizes guard against an edit that changes the layout but forgets the version.
 typedef struct {
   char magic[4];
   u32 version;
+  u16 headsize, layoutsize, tilesize, pad;
   u64 srcsize;
   u64 srcmtime;
   u32 target;
@@ -25,6 +27,7 @@ typedef struct {
   Layout layout;
   u16 previeww, previewh;
   u32 count;              // Pieces: a LayoutTile table of this many follows the header
+  u32 cuthash;            // cutter_hash of the cut
   u32 geosize;            // PieceGeo blob after the preview (piecegeo_write)
 } PuzzleCacheHeader;
 
@@ -90,7 +93,8 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   uint8_t * gbuf = NULL;
   int result = 1;
   if(fread(&h, sizeof(h), 1, f) != 1) goto done;
-  if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.srcsize != want->srcsize ||
+  if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.headsize != want->headsize ||
+     h.layoutsize != want->layoutsize || h.tilesize != want->tilesize || h.srcsize != want->srcsize ||
      h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed ||
      h.style != want->style || h.whimsy != want->whimsy || h.whimsyset != want->whimsyset) goto done;
   if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO ||
@@ -100,11 +104,21 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   pg->tiles = malloc(sizeof(LayoutTile) * h.count);
   if(!pg->tiles) { PGFX_ERR("Out of memory (tiles)"); result = 2; goto done; }
   if(fread(pg->tiles, sizeof(LayoutTile), h.count, f) != h.count) goto done;
+  // The layout must agree with itself and with the tiles (a damaged file that still has a
+  // good header shouldn't give odd sizes)
+  const Layout * l = &h.layout;
+  if(l->pages == 0 || l->cols == 0 || l->rows == 0 || l->cell < LAYOUT_MINCELL ||
+     l->width != (uint32_t)l->cols * l->cell || l->height != (uint32_t)l->rows * l->cell) goto done;
+  uint16_t maxw = 0, maxh = 0;
   for(uint32_t i = 0; i < h.count; i++) {
     const LayoutTile * t = pg->tiles + i;
-    if(t->page >= h.layout.pages || t->w == 0 || t->h == 0 || t->x + t->w > LAYOUT_PAGESIZE ||
+    if(t->page >= l->pages || t->w == 0 || t->h == 0 || t->x + t->w > LAYOUT_PAGESIZE ||
        t->y + t->h > LAYOUT_PAGESIZE) goto done;
+    if(t->w > maxw) maxw = t->w;
+    if(t->h > maxh) maxh = t->h;
   }
+  if(maxw != l->maxw || maxh != l->maxh) goto done;
+  pg->cuthash = h.cuthash;
   if(puzzlegfx_alloc(pg, err, errlen)) { result = 2; goto done; }
   for(int i = 0; i < pg->npages; i++) {
     if(fread(pg->pages[i].data, 1, pg->pages[i].size, f) != pg->pages[i].size) goto done;
@@ -116,7 +130,8 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   gbuf = malloc(h.geosize);
   if(!gbuf) { PGFX_ERR("Out of memory (piece geometry)"); result = 2; goto done; }
   if(fread(gbuf, 1, h.geosize, f) != h.geosize || piecegeo_read(geo, gbuf, h.geosize)) goto done;
-  if(geo->count != h.count) goto done;
+  if(geo->count != h.count || geo->cols != l->cols || geo->rows != l->rows || geo->cell != l->cell ||
+     geo->width != l->width || geo->height != l->height) goto done;
   result = 0;
 done:
   fclose(f);
@@ -180,6 +195,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   hascut = 1;
   pg->count = cut.count;
+  pg->cuthash = cutter_hash(&cut);
   boxes = malloc(sizeof(float) * 4 * cut.count);
   pg->tiles = malloc(sizeof(LayoutTile) * cut.count);
   outline = malloc(sizeof(float) * 2 * cut.maxpoints);
@@ -241,6 +257,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   h->previeww = pw;
   h->previewh = ph;
   h->count = pg->count;
+  h->cuthash = pg->cuthash;
   result = 0;
 done:
   if(src) imageload_free(src);
@@ -268,6 +285,9 @@ int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const
   memset(&h, 0, sizeof(h));
   memcpy(h.magic, "JGCA", 4);
   h.version = PGFX_CACHE_VERSION;
+  h.headsize = sizeof(PuzzleCacheHeader);
+  h.layoutsize = sizeof(Layout);
+  h.tilesize = sizeof(LayoutTile);
   h.target = target;
   h.seed = seed;
   h.style = style;

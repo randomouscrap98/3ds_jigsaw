@@ -13,6 +13,8 @@
 #define PINNED_IRREGULAR 0x0CB062D3u
 #define PINNED_WILD 0x6CE7D16Fu
 #define PINNED_RANDOM 0xB45D299Bu      // 1.2
+#define PINNED_WHIMSY { { 0x8C3BD049u, 0x881A00CEu }, { 0xFFEF07BBu, 0xBEC93799u }, \
+    { 0x33ED2971u, 0xB5F9C31Fu }, { 0x987CDF7Bu, 0xBEC67F6Cu } }   // 1.2, style x Few/Many
 
 void test_layout(void) {
   uint16_t c, r;
@@ -88,17 +90,10 @@ void test_layout(void) {
 // Pinned output: saves only store group positions, so if a generator's output changes,
 // existing saves for that style no longer fit their pieces. These hashes catch accidental
 // changes; update them only together with a deliberate, versioned change.
-static uint32_t cut_hash(uint8_t style, uint16_t cols, uint16_t rows, uint32_t seed) {
+static uint32_t cut_hash(uint8_t style, uint8_t whimsy, uint16_t cols, uint16_t rows, uint32_t seed) {
   Cutter cut;
-  if(cutter_init(&cut, style, WHIMSY_NONE, 0, cols, rows, seed)) return 0;
-  float * xy = malloc(sizeof(float) * 2 * cut.maxpoints);
-  uint32_t h = 2166136261u;
-  for(uint32_t p = 0; p < cut.count; p++) {
-    uint32_t n = cutter_outline(&cut, p, 1, 0, 0, xy);
-    h = (h ^ n) * 16777619u;
-    for(uint32_t i = 0; i < 2 * n; i++) h = (h ^ (uint32_t)(int32_t)lroundf(xy[i] * 1000)) * 16777619u;
-  }
-  free(xy);
+  if(cutter_init(&cut, style, whimsy, WHIMSY_SET_CUTE, cols, rows, seed)) return 0;
+  uint32_t h = cutter_hash(&cut);
   cutter_free(&cut);
   return h;
 }
@@ -106,9 +101,18 @@ static uint32_t cut_hash(uint8_t style, uint16_t cols, uint16_t rows, uint32_t s
 void test_cut_pinned(void) {
   const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM };
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
-    uint32_t h = cut_hash(st, 13, 9, 4242);
+    uint32_t h = cut_hash(st, WHIMSY_NONE, 13, 9, 4242);
     if(h != want[st]) printf("  style %u hash %08lX\n", st, (unsigned long)h);
     CHECK(h == want[st]);
+  }
+  // With whimsies (style x Few/Many)
+  const uint32_t wantw[CUT_STYLES][2] = PINNED_WHIMSY;
+  for(uint8_t st = 0; st < CUT_STYLES; st++) {
+    for(uint8_t wh = 0; wh < 2; wh++) {
+      uint32_t h = cut_hash(st, WHIMSY_FEW + wh, 13, 9, 4242);
+      if(h != wantw[st][wh]) printf("  style %u whimsy %u hash %08lX\n", st, WHIMSY_FEW + wh, (unsigned long)h);
+      CHECK(h == wantw[st][wh]);
+    }
   }
 }
 

@@ -16,7 +16,8 @@
 #define PGFX_PREVIEW_MAXH 240
 #define PGFX_CACHE_VERSION 6     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
                                  // 5: packed tiles (table in the cache), Random style.
-                                 // 6: whimsies (+ level and set in the header)
+                                 // 6: whimsies (+ level and set in the header), cut hash,
+                                 //    struct sizes
 #define PGFX_MAXGEO (4 << 20)    // Sanity limit on the cached PieceGeo size
 
 
@@ -25,6 +26,7 @@
 typedef struct {
   Layout layout;
   uint32_t count;               // Pieces
+  uint32_t cuthash;             // cutter_hash of the cut (saves check it on continue)
   LayoutTile * tiles;           // One per piece
   uint8_t * pageof;             // Texture page of each piece (for drawlist)
   C3D_Tex pages[PGFX_MAXPAGES];

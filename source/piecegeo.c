@@ -1,5 +1,8 @@
 #include "piecegeo.h"
 
+#include "bytes.h"
+#include "geom.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -115,17 +118,6 @@ int piecegeo_grid(PieceGeo * g, uint16_t cols, uint16_t rows, float cell, const 
   return 0;
 }
 
-// Even-odd point in polygon. The crossing rule makes it half-open: points on a left or
-// top edge are inside, on a right or bottom edge outside.
-static int piecegeo_inside(const float * h, uint32_t n, float x, float y) {
-  int in = 0;
-  for(uint32_t i = 0, j = n - 1; i < n; j = i++) {
-    float xi = h[2 * i], yi = h[2 * i + 1], xj = h[2 * j], yj = h[2 * j + 1];
-    if((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in = !in;
-  }
-  return in;
-}
-
 int32_t piecegeo_at(const PieceGeo * g, float x, float y) {
   if(!(x >= 0) || !(y >= 0)) return -1;
   uint32_t sx = (uint32_t)(x / g->ls), sy = (uint32_t)(y / g->ls);
@@ -133,40 +125,9 @@ int32_t piecegeo_at(const PieceGeo * g, float x, float y) {
   uint32_t s = sy * g->lw + sx;
   for(uint32_t i = g->lstart[s]; i < g->lstart[s + 1]; i++) {
     uint16_t p = g->lpiece[i];
-    if(piecegeo_inside(g->hb + 2 * g->hbstart[p], g->hbstart[p + 1] - g->hbstart[p], x, y)) return p;
+    if(geom_inside(g->hb + 2 * g->hbstart[p], g->hbstart[p + 1] - g->hbstart[p], x, y)) return p;
   }
   return -1;
-}
-
-static void put16(uint8_t ** p, uint16_t v) {
-  (*p)[0] = v & 0xFF; (*p)[1] = v >> 8;
-  *p += 2;
-}
-static void put32(uint8_t ** p, uint32_t v) {
-  for(int i = 0; i < 4; i++) (*p)[i] = (v >> (8 * i)) & 0xFF;
-  *p += 4;
-}
-static void putf(uint8_t ** p, float f) {
-  uint32_t v;
-  memcpy(&v, &f, 4);
-  put32(p, v);
-}
-static uint16_t get16(const uint8_t ** p) {
-  uint16_t v = (*p)[0] | ((*p)[1] << 8);
-  *p += 2;
-  return v;
-}
-static uint32_t get32(const uint8_t ** p) {
-  uint32_t v = 0;
-  for(int i = 0; i < 4; i++) v |= (uint32_t)(*p)[i] << (8 * i);
-  *p += 4;
-  return v;
-}
-static float getf(const uint8_t ** p) {
-  uint32_t v = get32(p);
-  float f;
-  memcpy(&f, &v, 4);
-  return f;
 }
 
 size_t piecegeo_size(const PieceGeo * g) {

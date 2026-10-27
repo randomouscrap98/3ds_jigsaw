@@ -1,5 +1,7 @@
 #include "boardsave.h"
 
+#include "bytes.h"
+
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -15,37 +17,6 @@ static int boardsave_v2(Board * b) {
 
 static size_t boardsave_header(uint16_t version) {
   return version >= 2 ? BOARDSAVE_HEADER2 : BOARDSAVE_HEADER;
-}
-
-static void put16(uint8_t ** p, uint16_t v) {
-  (*p)[0] = v & 0xFF; (*p)[1] = v >> 8;
-  *p += 2;
-}
-static void put32(uint8_t ** p, uint32_t v) {
-  for(int i = 0; i < 4; i++) (*p)[i] = (v >> (8 * i)) & 0xFF;
-  *p += 4;
-}
-static void putf(uint8_t ** p, float f) {
-  uint32_t v;
-  memcpy(&v, &f, 4);
-  put32(p, v);
-}
-static uint16_t get16(const uint8_t ** p) {
-  uint16_t v = (*p)[0] | ((*p)[1] << 8);
-  *p += 2;
-  return v;
-}
-static uint32_t get32(const uint8_t ** p) {
-  uint32_t v = 0;
-  for(int i = 0; i < 4; i++) v |= (uint32_t)(*p)[i] << (8 * i);
-  *p += 4;
-  return v;
-}
-static float getf(const uint8_t ** p) {
-  uint32_t v = get32(p);
-  float f;
-  memcpy(&f, &v, 4);
-  return f;
 }
 
 size_t boardsave_size(Board * b) {

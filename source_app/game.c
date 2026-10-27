@@ -83,8 +83,16 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     return 1;
   }
   if(cont) {
-    int r = savefile_readboard(save, savelen, &hdr, &g->board);
+    // A save from before cut hashes (0) can't be checked; otherwise the cut must be the one
+    // it was saved with (it could differ if the cache was rebuilt by a newer version)
+    int changed = hdr.cuthash && hdr.cuthash != g->gfx.cuthash;
+    int r = changed ? SAVEFILE_BAD : savefile_readboard(save, savelen, &hdr, &g->board);
     free(save);
+    if(changed) {
+      GAME_ERR("This puzzle's pieces changed since it was saved; start a new one");
+      game_free(g);
+      return 1;
+    }
     if(r) {
       GAME_ERR("Save file doesn't match this puzzle; start a new one");
       game_free(g);
@@ -131,6 +139,7 @@ int game_save(Game * g, int background) {
   sh.style = g->style;
   sh.whimsy = g->whimsy;
   sh.whimsyset = g->whimsyset;
+  sh.cuthash = g->gfx.cuthash;
   sh.target = g->target;
   sh.table = g->table;
   sh.music = g->music;

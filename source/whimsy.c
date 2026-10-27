@@ -1,5 +1,6 @@
 #include "whimsy.h"
 #include "rng.h"
+#include "geom.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -10,10 +11,9 @@
 #define WH_MINPART 0.03f      // Shortest edge piece left where a whimsy crosses (cells)
 #define WH_CLEARANCE 0.06f    // Body clearance for pieces around a whimsy (cells)
 #define WH_GRIDNEAR 0.45f     // Grid edges this close to a whimsy get new tabs
-#define WH_TABEDGE 0.5f       // A piece next to a whimsy needs an inner edge this long
-#ifndef WH_MINTHICK
-#define WH_MINTHICK 0.25f     // Pieces next to a whimsy: thickest inside circle at least this
-#endif
+#define WH_HOSTTAB 0.5f       // A piece next to a whimsy needs a straight inner edge this long
+                              // (WHIMSY_TABEDGE if that edge ends at a whimsy)
+#define WH_MINTHICK 0.25f     // ...and must be this thick (biggest circle inside, cells)
 // Heart proportions (any units; normalized after), approximating a cute heart picture the
 // user picked (its lobes are slightly oval): a fairly deep pointed dip, sharp point
 #define WH_HEART_A 1.9f       // Lobe circle centers at x = +-A
@@ -37,17 +37,8 @@ static uint32_t whimsy_chaikin(const float * in, uint32_t n, float * out) {
 
 // Scale to area 1, move the centroid to 0, make it clockwise (positive area, y down)
 static void whimsy_normalize(float * xy, uint32_t n) {
-  double a = 0, cx = 0, cy = 0;
-  for(uint32_t i = 0; i < n; i++) {
-    const float * p = xy + 2 * i, * q = xy + 2 * ((i + 1) % n);
-    double c = (double)p[0] * q[1] - (double)q[0] * p[1];
-    a += c;
-    cx += (p[0] + q[0]) * c;
-    cy += (p[1] + q[1]) * c;
-  }
-  a /= 2;
-  cx /= 6 * a;
-  cy /= 6 * a;
+  float cx = 0, cy = 0;
+  float a = geom_area(xy, n, &cx, &cy);
   if(a < 0) {
     for(uint32_t i = 0; i < n / 2; i++) {
       float * p = xy + 2 * i, * q = xy + 2 * (n - 1 - i);
@@ -74,7 +65,7 @@ static float whimsy_ray(float t, float cx, float cy, float r) {
 // Outline of a union of circles that's star-shaped around the origin, sampled at m angles
 // (sharp where circles meet). petals > 0: that many circles of radius r at distance d
 // around a middle circle; petals = 0: a cloud.
-static uint32_t whimsy_circles(float * xy, uint32_t m, uint32_t petals, float d, float r, const float * unused) {
+static uint32_t whimsy_circles(float * xy, uint32_t m, uint32_t petals, float d, float r) {
   
   static const float cloud[][3] = {
     { 0, 0, 0.6f }, { -0.4f, -0.34f, 0.44f }, { 0.4f, -0.34f, 0.44f },
@@ -166,10 +157,10 @@ uint32_t whimsy_shape(uint8_t set, uint32_t shape, float * xy) {
       break;
     }
     case 2:     // Six fat petals around a middle
-      n = whimsy_circles(xy, 120, 6, 0.66f, 0.34f, NULL);
+      n = whimsy_circles(xy, 120, 6, 0.66f, 0.34f);
       break;
     default:    // Cloud: round bumps on top of a flat-ish base
-      n = whimsy_circles(xy, 120, 0, 0, 0, NULL);
+      n = whimsy_circles(xy, 120, 0, 0, 0);
       break;
   }
   whimsy_normalize(xy, n);
@@ -184,34 +175,6 @@ uint32_t whimsy_count(uint8_t level, uint32_t count) {
 
 // ---- Geometry helpers ----
 
-static int whimsy_inside(const float * xy, uint32_t n, float x, float y) {
-  int in = 0;
-  for(uint32_t i = 0, j = n - 1; i < n; j = i++) {
-    float xi = xy[2 * i], yi = xy[2 * i + 1], xj = xy[2 * j], yj = xy[2 * j + 1];
-    if((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in = !in;
-  }
-  return in;
-}
-
-static float whimsy_area(const float * xy, uint32_t n) {
-  double a = 0;
-  for(uint32_t i = 0; i < n; i++) {
-    const float * p = xy + 2 * i, * q = xy + 2 * ((i + 1) % n);
-    a += (double)p[0] * q[1] - (double)q[0] * p[1];
-  }
-  return a / 2;
-}
-
-static float whimsy_pointseg(float px, float py, float ax, float ay, float bx, float by) {
-  float vx = bx - ax, vy = by - ay, wx = px - ax, wy = py - ay;
-  float l = vx * vx + vy * vy;
-  float t = l > 0 ? (vx * wx + vy * wy) / l : 0;
-  if(t < 0) t = 0;
-  if(t > 1) t = 1;
-  float dx = wx - t * vx, dy = wy - t * vy;
-  return sqrtf(dx * dx + dy * dy);
-}
-
 // Distance from segment ab to the polygon's outline (0 if they cross)
 static float whimsy_segdist(const float * xy, uint32_t n, float ax, float ay, float bx, float by) {
   float best = 1e30f;
@@ -224,109 +187,14 @@ static float whimsy_segdist(const float * xy, uint32_t n, float ax, float ay, fl
       float u = ((p[0] - ax) * ry - (p[1] - ay) * rx) / den;
       if(t >= 0 && t <= 1 && u >= 0 && u <= 1) return 0;
     }
-    float d = fminf(fminf(whimsy_pointseg(ax, ay, p[0], p[1], q[0], q[1]), whimsy_pointseg(bx, by, p[0], p[1], q[0], q[1])),
-        fminf(whimsy_pointseg(p[0], p[1], ax, ay, bx, by), whimsy_pointseg(q[0], q[1], ax, ay, bx, by)));
+    float d = fminf(fminf(geom_pointseg(ax, ay, p[0], p[1], q[0], q[1]), geom_pointseg(bx, by, p[0], p[1], q[0], q[1])),
+        fminf(geom_pointseg(p[0], p[1], ax, ay, bx, by), geom_pointseg(q[0], q[1], ax, ay, bx, by)));
     if(d < best) best = d;
   }
   return best;
 }
 
-// ---- Inserting a shape into the graph ----
-
-typedef struct {
-  uint32_t edge;    // Original edge it's on
-  float t;          // Along that edge (0..1)
-  float s;          // Along the shape (segment index + fraction)
-  uint32_t v;       // New vertex
-} WhCross;
-
-static int whimsy_crosscmp_t(const void * a, const void * b) {
-  const WhCross * x = a, * y = b;
-  if(x->edge != y->edge) return x->edge < y->edge ? -1 : 1;
-  return x->t < y->t ? -1 : x->t > y->t;
-}
-
-static int whimsy_crosscmp_s(const void * a, const void * b) {
-  const WhCross * x = a, * y = b;
-  return x->s < y->s ? -1 : x->s > y->s;
-}
-
-// Append an edge between vertices u -> v (in that walking direction for piece walker,
-// other on the far side), keeping a < b
-static void whimsy_edge(CutEdge * e, uint32_t u, uint32_t v, int32_t walker, int32_t other, uint8_t flags) {
-  memset(e, 0, sizeof(CutEdge));
-  e->flags = flags;
-  if(u < v) {
-    e->a = u; e->b = v; e->left = walker; e->right = other;
-  } else {
-    e->a = v; e->b = u; e->left = other; e->right = walker;
-  }
-}
-
-// Walks for every piece from the edges' sides. Returns 0 if every piece is one closed loop.
-static int whimsy_walks(CutGraph * g) {
-  uint32_t count = g->count;
-  uint32_t total = 0;
-  for(uint32_t i = 0; i < g->ne; i++) total += (g->e[i].left >= 0) + (g->e[i].right >= 0);
-  uint32_t * start = calloc(count + 1, sizeof(uint32_t));
-  uint32_t * half = malloc(sizeof(uint32_t) * (total ? total : 1));
-  uint32_t * walk = malloc(sizeof(uint32_t) * (total > count ? total : count + 1));
-  uint8_t * used = calloc(total ? total : 1, 1);
-  int err = !start || !half || !walk || !used;
-  if(!err) {
-    for(uint32_t i = 0; i < g->ne; i++) {
-      if(g->e[i].left >= 0) start[g->e[i].left + 1]++;
-      if(g->e[i].right >= 0) start[g->e[i].right + 1]++;
-    }
-    for(uint32_t p = 0; p < count; p++) start[p + 1] += start[p];
-    uint32_t * fill = walk;   // Scratch cursor per piece (reuses walk as temp)
-    memcpy(fill, start, sizeof(uint32_t) * count);
-    for(uint32_t i = 0; i < g->ne; i++) {
-      if(g->e[i].left >= 0) half[fill[g->e[i].left]++] = i * 2;
-      if(g->e[i].right >= 0) half[fill[g->e[i].right]++] = i * 2 + 1;
-    }
-    uint32_t nw = 0;
-    for(uint32_t p = 0; p < count && !err; p++) {
-      uint32_t s = start[p], n = start[p + 1] - s;
-      if(n < 2) { err = 1; break; }
-      // Chain: each half-edge's end is exactly one other half-edge's start
-      uint32_t cur = 0;
-      for(uint32_t k = 0; k < n && !err; k++) {
-        uint32_t h = half[s + cur];
-        used[s + cur] = 1;
-        walk[nw++] = h;
-        const CutEdge * e = g->e + (h >> 1);
-        uint32_t end = (h & 1) ? e->a : e->b;
-        int32_t next = -1;
-        for(uint32_t j = 0; j < n; j++) {
-          uint32_t hj = half[s + j];
-          const CutEdge * f = g->e + (hj >> 1);
-          uint32_t st = (hj & 1) ? f->b : f->a;
-          if(st != end) continue;
-          if(next >= 0) err = 1;   // Pinched: two ways on
-          next = j;
-        }
-        if(next < 0) err = 1;
-        else if(k + 1 < n) {
-          if(used[s + next]) err = 1;   // Closed early: the piece is in two parts
-          cur = next;
-        } else if(next != 0) err = 1;
-      }
-    }
-    if(!err) {
-      free(g->pstart);
-      free(g->pedge);
-      g->pstart = start;
-      g->pedge = walk;
-      start = walk = NULL;
-    }
-  }
-  free(start);
-  free(half);
-  free(walk);
-  free(used);
-  return err;
-}
+// ---- Checking the pieces around a whimsy ----
 
 void whimsy_measure(const float * xy, uint32_t n, float * thick, float * spike) {
   float x0 = xy[0], y0 = xy[1], x1 = xy[0], y1 = xy[1];
@@ -351,10 +219,10 @@ void whimsy_measure(const float * xy, uint32_t n, float * thick, float * spike) 
       float x = x0 + (gx + 0.5f) * st, y = y0 + (gy + 0.5f) * st;
       float * dp = d + gy * gw + gx;
       *dp = -1;
-      if(!whimsy_inside(xy, n, x, y)) continue;
+      if(!geom_inside(xy, n, x, y)) continue;
       float dmin = 1e30f;
       for(uint32_t i = 0, j = n - 1; i < n; j = i++) {
-        float e = whimsy_pointseg(x, y, xy[2 * j], xy[2 * j + 1], xy[2 * i], xy[2 * i + 1]);
+        float e = geom_pointseg(x, y, xy[2 * j], xy[2 * j + 1], xy[2 * i], xy[2 * i + 1]);
         if(e < dmin) dmin = e;
       }
       *dp = dmin;
@@ -386,41 +254,70 @@ void whimsy_measure(const float * xy, uint32_t n, float * thick, float * spike) 
   free(reach);
 }
 
-// A piece next to a whimsy still needs a tab: a straight inner edge long enough for one
-// (WHIMSY_TABEDGE if it ends at a whimsy, as cutgraph_tabs will judge it)
-static int whimsy_cantab(const CutGraph * g, uint32_t p) {
-  CutTabStyle st = { .mintab = WH_TABEDGE, .whimsytab = WHIMSY_TABEDGE };
-  for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
-    if(cutgraph_tabbable(g, &st, g->e + (g->pedge[k] >> 1), WH_TABEDGE)) return 1;
-  }
-  return 0;
+// ---- Inserting a shape into the graph ----
+
+typedef struct {
+  uint32_t edge;    // Original edge it's on
+  float t;          // Along that edge (0..1)
+  float s;          // Along the shape (segment index + fraction)
+  uint32_t v;       // New vertex
+} WhCross;
+
+// Work for one insertion: the shape, where it crosses the cut, what it covers
+typedef struct {
+  const float * xy;
+  uint32_t n;
+  WhCross * cross;
+  uint32_t ncross, capcross;
+  uint8_t * inside;   // Per vertex: inside the shape
+  uint8_t * dead;     // Per edge: wholly inside the shape
+} WhInsert;
+
+static int whimsy_crosscmp_t(const void * a, const void * b) {
+  const WhCross * x = a, * y = b;
+  if(x->edge != y->edge) return x->edge < y->edge ? -1 : 1;
+  return x->t < y->t ? -1 : x->t > y->t;
 }
 
-int whimsy_insert(CutGraph * g, const float * xy, uint32_t n) {
-  // Shape bounds for quick rejects
+static int whimsy_crosscmp_s(const void * a, const void * b) {
+  const WhCross * x = a, * y = b;
+  return x->s < y->s ? -1 : x->s > y->s;
+}
+
+// Fill in an edge between vertices u -> v (in that walking direction for piece walker,
+// other on the far side), keeping a < b
+static void whimsy_edge(CutEdge * e, uint32_t u, uint32_t v, int32_t walker, int32_t other, uint8_t flags) {
+  memset(e, 0, sizeof(CutEdge));
+  e->flags = flags;
+  if(u < v) {
+    e->a = u; e->b = v; e->left = walker; e->right = other;
+  } else {
+    e->a = v; e->b = u; e->left = other; e->right = walker;
+  }
+}
+
+// Step 1 (changes nothing): every crossing of an edge with the shape, which vertices are
+// inside, which edges are wholly inside. Returns 0 if it can go in, 1 if not, -1 out of memory.
+static int whimsy_crossings(const CutGraph * g, WhInsert * w) {
+  const float * xy = w->xy;
+  uint32_t n = w->n;
   float sx0 = xy[0], sy0 = xy[1], sx1 = xy[0], sy1 = xy[1];
   for(uint32_t i = 1; i < n; i++) {
     sx0 = fminf(sx0, xy[2 * i]); sx1 = fmaxf(sx1, xy[2 * i]);
     sy0 = fminf(sy0, xy[2 * i + 1]); sy1 = fmaxf(sy1, xy[2 * i + 1]);
   }
-  CutGraph old = {0};
-  int copied = 0;
-  WhCross * cross = NULL;
-  uint8_t * inside = malloc(g->nv ? g->nv : 1);
-  uint8_t * dead = calloc(g->ne ? g->ne : 1, 1);
-  uint32_t ncross = 0, capcross = 0;
-  int result = 1;
-  if(!inside || !dead) { result = -1; goto fail; }
-  for(uint32_t v = 0; v < g->nv; v++) inside[v] = whimsy_inside(xy, n, g->v[v].x, g->v[v].y);
-  // Every crossing of an edge with the shape
+  w->inside = malloc(g->nv ? g->nv : 1);
+  w->dead = calloc(g->ne ? g->ne : 1, 1);
+  if(!w->inside || !w->dead) return -1;
+  for(uint32_t v = 0; v < g->nv; v++) w->inside[v] = geom_inside(xy, n, g->v[v].x, g->v[v].y);
   for(uint32_t i = 0; i < g->ne; i++) {
     const CutEdge * e = g->e + i;
     float ax = g->v[e->a].x, ay = g->v[e->a].y, bx = g->v[e->b].x, by = g->v[e->b].y;
     if(fmaxf(ax, bx) < sx0 || fminf(ax, bx) > sx1 || fmaxf(ay, by) < sy0 || fminf(ay, by) > sy1) {
-      if(inside[e->a] || inside[e->b]) goto fail;
+      if(w->inside[e->a] || w->inside[e->b]) return 1;
       continue;
     }
-    uint32_t before = ncross;
+    uint32_t before = w->ncross;
     for(uint32_t j = 0; j < n; j++) {
       const float * p = xy + 2 * j, * q = xy + 2 * ((j + 1) % n);
       float rx = bx - ax, ry = by - ay, qx = q[0] - p[0], qy = q[1] - p[1];
@@ -429,100 +326,103 @@ int whimsy_insert(CutGraph * g, const float * xy, uint32_t n) {
       float t = ((p[0] - ax) * qy - (p[1] - ay) * qx) / den;
       float u = ((p[0] - ax) * ry - (p[1] - ay) * rx) / den;
       if(t < -1e-6f || t > 1 + 1e-6f || u < -1e-6f || u > 1 + 1e-6f) continue;
-      // Crossing right at a corner or a shape point: ambiguous, try another spot
-      if(t < 1e-4f || t > 1 - 1e-4f || u < 1e-4f || u > 1 - 1e-4f) goto fail;
-      if(e->npts || (e->flags & CUTEDGE_WHIMSY) || e->left < 0 || e->right < 0) goto fail;
-      if(ncross == capcross) {
-        capcross = capcross ? capcross * 2 : 32;
-        WhCross * nc = realloc(cross, sizeof(WhCross) * capcross);
-        if(!nc) { result = -1; goto fail; }
-        cross = nc;
+      // Crossing right at a corner or a shape point is ambiguous; so is crossing the border
+      // or another whimsy (placement keeps away from both)
+      if(t < 1e-4f || t > 1 - 1e-4f || u < 1e-4f || u > 1 - 1e-4f) return 1;
+      if(e->npts || (e->flags & CUTEDGE_WHIMSY) || e->left < 0 || e->right < 0) return 1;
+      if(w->ncross == w->capcross) {
+        w->capcross = w->capcross ? w->capcross * 2 : 32;
+        WhCross * nc = realloc(w->cross, sizeof(WhCross) * w->capcross);
+        if(!nc) return -1;
+        w->cross = nc;
       }
-      cross[ncross++] = (WhCross) { i, t, j + u, 0 };
+      w->cross[w->ncross++] = (WhCross) { i, t, j + u, 0 };
     }
-    if(ncross == before) {
-      if(inside[e->a] != inside[e->b]) goto fail;
-      if(inside[e->a]) dead[i] = 1;
-    } else if(((ncross - before) & 1) != (inside[e->a] != inside[e->b])) goto fail;
+    uint32_t ends = w->inside[e->a] != w->inside[e->b];
+    if(w->ncross == before) {
+      if(ends) return 1;
+      if(w->inside[e->a]) w->dead[i] = 1;
+    } else if(((w->ncross - before) & 1) != ends) return 1;
   }
-  if(ncross < 2) goto fail;
-  // Changes start here: keep a copy to undo them
-  if(cutgraph_copy(&old, g)) { result = -1; goto fail; }
-  copied = 1;
-  // New vertices at the crossings
-  uint32_t nv = g->nv + ncross;
-  CutVert * nvv = realloc(g->v, sizeof(CutVert) * nv);
-  if(!nvv) { result = -1; goto fail; }
-  g->v = nvv;
-  qsort(cross, ncross, sizeof(WhCross), whimsy_crosscmp_t);
-  for(uint32_t k = 0; k < ncross; k++) {
-    const CutEdge * e = g->e + cross[k].edge;
-    float t = cross[k].t;
-    cross[k].v = g->nv + k;
+  return w->ncross < 2;
+}
+
+// Step 2: a new vertex at each crossing, and the parts of crossed edges outside the shape
+// (tabs given out later); untouched edges are copied, edges wholly inside dropped. Writes
+// the new edge list to ne (room for ne + 2 * ncross). Returns 0, or 1 if a part left by a
+// crossing would be too short.
+static int whimsy_split(CutGraph * g, WhInsert * w, CutEdge * ne, uint32_t * nn) {
+  qsort(w->cross, w->ncross, sizeof(WhCross), whimsy_crosscmp_t);
+  for(uint32_t k = 0; k < w->ncross; k++) {
+    const CutEdge * e = g->e + w->cross[k].edge;
+    float t = w->cross[k].t;
+    w->cross[k].v = g->nv + k;
     g->v[g->nv + k] = (CutVert) { g->v[e->a].x + t * (g->v[e->b].x - g->v[e->a].x),
         g->v[e->a].y + t * (g->v[e->b].y - g->v[e->a].y) };
   }
-  g->nv = nv;
-  // New edge list: untouched live edges, outside parts of crossed edges, then the arcs
-  int32_t w = g->count;
-  uint32_t maxe = g->ne + 2 * ncross;
-  CutEdge * ne = malloc(sizeof(CutEdge) * maxe);
-  float * npts = malloc(sizeof(float) * 2 * (g->npts + n + ncross));
-  if(!ne || !npts) { free(ne); free(npts); result = -1; goto fail; }
-  memcpy(npts, g->pts, sizeof(float) * 2 * g->npts);
-  uint32_t nn = 0, np = g->npts;
+  g->nv += w->ncross;
+  *nn = 0;
   for(uint32_t i = 0, k = 0; i < g->ne; i++) {
     const CutEdge * e = g->e + i;
-    if(k >= ncross || cross[k].edge != i) {
-      if(!dead[i]) ne[nn++] = *e;
+    if(k >= w->ncross || w->cross[k].edge != i) {
+      if(!w->dead[i]) ne[(*nn)++] = *e;
       continue;
     }
-    // Crossed: walk a -> b, keeping the parts outside the shape (tabs given out later)
-    int in = inside[e->a];
+    // Walk a -> b, keeping the parts outside
+    int in = w->inside[e->a];
     uint32_t from = e->a;
     float tfrom = 0, L = cutgraph_edgelen(g, e);
-    for(; k < ncross && cross[k].edge == i; k++) {
+    for(; k < w->ncross && w->cross[k].edge == i; k++) {
       if(!in) {
-        if((cross[k].t - tfrom) * L < WH_MINPART) { free(ne); free(npts); goto fail; }
-        whimsy_edge(ne + nn++, from, cross[k].v, e->left, e->right, 0);
+        if((w->cross[k].t - tfrom) * L < WH_MINPART) return 1;
+        whimsy_edge(ne + (*nn)++, from, w->cross[k].v, e->left, e->right, 0);
       }
       in = !in;
-      from = cross[k].v;
-      tfrom = cross[k].t;
+      from = w->cross[k].v;
+      tfrom = w->cross[k].t;
     }
     if(!in) {
-      if((1 - tfrom) * L < WH_MINPART) { free(ne); free(npts); goto fail; }
-      whimsy_edge(ne + nn++, from, e->b, e->left, e->right, 0);
+      if((1 - tfrom) * L < WH_MINPART) return 1;
+      whimsy_edge(ne + (*nn)++, from, e->b, e->left, e->right, 0);
     }
   }
-  // Arcs along the shape between consecutive crossings; each borders one piece (the one
-  // outside the shape there). The shape runs clockwise, so the whimsy walks it forward.
-  qsort(cross, ncross, sizeof(WhCross), whimsy_crosscmp_s);
-  for(uint32_t k = 0; k < ncross; k++) {
-    const WhCross * x = cross + k, * y = cross + (k + 1) % ncross;
+  return 0;
+}
+
+// Step 3: the shape's outline between consecutive crossings, as polyline edges between the
+// new piece wid and the piece outside the shape there. The shape runs clockwise, so the
+// whimsy walks it forward. Points go to pts from *np. Returns 0, or 1 if an arc's two ends
+// don't border the same piece.
+static int whimsy_arcs(const CutGraph * g, WhInsert * w, int32_t wid, CutEdge * ne, uint32_t * nn, float * pts, uint32_t * np) {
+  const float * xy = w->xy;
+  uint32_t n = w->n;
+  qsort(w->cross, w->ncross, sizeof(WhCross), whimsy_crosscmp_s);
+  for(uint32_t k = 0; k < w->ncross; k++) {
+    const WhCross * x = w->cross + k, * y = w->cross + (k + 1) % w->ncross;
     const CutEdge * ex = g->e + x->edge, * ey = g->e + y->edge;
+    // The host is on the side of ex the shape heads into; the left piece's inside is
+    // toward (-dy, dx) of a -> b
     uint32_t j = (uint32_t)x->s;
     float dx = xy[2 * ((j + 1) % n)] - xy[2 * j], dy = xy[2 * ((j + 1) % n) + 1] - xy[2 * j + 1];
     float ex_x = g->v[ex->b].x - g->v[ex->a].x, ex_y = g->v[ex->b].y - g->v[ex->a].y;
-    // The left piece's inside is toward (-ey, ex) of a -> b
     int32_t host = dx * -ex_y + dy * ex_x > 0 ? ex->left : ex->right;
-    if(host < 0 || (ey->left != host && ey->right != host)) { free(ne); free(npts); goto fail; }
+    if(host < 0 || (ey->left != host && ey->right != host)) return 1;
     // Shape points strictly between the two crossings
-    uint32_t first = j + 1, last = (uint32_t)y->s;
+    uint32_t last = (uint32_t)y->s;
     uint32_t m = y->s > x->s ? last - j : last + n - j;
-    uint32_t p0 = np;
+    uint32_t p0 = *np;
     for(uint32_t i = 0; i < m; i++) {
-      uint32_t idx = (first + i) % n;
-      npts[2 * np] = xy[2 * idx];
-      npts[2 * np + 1] = xy[2 * idx + 1];
-      np++;
+      uint32_t idx = (j + 1 + i) % n;
+      pts[2 * *np] = xy[2 * idx];
+      pts[2 * *np + 1] = xy[2 * idx + 1];
+      (*np)++;
     }
-    CutEdge * e = ne + nn++;
-    whimsy_edge(e, x->v, y->v, w, host, CUTEDGE_WHIMSY);
+    CutEdge * e = ne + (*nn)++;
+    whimsy_edge(e, x->v, y->v, wid, host, CUTEDGE_WHIMSY);
     if(e->a != x->v) {
       // Stored b -> a: reverse the points
       for(uint32_t i = 0; i < m / 2; i++) {
-        float * p = npts + 2 * (p0 + i), * q = npts + 2 * (p0 + m - 1 - i);
+        float * p = pts + 2 * (p0 + i), * q = pts + 2 * (p0 + m - 1 - i);
         float t0 = p[0], t1 = p[1];
         p[0] = q[0]; p[1] = q[1];
         q[0] = t0; q[1] = t1;
@@ -531,40 +431,47 @@ int whimsy_insert(CutGraph * g, const float * xy, uint32_t n) {
     e->p0 = p0;
     e->npts = m;
   }
-  free(g->e);
-  free(g->pts);
-  g->e = ne;
-  g->ne = nn;
-  g->pts = npts;
-  g->npts = np;
-  g->count++;
-  if(whimsy_walks(g)) goto fail;
-  // The pieces around it must stay solid: no slivers or thin necks
-  {
-    uint32_t maxp = cutgraph_maxpoints(g);
-    float * body = malloc(sizeof(float) * 2 * maxp);
-    if(!body) { result = -1; goto fail; }
-    int bad = 0;
-    for(uint32_t i = 0; i < g->ne && !bad; i++) {
-      const CutEdge * e = g->e + i;
-      if(!(e->flags & CUTEDGE_WHIMSY) || (e->left != w && e->right != w)) continue;
-      int32_t sides[2] = { e->left, e->right };
-      for(int s = 0; s < 2 && !bad; s++) {
-        uint32_t bn = cutgraph_body(g, sides[s], 1, 0, 0, body);
-        if(sides[s] != w && whimsy_area(body, bn) < WH_HOSTAREA) bad = 1;
-        if(!edgegen_shape_ok(body, bn, WH_CLEARANCE)) bad = 1;
-        if(sides[s] != w && !whimsy_cantab(g, sides[s])) bad = 1;
-        if(!bad && sides[s] != w) {
-          float thick, spike;
-          whimsy_measure(body, bn, &thick, &spike);
-          if(thick < WH_MINTHICK || spike > WHIMSY_MAXSPIKE) bad = 1;
-        }
+  return 0;
+}
+
+// Step 5: the pieces around new whimsy wid must stay solid: enough area, no thin necks or
+// spikes, thick enough, and still able to get a tab. Returns 0 if fine, 1 if not, -1 out
+// of memory.
+static int whimsy_check(const CutGraph * g, int32_t wid) {
+  float * body = malloc(sizeof(float) * 2 * cutgraph_maxpoints(g));
+  uint8_t * wv = cutgraph_whimsyverts(g);
+  CutTabStyle st = { .mintab = WH_HOSTTAB, .whimsytab = WHIMSY_TABEDGE };
+  int bad = 0;
+  if(!body || !wv) bad = -1;
+  for(uint32_t i = 0; i < g->ne && !bad; i++) {
+    const CutEdge * e = g->e + i;
+    if(!(e->flags & CUTEDGE_WHIMSY) || (e->left != wid && e->right != wid)) continue;
+    int32_t sides[2] = { e->left, e->right };
+    for(int s = 0; s < 2 && !bad; s++) {
+      int32_t p = sides[s];
+      uint32_t bn = cutgraph_body(g, p, 1, 0, 0, body);
+      if(!edgegen_shape_ok(body, bn, WH_CLEARANCE)) bad = 1;
+      if(p == wid || bad) continue;
+      if(geom_area(body, bn, NULL, NULL) < WH_HOSTAREA) bad = 1;
+      int cantab = 0;
+      for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1] && !cantab; k++) {
+        cantab = cutgraph_tabbable(g, &st, g->e + (g->pedge[k] >> 1), WH_HOSTTAB, wv);
+      }
+      if(!cantab) bad = 1;
+      if(!bad) {
+        float thick, spike;
+        whimsy_measure(body, bn, &thick, &spike);
+        if(thick < WH_MINTHICK || spike > WHIMSY_MAXSPIKE) bad = 1;
       }
     }
-    free(body);
-    if(bad) goto fail;
   }
-  // Grid tabs near the whimsy could poke into it: those edges get fresh tabs later
+  free(body);
+  free(wv);
+  return bad;
+}
+
+// Step 6: grid tabs near the whimsy could poke into it; those edges get fresh tabs later
+static void whimsy_retab(CutGraph * g, const float * xy, uint32_t n) {
   for(uint32_t i = 0; i < g->ne; i++) {
     CutEdge * e = g->e + i;
     if(!(e->flags & CUTEDGE_GRID)) continue;
@@ -573,18 +480,55 @@ int whimsy_insert(CutGraph * g, const float * xy, uint32_t n) {
       e->ntabs = 0;
     }
   }
-  free(cross);
-  free(inside);
-  free(dead);
-  cutgraph_free(&old);
-  return 0;
-fail:
-  free(cross);
-  free(inside);
-  free(dead);
+}
+
+int whimsy_insert(CutGraph * g, const float * xy, uint32_t n) {
+  WhInsert w = { .xy = xy, .n = n };
+  CutGraph old = {0};
+  CutEdge * ne = NULL;
+  float * pts = NULL;
+  int copied = 0;
+  int result = whimsy_crossings(g, &w);
+  if(result) goto done;
+  // From here the graph changes: keep a copy to undo
+  result = -1;
+  if(cutgraph_copy(&old, g)) goto done;
+  copied = 1;
+  CutVert * nv = realloc(g->v, sizeof(CutVert) * (g->nv + w.ncross));
+  ne = malloc(sizeof(CutEdge) * (g->ne + 2 * w.ncross));
+  pts = malloc(sizeof(float) * 2 * (g->npts + n));
+  if(nv) g->v = nv;
+  if(!nv || !ne || !pts) goto done;
+  memcpy(pts, g->pts, sizeof(float) * 2 * g->npts);
+  uint32_t nn, np = g->npts;
+  int32_t wid = g->count;
+  result = whimsy_split(g, &w, ne, &nn);
+  if(!result) result = whimsy_arcs(g, &w, wid, ne, &nn, pts, &np);
+  if(result) goto done;
+  free(g->e);
+  free(g->pts);
+  g->e = ne;
+  g->ne = nn;
+  g->pts = pts;
+  g->npts = np;
+  g->count++;
+  ne = NULL;
+  pts = NULL;
+  result = cutgraph_rewalk(g) ? 1 : whimsy_check(g, wid);
+  if(!result) whimsy_retab(g, xy, n);
+done:
+  free(w.cross);
+  free(w.inside);
+  free(w.dead);
+  free(ne);
+  free(pts);
   if(copied) {
-    cutgraph_free(g);
-    *g = old;
+    if(result) {
+      cutgraph_free(g);
+      *g = old;
+    } else {
+      cutgraph_free(&old);
+    }
   }
   return result;
 }

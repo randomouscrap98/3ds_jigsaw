@@ -26,6 +26,7 @@ void savefile_write(const SaveHeader * h, Board * b, uint8_t * buf) {
   buf[23] = h->music;
   buf[24] = h->whimsy;
   buf[25] = h->whimsyset;
+  for(int i = 0; i < 4; i++) buf[26 + i] = (h->cuthash >> (8 * i)) & 0xFF;
   boardsave_write(b, buf + SAVEFILE_HEADER);
 }
 
@@ -46,6 +47,9 @@ int savefile_readheader(const uint8_t * buf, size_t len, SaveHeader * h) {
   if(h->size > 25) {
     h->whimsy = buf[24];
     h->whimsyset = buf[25];
+  }
+  if(h->size > 29) {
+    for(int i = 0; i < 4; i++) h->cuthash |= (uint32_t)buf[26 + i] << (8 * i);
   }
   return SAVEFILE_OK;
 }

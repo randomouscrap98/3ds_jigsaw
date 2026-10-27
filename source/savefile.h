@@ -24,7 +24,8 @@
 //   23 u8 music mode (SAVEFILE_MUSIC_*; 1.1, was reserved = 0 = in order)
 //   24 u8 whimsy level (WHIMSY_*; 1.2, 0 = none)
 //   25 u8 whimsy shape set (WHIMSY_SET_*; 1.2, 0 = cute)
-//   26.. reserved, zero
+//   26 u32 cut hash (cutter_hash of the cut the board was saved with; 1.2, 0 = unknown)
+//   30.. reserved, zero
 typedef struct {
   uint16_t version;
   uint16_t size;
@@ -36,6 +37,7 @@ typedef struct {
   uint8_t music;      // SAVEFILE_MUSIC_*
   uint8_t whimsy;     // WHIMSY_* level
   uint8_t whimsyset;  // WHIMSY_SET_*
+  uint32_t cuthash;   // The cut's fingerprint (0 = unknown, from before 1.2)
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board
