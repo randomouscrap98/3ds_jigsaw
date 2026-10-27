@@ -22,6 +22,7 @@ haven't). Without it the game just runs silently.
 | D-Pad Up/Down, or X/B | Zoom in/out |
 | C-Stick (New 3DS) | Smooth zoom |
 | Hold Y | Show your time and progress |
+| SELECT | Change felt (saved with puzzle) |
 | START | Save and go back to the menu |
 
 Pieces snap together when you drop them close to a matching neighbour with the same

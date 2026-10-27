@@ -19,7 +19,7 @@
 #define RENDER_GLOW_OFFSET  0.15f   // Shadow offset down-right, in cells (scales with zoom)
 #define RENDER_GLOW_TEX     64
 #define RENDER_COLOR_SELECT C2D_Color32(240, 200, 90, 255)  // Selected pieces tint (menu yellow)
-#define RENDER_SELECT_BLEND 0.55f   // How much of the select color goes into a selected piece
+#define RENDER_SELECT_BLEND 0.85f   // How much of the select color goes into a selected piece
 #define RENDER_COLOR_BOX    C2D_Color32(240, 200, 90, 60)   // Selection box fill
 #define RENDER_COLOR_BOXEDGE C2D_Color32(240, 200, 90, 230) // Selection box border
 

@@ -63,7 +63,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     return 1;
   }
   g->sel = calloc(g->board.count, 1);
-  if(!g->sel) {
+  g->boxsel = calloc(g->board.count, 1);
+  if(!g->sel || !g->boxsel) {
     GAME_ERR("Out of memory (selection)");
     game_free(g);
     free(save);
@@ -96,7 +97,9 @@ void game_free(Game * g) {
   board_free(&g->board);
   puzzlegfx_free(&g->gfx);
   free(g->sel);
+  free(g->boxsel);
   g->sel = NULL;
+  g->boxsel = NULL;
   g->nsel = 0;
   g->held = -1;
 }
@@ -312,11 +315,16 @@ int game_update(Game * g, const GameInput * in) {
 }
 
 void game_render_bottom(Game * g, Render * r) {
-  render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->sel, g->table);
   if(g->boxing && g->boxmove >= GAME_TAPDIST) {
+    // Show what the box would add while it's being drawn
     float wx, wy;
     camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
+    memcpy(g->boxsel, g->sel, g->board.count);
+    board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->boxsel);
+    render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->boxsel, g->table);
     render_box(&g->cam, g->boxwx, g->boxwy, wx, wy);
+  } else {
+    render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->sel, g->table);
   }
 }
 

@@ -66,6 +66,7 @@ typedef struct {
   u8 movingsel;           // held is part of the selection: the whole selection follows
   uint8_t * sel;          // Selected groups: one byte per group slot (board.count)
   uint32_t nsel;          // Number of selected groups
+  uint8_t * boxsel;       // Scratch: sel plus whatever the box being drawn covers (for display)
   float boxwx, boxwy;     // World point where the box started
   float boxsx, boxsy;     // Screen point where the box started
   float boxmove;          // Farthest the stylus got from the box start (pixels)
