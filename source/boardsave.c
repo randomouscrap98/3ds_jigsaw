@@ -4,8 +4,18 @@
 #include <string.h>
 #include <math.h>
 
-#define BOARDSAVE_HEADER 18
+#define BOARDSAVE_HEADER 18      // Version 1
+#define BOARDSAVE_HEADER2 22     // Version 2 (+ count)
 #define BOARDSAVE_GROUP 9
+
+// Version 1 unless the board has pieces beyond the grid
+static int boardsave_v2(Board * b) {
+  return b->count != (uint32_t)b->geo->cols * b->geo->rows;
+}
+
+static size_t boardsave_header(uint16_t version) {
+  return version >= 2 ? BOARDSAVE_HEADER2 : BOARDSAVE_HEADER;
+}
 
 static void put16(uint8_t ** p, uint16_t v) {
   (*p)[0] = v & 0xFF; (*p)[1] = v >> 8;
@@ -39,18 +49,21 @@ static float getf(const uint8_t ** p) {
 }
 
 size_t boardsave_size(Board * b) {
-  return BOARDSAVE_HEADER + BOARDSAVE_GROUP * b->ngroups + 2 * b->count;
+  return boardsave_header(boardsave_v2(b) ? 2 : 1) + BOARDSAVE_GROUP * b->ngroups + 2 * b->count;
 }
 
 size_t boardsave_write(Board * b, uint8_t * buf) {
   uint8_t * p = buf;
   memcpy(p, "JIGS", 4);
   p += 4;
-  put16(&p, BOARDSAVE_VERSION);
+  int v2 = boardsave_v2(b);
+  put16(&p, v2 ? 2 : 1);
   put16(&p, b->geo->cols);
   put16(&p, b->geo->rows);
   putf(&p, b->geo->cell);
   put32(&p, b->ngroups);
+  if(v2) put32(&p, b->count);
+  size_t head = boardsave_header(v2 ? 2 : 1);
   for(uint32_t i = 0; i < b->ngroups; i++) {
     BoardGroup * g = b->groups + b->order[i];
     putf(&p, g->x);
@@ -60,7 +73,7 @@ size_t boardsave_write(Board * b, uint8_t * buf) {
   // Map group id -> index in order. Reuse the piece "next" walk to avoid an allocation.
   for(uint32_t i = 0; i < b->ngroups; i++) {
     for(uint16_t pc = b->groups[b->order[i]].first; pc != BOARD_NONE; pc = b->pieces[pc].next) {
-      uint8_t * q = buf + BOARDSAVE_HEADER + BOARDSAVE_GROUP * b->ngroups + 2 * pc;
+      uint8_t * q = buf + head + BOARDSAVE_GROUP * b->ngroups + 2 * pc;
       put16(&q, i);
     }
   }
@@ -75,7 +88,13 @@ int boardsave_peek(const uint8_t * buf, size_t len, BoardSaveInfo * info) {
   info->rows = get16(&p);
   info->cell = getf(&p);
   info->ngroups = get32(&p);
-  if(info->version != BOARDSAVE_VERSION) return 2;
+  if(info->version < 1 || info->version > BOARDSAVE_VERSION) return 2;
+  if(info->version >= 2) {
+    if(len < BOARDSAVE_HEADER2) return 1;
+    info->count = get32(&p);
+  } else {
+    info->count = (uint32_t)info->cols * info->rows;
+  }
   return 0;
 }
 
@@ -83,13 +102,14 @@ int boardsave_read(Board * b, const uint8_t * buf, size_t len) {
   BoardSaveInfo info;
   int err = boardsave_peek(buf, len, &info);
   if(err) return err;
-  if(info.cols != b->geo->cols || info.rows != b->geo->rows) return 3;
+  if(info.cols != b->geo->cols || info.rows != b->geo->rows || info.count != b->count) return 3;
   if(info.ngroups == 0 || info.ngroups > b->count) return 4;
-  if(len < BOARDSAVE_HEADER + BOARDSAVE_GROUP * info.ngroups + 2 * b->count) return 5;
+  size_t head = boardsave_header(info.version);
+  if(len < head + BOARDSAVE_GROUP * info.ngroups + 2 * b->count) return 5;
   if(!(info.cell > 0) || !isfinite(info.cell)) return 6;
   float scale = b->geo->cell / info.cell;
   // Validate everything before touching the board
-  const uint8_t * gp = buf + BOARDSAVE_HEADER;
+  const uint8_t * gp = buf + head;
   const uint8_t * pp = gp + BOARDSAVE_GROUP * info.ngroups;
   uint32_t * counts = calloc(info.ngroups, sizeof(uint32_t));
   if(!counts) return 7;

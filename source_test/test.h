@@ -23,6 +23,7 @@ void test_piecegeo(void);
 void test_randcut(void);
 void test_cutgraph_grid(void);
 void test_whimsy(void);
+void test_boardsave_whimsy(void);
 void test_drawlist(void);
 void test_musicdec(void);
 void test_musicdec_files(const char * dir);

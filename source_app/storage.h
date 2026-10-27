@@ -14,10 +14,12 @@
 // Make sure all the folders exist
 void storage_init(void);
 void storage_puzzlepath(const char * name, char * out);
-void storage_cachepath(const char * name, uint32_t target, uint8_t style, char * out);
+// Cache file for a picture cut a given way: "<name>_<target>[_s<style>][_w<whimsy>[_g<set>]].bin"
+// (each part only when nonzero, so 1.0-1.1 names are unchanged)
+void storage_cachepath(const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t set, char * out);
 void storage_savepath(const char * name, char * out);
-// 1 if file (a name in the cache folder) is one of image name's caches, any count/style:
-// "<name>_<digits>.bin" or "<name>_<digits>_s<digits>.bin"
+// 1 if file (a name in the cache folder) is one of image name's caches, any count/style/
+// whimsies: "<name>_<digits>[_s<digits>][_w<digits>[_g<digits>]].bin"
 int storage_iscache(const char * name, const char * file);
 // Delete every cache of image name except the file at keep (a full cache path)
 void storage_cleancaches(const char * name, const char * keep);

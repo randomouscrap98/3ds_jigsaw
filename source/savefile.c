@@ -24,6 +24,8 @@ void savefile_write(const SaveHeader * h, Board * b, uint8_t * buf) {
   buf[18] = h->table;
   for(int i = 0; i < 4; i++) buf[19 + i] = (h->seconds >> (8 * i)) & 0xFF;
   buf[23] = h->music;
+  buf[24] = h->whimsy;
+  buf[25] = h->whimsyset;
   boardsave_write(b, buf + SAVEFILE_HEADER);
 }
 
@@ -41,6 +43,10 @@ int savefile_readheader(const uint8_t * buf, size_t len, SaveHeader * h) {
   for(int i = 0; i < 4; i++) h->seconds |= (uint32_t)buf[19 + i] << (8 * i);
   if(h->size > 23) h->music = buf[23];
   if(h->music > SAVEFILE_MUSIC_SHUFFLE) h->music = SAVEFILE_MUSIC_ORDER;
+  if(h->size > 25) {
+    h->whimsy = buf[24];
+    h->whimsyset = buf[25];
+  }
   return SAVEFILE_OK;
 }
 
@@ -49,7 +55,7 @@ int savefile_peek(const uint8_t * buf, size_t len, SaveInfo * info) {
   if(r) return r;
   BoardSaveInfo bi;
   if(boardsave_peek(buf + info->header.size, len - info->header.size, &bi)) return SAVEFILE_BAD;
-  info->pieces = (uint32_t)bi.cols * bi.rows;
+  info->pieces = bi.count;
   info->groups = bi.ngroups;
   return SAVEFILE_OK;
 }

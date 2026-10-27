@@ -22,7 +22,9 @@
 //   15 u8 cut style              16 u16 target piece count
 //   18 u8 table color            19 u32 play time, seconds
 //   23 u8 music mode (SAVEFILE_MUSIC_*; 1.1, was reserved = 0 = in order)
-//   24.. reserved, zero
+//   24 u8 whimsy level (WHIMSY_*; 1.2, 0 = none)
+//   25 u8 whimsy shape set (WHIMSY_SET_*; 1.2, 0 = cute)
+//   26.. reserved, zero
 typedef struct {
   uint16_t version;
   uint16_t size;
@@ -32,12 +34,14 @@ typedef struct {
   uint8_t table;
   uint32_t seconds;   // Play time
   uint8_t music;      // SAVEFILE_MUSIC_*
+  uint8_t whimsy;     // WHIMSY_* level
+  uint8_t whimsyset;  // WHIMSY_SET_*
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board
 typedef struct {
   SaveHeader header;
-  uint32_t pieces;    // cols * rows
+  uint32_t pieces;    // Pieces (including whimsies)
   uint32_t groups;    // Groups left; 1 = complete
 } SaveInfo;
 

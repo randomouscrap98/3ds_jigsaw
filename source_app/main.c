@@ -91,7 +91,7 @@ static void app_start_game(App * app, PuzzleChoice choice) {
   char err[256] = "";
   app_progress(app, "Loading", 0, 1);
   puzzlemenu_waitidle(&app->menu);
-  if(game_init(&app->game, choice.name, choice.target, choice.style, choice.music, &app->writer,
+  if(game_init(&app->game, choice.name, choice.target, choice.style, choice.whimsy, choice.whimsyset, choice.music, &app->writer,
       app_progress, app, err, sizeof(err))) {
     puzzlemenu_setstatus(&app->menu, err[0] ? err : "Couldn't start the puzzle");
     return;

@@ -32,6 +32,7 @@ int main(int argc, char ** argv) {
   RUN(test_randcut);
   RUN(test_cutgraph_grid);
   RUN(test_whimsy);
+  RUN(test_boardsave_whimsy);
   RUN(test_drawlist);
   RUN(test_musicdec);
   RUN(test_boardsave);

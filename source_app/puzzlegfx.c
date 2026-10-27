@@ -21,6 +21,7 @@ typedef struct {
   u32 target;
   u32 seed;
   u32 style;
+  u32 whimsy, whimsyset;
   Layout layout;
   u16 previeww, previewh;
   u32 count;              // Pieces: a LayoutTile table of this many follows the header
@@ -91,7 +92,7 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   if(fread(&h, sizeof(h), 1, f) != 1) goto done;
   if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.srcsize != want->srcsize ||
      h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed ||
-     h.style != want->style) goto done;
+     h.style != want->style || h.whimsy != want->whimsy || h.whimsyset != want->whimsyset) goto done;
   if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO ||
      h.count == 0 || h.count > 0xFFF0) goto done;
   pg->layout = h.layout;
@@ -173,7 +174,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   // Cut first (in cells), then pick the piece size whose tiles fit the pages
   if(cb) cb(udata, "Cutting pieces", 0, 1);
-  if(cutter_init(&cut, h->style, WHIMSY_NONE, WHIMSY_SET_CUTE, l->cols, l->rows, h->seed)) {
+  if(cutter_init(&cut, h->style, h->whimsy, h->whimsyset, l->cols, l->rows, h->seed)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }
@@ -258,7 +259,8 @@ done:
 }
 
 int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, uint8_t style, progress_fn cb, void * udata, char * err, size_t errlen) {
+    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset,
+    progress_fn cb, void * udata, char * err, size_t errlen) {
   puzzlegfx_zero(pg);
   memset(geo, 0, sizeof(PieceGeo));
   err[0] = 0;
@@ -269,6 +271,8 @@ int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const
   h.target = target;
   h.seed = seed;
   h.style = style;
+  h.whimsy = whimsy;
+  h.whimsyset = whimsyset;
   puzzlegfx_srcinfo(imagepath, &h.srcsize, &h.srcmtime);
   if(h.srcsize == 0) {
     PGFX_ERR("Can't find image %s", imagepath);

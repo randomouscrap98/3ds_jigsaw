@@ -1,6 +1,7 @@
 #include "game.h"
 #include "savefile.h"
 #include "rng.h"
+#include "whimsy.h"
 #include "render.h"
 
 #include <stdio.h>
@@ -14,7 +15,7 @@ static uint32_t game_cutseed(const char * name, uint32_t target, uint8_t style) 
   return rng_hashstr(name) ^ (target * 2654435761u) ^ (style * 0x9E3779B9u);
 }
 
-int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t music,
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t music,
     SaveWriter * writer,
     progress_fn cb, void * udata,
     char * err, size_t errlen) {
@@ -41,16 +42,23 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     }
     target = hdr.target;
     style = hdr.style;
+    whimsy = hdr.whimsy;
+    whimsyset = hdr.whimsyset;
     g->table = hdr.table;
     g->music = hdr.music;
     g->playms = (u64)hdr.seconds * 1000;
   }
+  // Unknown values (a newer save, or junk) mean none/cute, as the cutter treats them
+  if(whimsy >= WHIMSY_LEVELS) whimsy = WHIMSY_NONE;
+  if(whimsyset >= WHIMSY_SETS) whimsyset = WHIMSY_SET_CUTE;
   g->target = target;
   g->style = style;
+  g->whimsy = whimsy;
+  g->whimsyset = whimsyset;
   char ipath[STORAGE_MAXPATH], cpath[STORAGE_MAXPATH];
   storage_puzzlepath(name, ipath);
-  storage_cachepath(name, target, style, cpath);
-  if(puzzlegfx_load(&g->gfx, &g->geo, ipath, cpath, target, game_cutseed(name, target, style), style,
+  storage_cachepath(name, target, style, whimsy, whimsyset, cpath);
+  if(puzzlegfx_load(&g->gfx, &g->geo, ipath, cpath, target, game_cutseed(name, target, style), style, whimsy, whimsyset,
       cb, udata, err, errlen)) {
     free(save);
     return 1;
@@ -121,6 +129,8 @@ int game_save(Game * g, int background) {
   sh.appver[1] = APP_VERSION_MINOR;
   sh.appver[2] = APP_VERSION_MICRO;
   sh.style = g->style;
+  sh.whimsy = g->whimsy;
+  sh.whimsyset = g->whimsyset;
   sh.target = g->target;
   sh.table = g->table;
   sh.music = g->music;

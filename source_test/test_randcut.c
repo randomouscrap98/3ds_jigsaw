@@ -176,3 +176,67 @@ void test_whimsy(void) {
     }
   }
 }
+
+#include "boardsave.h"
+#include "savefile.h"
+
+// Saves with whimsies: boardsave v2 carries the piece count; boards without stay v1
+void test_boardsave_whimsy(void) {
+  Cutter c;
+  CHECK(cutter_init(&c, CUT_STYLE_CLASSIC, WHIMSY_MANY, WHIMSY_SET_CUTE, 12, 9, 77) == 0);
+  CHECK(c.count > 12 * 9);
+  PieceGeo g;
+  CHECK(cutter_geo(&c, 20, &g) == 0);
+  g.cols = 12;
+  g.rows = 9;
+  Board b, d;
+  CHECK(board_init(&b, &g, 800, 600) == 0);
+  board_scatter(&b, 5, 0, 0, 800, 600);
+  SaveHeader h;
+  savefile_init(&h);
+  h.style = CUT_STYLE_CLASSIC;
+  h.target = 108;
+  h.whimsy = WHIMSY_MANY;
+  h.whimsyset = WHIMSY_SET_CUTE;
+  size_t len = savefile_size(&b);
+  uint8_t * buf = malloc(len);
+  savefile_write(&h, &b, buf);
+  SaveInfo info;
+  CHECK(savefile_peek(buf, len, &info) == SAVEFILE_OK && info.pieces == c.count);
+  CHECK(info.header.whimsy == WHIMSY_MANY && info.header.whimsyset == WHIMSY_SET_CUTE);
+  BoardSaveInfo bi;
+  CHECK(boardsave_peek(buf + SAVEFILE_HEADER, len - SAVEFILE_HEADER, &bi) == 0 && bi.version == 2 && bi.count == c.count);
+  CHECK(board_init(&d, &g, 800, 600) == 0);
+  SaveHeader rh;
+  CHECK(savefile_readheader(buf, len, &rh) == SAVEFILE_OK);
+  CHECK(savefile_readboard(buf, len, &rh, &d) == SAVEFILE_OK);
+  int same = d.ngroups == b.ngroups;
+  for(uint32_t p = 0; p < b.count && same; p++) {
+    float x0, y0, x1, y1;
+    board_piece_center(&b, p, &x0, &y0);
+    board_piece_center(&d, p, &x1, &y1);
+    same = fabsf(x0 - x1) < 1e-3f && fabsf(y0 - y1) < 1e-3f && board_piece_rot(&b, p) == board_piece_rot(&d, p);
+  }
+  CHECK(same);
+  board_free(&d);
+  // A board with a different piece count (e.g. the same picture without whimsies) is refused
+  PieceGeo plain;
+  CHECK(piecegeo_grid(&plain, 12, 9, 20, NULL) == 0);
+  CHECK(board_init(&d, &plain, 800, 600) == 0);
+  CHECK(savefile_readboard(buf, len, &rh, &d) == SAVEFILE_BAD);
+  // ...and a plain board writes version 1 (readable by 1.0-1.1)
+  size_t plen = boardsave_size(&d);
+  uint8_t * pbuf = malloc(plen);
+  CHECK(boardsave_write(&d, pbuf) == plen);
+  CHECK(boardsave_peek(pbuf, plen, &bi) == 0 && bi.version == 1 && bi.count == 12 * 9 && plen == 18 + 9 * d.ngroups + 2 * 108);
+  // A 1.1 header (24 bytes) reads as no whimsies
+  buf[10] = 24;
+  CHECK(savefile_readheader(buf, len, &rh) == SAVEFILE_OK && rh.whimsy == 0 && rh.whimsyset == 0);
+  free(pbuf);
+  free(buf);
+  board_free(&d);
+  board_free(&b);
+  piecegeo_free(&plain);
+  piecegeo_free(&g);
+  cutter_free(&c);
+}

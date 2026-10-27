@@ -15,7 +15,7 @@
 #define PMENU_NUMCOUNTS 4
 #define PMENU_PIECES_NAMES "50\n100\n250\n500"  // Same as pmenu_counts in puzzlemenu.c
 #define PMENU_PIECES_DEFAULT 1                  // 100
-#define PMENU_MAXOPTS 5      // Continue, Pieces, Piece style, Music, Start new puzzle
+#define PMENU_MAXOPTS 6      // Continue, Pieces, Piece style, Whimsies, Music, Start new puzzle
 #define PMENU_ACT_CONTINUE 0
 #define PMENU_ACT_NEW 0xFFFFFFFE
 #define PMENU_ACT_NONE 0xFFFFFFFF
@@ -37,6 +37,8 @@ typedef struct {
   const char * name;    // NULL = nothing picked yet
   uint32_t target;      // Piece count for a new game, 0 = continue
   uint8_t style;        // Cut style for a new game (CUT_STYLE_*)
+  uint8_t whimsy;       // Whimsies for a new game (WHIMSY_*)
+  uint8_t whimsyset;    // Whimsy shapes for a new game (WHIMSY_SET_*)
   uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
   u8 quit;
 } PuzzleChoice;
@@ -52,6 +54,7 @@ typedef struct {
   uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
   tui_menu_number_t pieces;              // Piece count picked in options: index into the counts
   tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
+  tui_menu_number_t whimsy;              // Whimsies picked in options (kept between puzzles)
   tui_menu_number_t music;               // Music picked in options: PMENU_MUSIC_* order
   char status[128];                      // Shown under the menu (errors etc.)
   Thumb thumb;                           // Picture of the puzzle being set up (bottom screen)

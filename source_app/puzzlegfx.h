@@ -14,8 +14,9 @@
 #define PGFX_PREVIEW_TEXH 256
 #define PGFX_PREVIEW_MAXW 400
 #define PGFX_PREVIEW_MAXH 240
-#define PGFX_CACHE_VERSION 5     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
-                                 // 5: packed tiles (table in the cache), Random style
+#define PGFX_CACHE_VERSION 6     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
+                                 // 5: packed tiles (table in the cache), Random style.
+                                 // 6: whimsies (+ level and set in the header)
 #define PGFX_MAXGEO (4 << 20)    // Sanity limit on the cached PieceGeo size
 
 
@@ -35,11 +36,12 @@ typedef struct {
 } PuzzleGfx;
 
 // Load (from cache if valid, otherwise build + write cache). seed picks the cut, style is
-// CUT_STYLE_*. The cut's piece geometry goes to geo (cached with the textures; the
+// CUT_STYLE_*, whimsy/set WHIMSY_* / WHIMSY_SET_*. The cut's piece geometry goes to geo (cached with the textures; the
 // caller frees it). On failure, a human readable reason is written to err and geo is left
 // empty. Returns 0 on success.
 int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, uint8_t style, progress_fn cb, void * udata, char * err, size_t errlen);
+    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset,
+    progress_fn cb, void * udata, char * err, size_t errlen);
 void puzzlegfx_free(PuzzleGfx * pg);
 C2D_Image puzzlegfx_piece(PuzzleGfx * pg, uint32_t piece);
 C2D_Image puzzlegfx_preview(PuzzleGfx * pg);
