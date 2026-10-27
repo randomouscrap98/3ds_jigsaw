@@ -217,7 +217,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   tile = malloc(sizeof(uint32_t) * l->maxw * l->maxh);
   if(!tile) { PGFX_ERR("Out of memory (tile)"); goto done; }
   for(uint32_t i = 0; i < cut.count; i++) {
-    if(cb && (i % 8) == 0) cb(udata, "Cutting pieces", i, cut.count);
+    if(cb && (i % 8) == 0) cb(udata, "Drawing pieces", i, cut.count);
     const LayoutTile * t = pg->tiles + i;
     uint32_t n = cutter_outline(&cut, i, l->cell, -t->ox, -t->oy, outline);
     piecebake_tile(&pb, outline, n, img, l->width, l->height, t->ox, t->oy, t->w, t->h, tile);
