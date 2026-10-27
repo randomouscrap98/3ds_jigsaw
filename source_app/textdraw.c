@@ -1,5 +1,6 @@
 #include "textdraw.h"
 
+#include <math.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -41,6 +42,35 @@ void textdraw_center(TextDraw * td, float x, float y, float scale, u32 color, co
   va_start(args, fmt);
   textdraw_draw(td, x, y, scale, color, 1, fmt, args);
   va_end(args);
+}
+
+void textdraw_marquee(TextDraw * td, float x, float y, float w, float scale, u32 color,
+    float scroll, const char * str) {
+  C2D_Text text;
+  if(!C2D_TextParse(&text, td->buf, str)) return;
+  C2D_TextOptimize(&text);
+  float tw, th;
+  C2D_TextGetDimensions(&text, scale, scale, &tw, &th);
+  if(tw <= w) {
+    C2D_DrawText(&text, C2D_WithColor | C2D_AlignCenter, x + w / 2, y, 0.9f, scale, scale, color);
+    return;
+  }
+  float period = tw + TEXTDRAW_MARQUEE_GAP;
+  float off = fmodf(scroll, period);
+  // The scissor box is in framebuffer coordinates; the top screen's framebuffer is
+  // rotated (240 wide, 400 tall), so screen x runs down it from the far end
+  float x0 = x, y0 = y, x1 = x + w, y1 = y + th;
+  if(x0 < 0) x0 = 0;
+  if(y0 < 0) y0 = 0;
+  if(x1 > TEXTDRAW_TOPW) x1 = TEXTDRAW_TOPW;
+  if(y1 > TEXTDRAW_TOPH) y1 = TEXTDRAW_TOPH;
+  C2D_Flush();  // Whatever is already batched mustn't be clipped
+  C3D_SetScissor(GPU_SCISSOR_NORMAL, (u32)(TEXTDRAW_TOPH - y1), (u32)(TEXTDRAW_TOPW - x1),
+      (u32)(TEXTDRAW_TOPH - y0), (u32)(TEXTDRAW_TOPW - x0));
+  C2D_DrawText(&text, C2D_WithColor, x - off, y, 0.9f, scale, scale, color);
+  C2D_DrawText(&text, C2D_WithColor, x - off + period, y, 0.9f, scale, scale, color);
+  C2D_Flush();
+  C3D_SetScissor(GPU_SCISSOR_DISABLE, 0, 0, 0, 0);
 }
 
 void textdraw_fmttime(char * out, size_t len, uint32_t seconds) {

@@ -33,6 +33,7 @@
 #define GAME_AUTOSAVE_MS 30000
 #define GAME_MAXFRAME_MS 100      // Longer frames (HOME menu, sleep) only count this much play time
 #define GAME_OVERLAY_FADE_MS 200  // Info overlay (hold Y) fade in / out time
+#define GAME_MARQUEE_SPEED 30.0f  // Song name scroll, pixels per second
 #define GAME_SELECTKEYS (KEY_A | KEY_DLEFT)  // Held at touch-down: box-select / tap-toggle
 #define GAME_TAPDIST 6            // Stylus moving less than this (pixels) is a tap, not a box
 
@@ -59,7 +60,7 @@ typedef struct {
   float update;           // game_update
   float bottom;           // game_render_bottom (table + pieces)
   float music;            // Music thread decoding, per frame
-  char song[64];          // Music file playing ("" = none)
+  char song[256];         // Music file playing ("" = none)
   uint32_t drawn, texswaps;
   float build;            // Last drawlist rebuild (not smoothed)
   uint32_t layers;        // Drawlist layers
@@ -100,6 +101,8 @@ typedef struct {
   u64 playms;             // Play time; stops counting once complete
   float overlay;          // Info overlay opacity 0..1 (hold Y)
   GamePerf perf;          // Filled in by main, shown on the overlay
+  char lastsong[256];     // Song the marquee is showing, and when it started
+  u64 songstart;
 } Game;
 
 // Start a puzzle. target = piece count for a new game (cut in the given style), or 0 to

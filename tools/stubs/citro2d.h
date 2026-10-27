@@ -10,6 +10,7 @@ enum { C2D_AtBaseline = 1, C2D_WithColor = 2, C2D_AlignLeft = 0, C2D_AlignRight 
 #define C2D_DEFAULT_MAX_OBJECTS 4096
 static inline u32 C2D_Color32(u8 r, u8 g, u8 b, u8 a) { return r | (g << 8) | (b << 16) | ((u32)a << 24); }
 bool C2D_Init(size_t maxObjects); void C2D_Fini(void); void C2D_Prepare(void); void C2D_Flush(void);
+void C2D_TextGetDimensions(const C2D_Text * text, float scaleX, float scaleY, float * outWidth, float * outHeight);
 C3D_RenderTarget * C2D_CreateScreenTarget(gfxScreen_t screen, gfx3dSide_t side);
 void C2D_TargetClear(C3D_RenderTarget * target, u32 color);
 void C2D_SceneBegin(C3D_RenderTarget * target);
