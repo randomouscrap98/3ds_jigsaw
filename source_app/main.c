@@ -21,6 +21,16 @@
 #define MAIN_REPEAT_INTERVAL 5
 #define MAIN_CHIME_DELAY 4      // Frames between the last piece's click and the completion chime
 
+#define MAIN_PERF_SMOOTH 0.1f  // Weight of the newest frame in the perf averages
+
+static float main_ms(u64 ticks) {
+  return ticks / (SYSCLOCK_ARM11 / 1000.0f);
+}
+
+static void main_smooth(float * avg, float v) {
+  *avg += (v - *avg) * MAIN_PERF_SMOOTH;
+}
+
 typedef enum { MODE_MENU, MODE_GAME } MainMode;
 
 // Everything the app owns, so hooks and callbacks can reach it
@@ -112,7 +122,12 @@ int main(int argc, char ** argv) {
   app.mode = MODE_MENU;
   aptHook(&app.hook, app_hook, &app);
 
+  u64 lastloop = svcGetSystemTick();
   while(aptMainLoop()) {
+    u64 t0 = svcGetSystemTick();
+    GamePerf * pf = &app.game.perf;
+    main_smooth(&pf->frame, main_ms(t0 - lastloop));
+    lastloop = t0;
     hidScanInput();
     GameInput in;
     in.down = hidKeysDown();
@@ -128,21 +143,34 @@ int main(int argc, char ** argv) {
       if(choice.quit) break;
       if(choice.name) app_start_game(&app, choice);
     } else {
+      u64 tu = svcGetSystemTick();
       int ev = game_update(&app.game, &in);
+      main_smooth(&pf->update, main_ms(svcGetSystemTick() - tu));
       if(ev & GAME_EV_MERGE) sfx_play(&app.sfx, SFX_MERGE);
       if(ev & GAME_EV_COMPLETE) sfx_play_later(&app.sfx, SFX_COMPLETE, MAIN_CHIME_DELAY);
       if(ev & GAME_EV_EXIT) app_end_game(&app);
     }
 
     sfx_tick(&app.sfx);
+    u64 t1 = svcGetSystemTick();
     app_frame_begin(&app);
+    u64 t2 = svcGetSystemTick();
     C2D_SceneBegin(app.top);
     if(app.mode == MODE_MENU) puzzlemenu_render_top(&app.menu, &app.td);
     else game_render_top(&app.game, &app.td);
     C2D_SceneBegin(app.bottom);
     if(app.mode == MODE_MENU) puzzlemenu_render_bottom(&app.menu, &app.td);
-    else game_render_bottom(&app.game, &app.render);
+    else {
+      u64 tb = svcGetSystemTick();
+      game_render_bottom(&app.game, &app.render);
+      main_smooth(&pf->bottom, main_ms(svcGetSystemTick() - tb));
+      pf->drawn = app.render.drawn;
+      pf->texswaps = app.render.texswaps;
+    }
+    u64 t3 = svcGetSystemTick();
     C3D_FrameEnd(0);
+    main_smooth(&pf->cpu, main_ms((t1 - t0) + (t3 - t2)));
+    main_smooth(&pf->gpu, C3D_GetDrawingTime());
   }
 
   if(app.mode == MODE_GAME) {

@@ -26,6 +26,8 @@ typedef struct { void * next; aptHookFn callback; void * param; } aptHookCookie;
 void aptHook(aptHookCookie * cookie, aptHookFn callback, void * param);
 void aptUnhook(aptHookCookie * cookie);
 u64 osGetTime(void);
+u64 svcGetSystemTick(void);
+#define SYSCLOCK_ARM11 268111856
 Result archive_getmtime(const char * name, u64 * mtime);
 void * linearAlloc(size_t size); void linearFree(void * mem);
 Result DSP_FlushDataCache(const void * address, u32 size);

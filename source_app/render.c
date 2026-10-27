@@ -80,7 +80,7 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   }
 }
 
-static void render_group(Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid, const C2D_ImageTint * tint) {
+static void render_group(Render * r, Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid, const C2D_ImageTint * tint) {
   BoardGroup * g = b->groups + gid;
   float angle = RENDER_ANGLE_SIGN * g->rot * (float)M_PI_2;
   float zoom = c->zoom;
@@ -90,7 +90,11 @@ static void render_group(Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid, co
     board_piece_center(b, p, &wx, &wy);
     camera_to_screen(c, wx, wy, &sx, &sy);
     if(sx < -half || sy < -half || sx > c->sw + half || sy > c->sh + half) continue;
-    C2D_DrawImageAtRotated(puzzlegfx_piece(pg, p), sx, sy, 0.5f, angle, tint, zoom, zoom);
+    C2D_Image img = puzzlegfx_piece(pg, p);
+    if(img.tex != r->lasttex) r->texswaps++;
+    r->lasttex = img.tex;
+    r->drawn++;
+    C2D_DrawImageAtRotated(img, sx, sy, 0.5f, angle, tint, zoom, zoom);
   }
 }
 
@@ -109,11 +113,13 @@ void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t hel
       render_glow(r, b, c, held);
     }
   }
+  r->drawn = r->texswaps = 0;
+  r->lasttex = NULL;
   C2D_ImageTint seltint;
   C2D_PlainImageTint(&seltint, RENDER_COLOR_SELECT, RENDER_SELECT_BLEND);
   for(uint32_t i = 0; i < b->ngroups; i++) {
     uint16_t gid = b->order[i];
-    render_group(b, c, pg, gid, sel[gid] ? &seltint : NULL);
+    render_group(r, b, c, pg, gid, sel[gid] ? &seltint : NULL);
   }
 }
 

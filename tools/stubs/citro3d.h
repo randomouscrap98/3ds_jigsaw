@@ -9,6 +9,7 @@ typedef struct C3D_RenderTarget_tag C3D_RenderTarget;
 #define C3D_FRAME_SYNCDRAW 1
 bool C3D_Init(size_t cmdBufSize); void C3D_Fini(void);
 bool C3D_FrameBegin(u8 flags); void C3D_FrameEnd(u8 flags);
+float C3D_GetDrawingTime(void); float C3D_GetProcessingTime(void);
 bool C3D_TexInit(C3D_Tex * tex, u16 width, u16 height, GPU_TEXCOLOR format);
 void C3D_TexDelete(C3D_Tex * tex); void C3D_TexFlush(C3D_Tex * tex);
 void C3D_TexSetFilter(C3D_Tex * tex, GPU_TEXTURE_FILTER_PARAM magFilter, GPU_TEXTURE_FILTER_PARAM minFilter);

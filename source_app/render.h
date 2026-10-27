@@ -28,6 +28,10 @@ typedef struct {
   C3D_Tex glowtex;
   Tex3DS_SubTexture glowsub;
   uint8_t hasglow;
+  // Perf counters for the last render_table: piece sprites drawn, and how often the piece
+  // texture changed between consecutive sprites (each change splits the GPU batch)
+  uint32_t drawn, texswaps;
+  const C3D_Tex * lasttex;
 } Render;
 
 int render_init(Render * r);

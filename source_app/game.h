@@ -47,6 +47,16 @@ typedef struct {
   circlePosition cstick;  // New 3DS only; always 0,0 elsewhere
 } GameInput;
 
+// Frame timings (ms, smoothed), measured by main
+typedef struct {
+  float frame;            // Loop start to loop start
+  float cpu;              // Our CPU work: update + building the frame (not the vsync wait)
+  float update;           // game_update
+  float bottom;           // game_render_bottom (table + pieces)
+  float gpu;              // C3D_GetDrawingTime
+  uint32_t drawn, texswaps;
+} GamePerf;
+
 // One puzzle being played: the board, the view onto it, its graphics, and the
 // stylus state.
 typedef struct {
@@ -78,6 +88,7 @@ typedef struct {
   u64 lastframe;          // osGetTime of the previous update
   u64 playms;             // Play time; stops counting once complete
   float overlay;          // Info overlay opacity 0..1 (hold Y)
+  GamePerf perf;          // Filled in by main, shown on the overlay
 } Game;
 
 // Start a puzzle. target = piece count for a new game (cut in the given style), or 0 to
