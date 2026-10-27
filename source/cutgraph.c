@@ -166,8 +166,26 @@ static int cutgraph_piecetabs(const CutGraph * g, uint32_t p) {
 }
 
 // An edge that can carry tabs: between two pieces, straight, not part of a whimsy
-static int cutgraph_tabbable(const CutEdge * e) {
+static int cutgraph_inner(const CutEdge * e) {
   return e->left >= 0 && e->right >= 0 && e->npts == 0 && !(e->flags & CUTEDGE_WHIMSY);
+}
+
+// Does a whimsy's outline end at vertex v? (Only whimsy outline edges have polylines or
+// the WHIMSY flag, and they always meet straight edges at crossing vertices.)
+static int cutgraph_whimsyvert(const CutGraph * g, uint32_t v) {
+  for(uint32_t i = 0; i < g->ne; i++) {
+    const CutEdge * e = g->e + i;
+    if((e->flags & CUTEDGE_WHIMSY) && (e->a == v || e->b == v)) return 1;
+  }
+  return 0;
+}
+
+int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min) {
+  if(!cutgraph_inner(e)) return 0;
+  float L = cutgraph_edgelen(g, e);
+  if(L < min) return 0;
+  if(st->whimsytab > min && L < st->whimsytab && (cutgraph_whimsyvert(g, e->a) || cutgraph_whimsyvert(g, e->b))) return 0;
+  return 1;
 }
 
 // Canonical (a -> b) points of an edge in cell units, a included, b excluded
@@ -269,7 +287,7 @@ int cutgraph_tabs(CutGraph * g, const CutTabStyle * st, uint32_t seed) {
     CutEdge * e = g->e + i;
     if(e->flags & (CUTEDGE_GRID | CUTEDGE_WHIMSY)) continue;
     float L = cutgraph_edgelen(g, e);
-    e->ntabs = !cutgraph_tabbable(e) || L < st->mintab ? 0 : L >= st->twotab ? 2 : 1;
+    e->ntabs = !cutgraph_tabbable(g, st, e, st->mintab) ? 0 : L >= st->twotab ? 2 : 1;
     cutgraph_rolltabs(g, st, e, &r);
   }
   // Every piece but a whimsy needs a tab or blank: give tabless pieces one on their longest
@@ -280,11 +298,11 @@ int cutgraph_tabs(CutGraph * g, const CutTabStyle * st, uint32_t seed) {
     float bestlen = 0;
     for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
       CutEdge * e = g->e + (g->pedge[k] >> 1);
-      if(!cutgraph_tabbable(e)) continue;
+      if(!cutgraph_tabbable(g, st, e, st->mintab * 0.6f)) continue;
       float L = cutgraph_edgelen(g, e);
       if(L > bestlen) { bestlen = L; best = g->pedge[k] >> 1; }
     }
-    if(best < 0 || bestlen < st->mintab * 0.6f) return 1;
+    if(best < 0) return 1;
     g->e[best].ntabs = 1;
     g->e[best].flags &= ~CUTEDGE_GRID;
     cutgraph_rolltabs(g, st, g->e + best, &r);

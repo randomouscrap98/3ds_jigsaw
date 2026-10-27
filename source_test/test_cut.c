@@ -43,7 +43,13 @@ void test_layout(void) {
         CHECK(layout_fit(&l, boxes, cut.count, 1024, 3, tiles) == 0);
         Layout l2 = l;
         CHECK(layout_fit(&l2, boxes, cut.count, 1024, 3, again) == 0);
-        CHECK(!memcmp(tiles, again, sizeof(LayoutTile) * cut.count) && l2.cell == l.cell);
+        int same = l2.cell == l.cell;
+        for(uint32_t p = 0; p < cut.count; p++) {
+          const LayoutTile * a = tiles + p, * b = again + p;
+          same &= a->page == b->page && a->x == b->x && a->y == b->y && a->w == b->w && a->h == b->h &&
+              a->ox == b->ox && a->oy == b->oy;
+        }
+        CHECK(same);
         CHECK(l.pages >= 1 && l.pages <= 3);
         CHECK(l.width <= 1024 && l.height <= 1024);
         CHECK(l.width <= l.cropw + 0.01f && l.height <= l.croph + 0.01f);  // never upscale

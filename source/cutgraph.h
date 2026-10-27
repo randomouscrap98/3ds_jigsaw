@@ -43,6 +43,7 @@ typedef struct {
   float mintab;       // Edges shorter than this get no tab
   float twotab;       // Edges at least this long get two tabs
   float maxtab;       // Longest stretch of edge one tab is drawn over
+  float whimsytab;    // Edges ending where a whimsy crosses get a tab only if this long
   const EdgeStyle * jitter;   // Tab shape randomness (edgegen style)
 } CutTabStyle;
 
@@ -80,6 +81,9 @@ float cutgraph_edgelen(const CutGraph * g, const CutEdge * e);
 // pieces whose outline fails edgegen_shape_ok until all pass. Same seed = same tabs.
 // Returns 0 on success.
 int cutgraph_tabs(CutGraph * g, const CutTabStyle * st, uint32_t seed);
+// 1 if edge e may get a tab under st: between two pieces, straight, not part of a whimsy,
+// long enough (whimsytab if an end touches a whimsy, else mintab)
+int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min);
 // Pieces that are whimsies (every edge WHIMSY) are exempt from needing a tab
 int cutgraph_iswhimsy(const CutGraph * g, uint32_t p);
 uint32_t cutgraph_maxpoints(const CutGraph * g);

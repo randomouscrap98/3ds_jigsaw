@@ -21,10 +21,22 @@
 #ifndef WHIMSY_AREA
 #define WHIMSY_AREA 1.6f      // Typical whimsy area (cells^2)
 #endif
+#define WHIMSY_TABEDGE 0.75f  // Edges ending at a whimsy get a tab only if at least this long
 #define WHIMSY_JITTER 0.15f   // How far a whimsy center strays from the corner it is placed on
 #define WHIMSY_BORDER 0.3f    // Closest a whimsy gets to the puzzle border (cells)
 #define WHIMSY_GAP 0.6f       // Closest two whimsies get (cells)
-#define WHIMSY_TRIES 100      // Placement attempts per whimsy
+#define WHIMSY_TRIES 60       // Placement attempts per whimsy per shape tried
+
+#define WHIMSY_MEASURESTEP 0.05f  // Sampling grid for whimsy_measure (cells)
+#define WHIMSY_SPIKER 0.12f       // Parts thinner than twice this count as spikes (cells)
+#ifndef WHIMSY_MAXSPIKE
+#define WHIMSY_MAXSPIKE 0.05f     // Most spike area a piece next to a whimsy may have (cells^2)
+#endif
+
+// How thick a polygon is (radius of the biggest circle inside), and how much of it is in
+// parts thinner than 2 * WHIMSY_SPIKER (horns, slivers: area no disc of that radius
+// reaches). Sampled on a WHIMSY_MEASURESTEP grid.
+void whimsy_measure(const float * xy, uint32_t n, float * thick, float * spike);
 
 // Shapes in a set, and one of them: a closed outline (clockwise, y down) of area 1 centered
 // on its centroid. xy holds WHIMSY_MAXSHAPE pairs. Returns the point count.

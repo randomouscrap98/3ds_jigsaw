@@ -374,6 +374,7 @@ void randcut_tabstyle(const RandCutStyle * st, CutTabStyle * ts) {
   ts->mintab = st->mintab;
   ts->twotab = st->twotab;
   ts->maxtab = st->maxtab;
+  ts->whimsytab = 0;
   ts->jitter = edgegen_style(EDGEGEN_STYLE_CLASSIC);
 }
 

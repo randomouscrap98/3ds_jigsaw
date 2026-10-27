@@ -78,40 +78,15 @@ static void render(const Cutter * c, float cell, const uint8_t * img, uint32_t W
   free(boxes);
 }
 
-// Thickness of a polygon: radius of the largest circle that fits inside (sampled)
-static float inradius(const float * xy, uint32_t n) {
-  float x0 = xy[0], y0 = xy[1], x1 = xy[0], y1 = xy[1];
-  for(uint32_t i = 1; i < n; i++) {
-    x0 = fminf(x0, xy[2 * i]); x1 = fmaxf(x1, xy[2 * i]);
-    y0 = fminf(y0, xy[2 * i + 1]); y1 = fmaxf(y1, xy[2 * i + 1]);
-  }
-  float best = 0;
-  for(float y = y0; y <= y1; y += 0.02f) {
-    for(float x = x0; x <= x1; x += 0.02f) {
-      int in = 0;
-      float dmin = 1e9f;
-      for(uint32_t i = 0, j = n - 1; i < n; j = i++) {
-        float xi = xy[2 * i], yi = xy[2 * i + 1], xj = xy[2 * j], yj = xy[2 * j + 1];
-        if((yi > y) != (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) in = !in;
-        float vx = xj - xi, vy = yj - yi, wx = x - xi, wy = y - yi, l = vx * vx + vy * vy;
-        float t = l > 0 ? (vx * wx + vy * wy) / l : 0;
-        t = t < 0 ? 0 : t > 1 ? 1 : t;
-        float dx = wx - t * vx, dy = wy - t * vy;
-        dmin = fminf(dmin, dx * dx + dy * dy);
-      }
-      if(in && dmin > best) best = dmin;
-    }
-  }
-  return sqrtf(best);
-}
-
-typedef struct { float r; uint32_t p; } Thin;
+typedef struct { float r, sp; uint32_t p; } Thin;
+// Worst first: most spike area
 static int thincmp(const void * a, const void * b) {
-  float x = ((const Thin *)a)->r, y = ((const Thin *)b)->r;
-  return x < y ? -1 : x > y;
+  float x = ((const Thin *)a)->sp, y = ((const Thin *)b)->sp;
+  return x > y ? -1 : x < y;
 }
 
-// The thinnest pieces next to whimsies, each on its own (whimsy neighbours faint pink)
+// The spikiest pieces next to whimsies (most area in parts thinner than 2 * WHIMSY_SPIKER),
+// each on its own (whimsy neighbours faint pink)
 static void thinsheet(const Cutter * c, const char * path, const char * name) {
   const CutGraph * g = &c->g;
   float * body = malloc(sizeof(float) * 2 * c->maxpoints);
@@ -124,12 +99,15 @@ static void thinsheet(const Cutter * c, const char * path, const char * name) {
     int near = 0;
     for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) near |= (g->e[g->pedge[k] >> 1].flags & CUTEDGE_WHIMSY) != 0;
     uint32_t n = cutgraph_body(g, p, 1, 0, 0, body);
-    float r = inradius(body, n);
-    if(near) list[nl++] = (Thin) { r, p };
+    float r, sp;
+    whimsy_measure(body, n, &r, &sp);
+    if(near) list[nl++] = (Thin) { r, sp, p };
     else if(nnormal < 60) { normal += r; nnormal++; }
   }
   qsort(list, nl, sizeof(Thin), thincmp);
-  printf("  %s: %u pieces next to whimsies; ordinary piece thickness (inradius) ~%.2f; thinnest:", name, nl, normal / nnormal);
+  float thinnest = 1e9f;
+  for(uint32_t i = 0; i < nl; i++) thinnest = fminf(thinnest, list[i].r);
+  printf("  %s: %u pieces next to whimsies, thinnest %.2f (ordinary ~%.2f); most spike area:", name, nl, thinnest, normal / nnormal);
   uint32_t show = nl < 10 ? nl : 10, S = 300;
   const float scale = 100;
   uint32_t W = S * show, H = S;
@@ -144,7 +122,7 @@ static void thinsheet(const Cutter * c, const char * path, const char * name) {
   float * xy = malloc(sizeof(float) * 2 * c->maxpoints);
   for(uint32_t i = 0; i < show; i++) {
     uint32_t p = list[i].p;
-    printf(" %.2f", list[i].r);
+    printf(" %.3f", list[i].sp);
     uint32_t n = cutter_outline(c, p, scale, 0, 0, xy);
     float cx = 0, cy = 0;
     for(uint32_t k = 0; k < n; k++) { cx += xy[2 * k]; cy += xy[2 * k + 1]; }
@@ -256,7 +234,7 @@ int main(int argc, char ** argv) {
         if(wh == WHIMSY_MANY) {
           char name[64];
           snprintf(name, sizeof name, "%s_%u", stylenames[styles[si]], targets[t]);
-          snprintf(path, sizeof path, "%s/thin_%s.png", argv[1], name);
+          snprintf(path, sizeof path, "%s/spiky_%s.png", argv[1], name);
           thinsheet(&c, path, name);
         }
         free(img);
