@@ -54,7 +54,8 @@ typedef struct {
   float cpu;              // Our CPU work: update + building the frame (not the vsync wait)
   float update;           // game_update
   float bottom;           // game_render_bottom (table + pieces)
-  float gpu;              // C3D_GetDrawingTime
+  float music;            // Music thread decoding, per frame
+  char song[64];          // Music file playing ("" = none)
   uint32_t drawn, texswaps;
   float build;            // Last drawlist rebuild (not smoothed)
   uint32_t layers;        // Drawlist layers

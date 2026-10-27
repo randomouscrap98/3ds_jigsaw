@@ -12,6 +12,7 @@ void storage_init(void) {
   mkdir(STORAGE_PUZZLES, 0777);
   mkdir(STORAGE_CACHE, 0777);
   mkdir(STORAGE_SAVES, 0777);
+  mkdir(STORAGE_MUSIC, 0777);
 }
 
 void storage_puzzlepath(const char * name, char * out) {

@@ -8,6 +8,7 @@
 
 #include "defaults.h"
 #include "game.h"
+#include "music.h"
 #include "puzzlemenu.h"
 #include "savewriter.h"
 #include "render.h"
@@ -43,6 +44,7 @@ typedef struct {
   PuzzleMenu menu;
   Game game;
   Sfx sfx;
+  Music music;
   MainMode mode;
   aptHookCookie hook;
 } App;
@@ -119,6 +121,7 @@ int main(int argc, char ** argv) {
     romfsExit();
   }
   puzzlemenu_init(&app.menu);
+  music_init(&app.music, app.sfx.ok);  // Silently nothing on failure
   app.mode = MODE_MENU;
   aptHook(&app.hook, app_hook, &app);
 
@@ -170,7 +173,8 @@ int main(int argc, char ** argv) {
     u64 t3 = svcGetSystemTick();
     C3D_FrameEnd(0);
     main_smooth(&pf->cpu, main_ms((t1 - t0) + (t3 - t2)));
-    main_smooth(&pf->gpu, C3D_GetDrawingTime());
+    main_smooth(&pf->music, main_ms(music_busy(&app.music)));
+    music_name(&app.music, pf->song, sizeof(pf->song));
   }
 
   if(app.mode == MODE_GAME) {
@@ -180,6 +184,7 @@ int main(int argc, char ** argv) {
   aptUnhook(&app.hook);
   savewriter_free(&app.writer);
   puzzlemenu_free(&app.menu);
+  music_free(&app.music);  // Before sfx_free shuts ndsp down
   sfx_free(&app.sfx);
   render_free(&app.render);
   textdraw_free(&app.td);

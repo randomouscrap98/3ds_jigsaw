@@ -372,20 +372,23 @@ void game_render_top(Game * g, TextDraw * td) {
     u8 a = (u8)(g->overlay * 255);
     char time[16];
     textdraw_fmttime(time, sizeof(time), g->playms / 1000);
-    C2D_DrawRectSolid(90, 66, 0.7f, 220, 124, C2D_Color32(16, 16, 20, (u8)(g->overlay * 210)));
+    C2D_DrawRectSolid(70, 66, 0.7f, 260, 138, C2D_Color32(16, 16, 20, (u8)(g->overlay * 210)));
     textdraw_center(td, 200, 74, 0.8f, C2D_Color32(255, 220, 90, a), "%s", time);
     textdraw_center(td, 200, 108, 0.5f, C2D_Color32(230, 230, 230, a), "%lu pieces, %lu groups left",
         (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
     // Perf readout (1.1 investigation)
     const GamePerf * pf = &g->perf;
     u32 pc = C2D_Color32(170, 170, 170, a);
-    textdraw_center(td, 200, 128, 0.45f, pc, "CPU %.1f ms (%d%%)  GPU %.1f ms  frame %.1f",
-        pf->cpu, pf->frame > 0 ? (int)(100 * pf->cpu / pf->frame) : 0, pf->gpu, pf->frame);
+    int pct = pf->frame > 0 ? (int)(100 * pf->cpu / pf->frame) : 0;
+    int mpct = pf->frame > 0 ? (int)(100 * pf->music / pf->frame) : 0;
+    textdraw_center(td, 200, 128, 0.45f, pc, "CPU %.1f ms (%d%%)  music %.1f ms (%d%%)",
+        pf->cpu, pct, pf->music, mpct);
     textdraw_center(td, 200, 142, 0.45f, pc, "update %.1f  table+pieces %.1f ms",
         pf->update, pf->bottom);
     textdraw_center(td, 200, 156, 0.45f, pc, "%lu sprites, %lu texture switches",
         (unsigned long)pf->drawn, (unsigned long)pf->texswaps);
     textdraw_center(td, 200, 170, 0.45f, pc, "draw order: %lu layers, rebuilt in %.2f ms",
         (unsigned long)pf->layers, pf->build);
+    textdraw_center(td, 200, 184, 0.45f, pc, "Music: %s", pf->song[0] ? pf->song : "none");
   }
 }

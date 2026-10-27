@@ -8,6 +8,7 @@
 #define STORAGE_PUZZLES STORAGE_ROOT "/puzzles"
 #define STORAGE_CACHE   STORAGE_ROOT "/cache"
 #define STORAGE_SAVES   STORAGE_ROOT "/saves"
+#define STORAGE_MUSIC   STORAGE_ROOT "/music"
 #define STORAGE_MAXPATH 512
 
 // Make sure all the folders exist
