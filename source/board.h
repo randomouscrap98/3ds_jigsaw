@@ -1,23 +1,25 @@
 #ifndef __HEADER_JIGSAW_BOARD__
 #define __HEADER_JIGSAW_BOARD__
 
+#include "piecegeo.h"
+
 #include <stdint.h>
 
 #define BOARD_NONE 0xFFFF
 #define BOARD_MAXPIECES 0xFFF0
 
-// A single puzzle piece. Pieces are indexed row * cols + col and never move between
-// slots; only the group they belong to changes.
+// A single puzzle piece. Pieces are indexed as in the board's PieceGeo and never move
+// between slots; only the group they belong to changes.
 typedef struct {
   uint16_t group;   // Group this piece belongs to
   uint16_t next;    // Next piece in the same group (BOARD_NONE = end)
 } BoardPiece;
 
 // A set of pieces locked together. Every group uses the same frame convention:
-// (x, y) is where the top-left corner of grid cell (0,0) would be in the world, and
-// rot (0-3, clockwise quarter turns) rotates the whole grid around that point. So a
-// piece's world position = (x, y) + R(rot) * (col * cell, row * cell). Two groups are
-// correctly aligned with each other exactly when they have the same x, y and rot.
+// (x, y) is where the puzzle frame's origin (top-left of the solved puzzle) would be in
+// the world, and rot (0-3, clockwise quarter turns) rotates the whole puzzle around that
+// point. So a piece's world center = (x, y) + R(rot) * (its PieceGeo home center). Two
+// groups are correctly aligned with each other exactly when they have the same x, y and rot.
 typedef struct {
   float x, y;
   uint16_t first;   // First piece in this group's list (BOARD_NONE = dead group)
@@ -32,14 +34,13 @@ typedef struct {
   uint16_t * order;     // Draw order of live groups, bottom first
   uint32_t ngroups;     // Live groups (length of order)
   uint32_t count;       // Total pieces
-  uint16_t cols, rows;
-  float cell;           // Size of one grid cell (world units)
+  const PieceGeo * geo; // Piece geometry (not owned; must outlive the board)
   float width, height;  // Table size; table spans (0,0) to (width,height)
 } Board;
 
 // Create a solved-looking board: every piece is its own group, at its home position
 // with rotation 0. Call board_scatter afterwards to make it an actual puzzle.
-int board_init(Board * b, uint16_t cols, uint16_t rows, float cell, float width, float height);
+int board_init(Board * b, const PieceGeo * geo, float width, float height);
 void board_free(Board * b);
 // Throw all pieces into their own groups at random spots/rotations, spread evenly over
 // the region (x, y, w, h) of the table

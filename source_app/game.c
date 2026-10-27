@@ -59,8 +59,9 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   storage_cleancaches(name, cpath);
   Layout * l = &g->gfx.layout;
   float tw = l->width * GAME_TABLESCALE, th = l->height * GAME_TABLESCALE;
-  if(board_init(&g->board, l->cols, l->rows, l->cell, tw, th)) {
+  if(piecegeo_grid(&g->geo, l->cols, l->rows, l->cell) || board_init(&g->board, &g->geo, tw, th)) {
     GAME_ERR("Out of memory (board)");
+    piecegeo_free(&g->geo);
     puzzlegfx_free(&g->gfx);
     free(save);
     return 1;
@@ -99,6 +100,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
 
 void game_free(Game * g) {
   board_free(&g->board);
+  piecegeo_free(&g->geo);
   puzzlegfx_free(&g->gfx);
   drawlist_free(&g->dl);
   free(g->sel);
@@ -194,7 +196,7 @@ static int game_release(Game * g) {
     // Moving a selection never snaps: it only goes where it's put
     g->dirty = 1;
   } else if(g->held >= 0) {
-    int merges = board_drop(&g->board, g->held, g->board.cell * GAME_SNAP);
+    int merges = board_drop(&g->board, g->held, g->board.geo->cell * GAME_SNAP);
     if(merges) ev |= GAME_EV_MERGE;
     if(merges && board_complete(&g->board)) ev |= GAME_EV_COMPLETE;
     g->dirty = 1;

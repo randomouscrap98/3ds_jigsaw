@@ -73,6 +73,7 @@ typedef struct {
 // One puzzle being played: the board, the view onto it, its graphics, and the
 // stylus state.
 typedef struct {
+  PieceGeo geo;           // Piece geometry (the board points at it)
   Board board;
   DrawList dl;            // Piece draw order (batched by texture page)
   u8 dldirty;             // Rebuild dl before the next draw

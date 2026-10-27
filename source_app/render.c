@@ -66,9 +66,9 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   C2D_Image img = { .tex = &r->glowtex, .subtex = &r->glowsub };
   C2D_ImageTint tint;
   C2D_PlainImageTint(&tint, RENDER_COLOR_GLOW, 1.0f);
-  float size = RENDER_GLOW_SIZE * b->cell * c->zoom;
+  float size = RENDER_GLOW_SIZE * b->geo->cell * c->zoom;
   float scale = size / RENDER_GLOW_TEX, half = size / 2;
-  float off = RENDER_GLOW_OFFSET * b->cell * c->zoom;
+  float off = RENDER_GLOW_OFFSET * b->geo->cell * c->zoom;
   for(uint16_t p = b->groups[gid].first; p != BOARD_NONE; p = b->pieces[p].next) {
     float wx, wy, sx, sy;
     board_piece_center(b, p, &wx, &wy);

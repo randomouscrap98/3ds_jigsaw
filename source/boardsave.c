@@ -47,9 +47,9 @@ size_t boardsave_write(Board * b, uint8_t * buf) {
   memcpy(p, "JIGS", 4);
   p += 4;
   put16(&p, BOARDSAVE_VERSION);
-  put16(&p, b->cols);
-  put16(&p, b->rows);
-  putf(&p, b->cell);
+  put16(&p, b->geo->cols);
+  put16(&p, b->geo->rows);
+  putf(&p, b->geo->cell);
   put32(&p, b->ngroups);
   for(uint32_t i = 0; i < b->ngroups; i++) {
     BoardGroup * g = b->groups + b->order[i];
@@ -83,11 +83,11 @@ int boardsave_read(Board * b, const uint8_t * buf, size_t len) {
   BoardSaveInfo info;
   int err = boardsave_peek(buf, len, &info);
   if(err) return err;
-  if(info.cols != b->cols || info.rows != b->rows) return 3;
+  if(info.cols != b->geo->cols || info.rows != b->geo->rows) return 3;
   if(info.ngroups == 0 || info.ngroups > b->count) return 4;
   if(len < BOARDSAVE_HEADER + BOARDSAVE_GROUP * info.ngroups + 2 * b->count) return 5;
   if(!(info.cell > 0) || !isfinite(info.cell)) return 6;
-  float scale = b->cell / info.cell;
+  float scale = b->geo->cell / info.cell;
   // Validate everything before touching the board
   const uint8_t * gp = buf + BOARDSAVE_HEADER;
   const uint8_t * pp = gp + BOARDSAVE_GROUP * info.ngroups;

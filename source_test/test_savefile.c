@@ -6,7 +6,7 @@
 
 void test_savefile(void) {
   Board b, c;
-  CHECK(board_init(&b, 6, 5, 20, 400, 300) == 0);
+  CHECK(test_board_grid(&b, 6, 5, 20, 400, 300) == 0);
   board_scatter(&b, 7, 0, 0, b.width, b.height);
   SaveHeader h, r;
   savefile_init(&h);
@@ -46,7 +46,7 @@ void test_savefile(void) {
   CHECK(info.pieces == 30 && info.groups == 30 && info.header.target == 500);
 
   // Board round trip
-  CHECK(board_init(&c, 6, 5, 20, 400, 300) == 0);
+  CHECK(test_board_grid(&c, 6, 5, 20, 400, 300) == 0);
   CHECK(savefile_readboard(buf, len, &r, &c) == SAVEFILE_OK);
   float x1, y1, x2, y2;
   board_piece_center(&b, 11, &x1, &y1);
@@ -54,7 +54,7 @@ void test_savefile(void) {
   CHECKF(x1, x2);
   CHECKF(y1, y2);
   CHECK(savefile_readboard(buf, len - 1, &r, &c) == SAVEFILE_BAD);
-  board_free(&c);
+  test_board_free(&c);
 
   // Too short, bad magic, size past the end, newer version
   CHECK(savefile_readheader(buf, SAVEFILE_MINHEADER - 1, &r) == SAVEFILE_BAD);
@@ -69,5 +69,5 @@ void test_savefile(void) {
   uint8_t old[32] = { 0xF4, 0x01, 0, 0, 'J', 'I', 'G', 'S' };
   CHECK(savefile_readheader(old, sizeof(old), &r) == SAVEFILE_BAD);
   free(buf);
-  board_free(&b);
+  test_board_free(&b);
 }

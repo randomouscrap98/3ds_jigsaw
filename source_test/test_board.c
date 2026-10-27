@@ -12,9 +12,32 @@ static void place(Board * b, uint16_t p, float ox, float oy, uint8_t rot) {
   g->x = ox; g->y = oy; g->rot = rot;
 }
 
+int test_board_grid(Board * b, uint16_t cols, uint16_t rows, float cell, float width, float height) {
+  PieceGeo * g = malloc(sizeof(PieceGeo));
+  if(!g || piecegeo_grid(g, cols, rows, cell)) {
+    free(g);
+    return 1;
+  }
+  if(board_init(b, g, width, height)) {
+    piecegeo_free(g);
+    free(g);
+    return 1;
+  }
+  return 0;
+}
+
+void test_board_free(Board * b) {
+  PieceGeo * g = (PieceGeo *)b->geo;
+  board_free(b);
+  if(g) {
+    piecegeo_free(g);
+    free(g);
+  }
+}
+
 void test_board(void) {
   Board b;
-  CHECK(board_init(&b, 4, 3, 10, 200, 150) == 0);
+  CHECK(test_board_grid(&b, 4, 3, 10, 200, 150) == 0);
   CHECK(b.count == 12 && b.ngroups == 12);
 
   // Solved layout: every group at 0,0 rot 0. Pick hits the right piece.
@@ -38,10 +61,10 @@ void test_board(void) {
   board_rotate(&b, 0, 1, 33, 7);
   board_rotate(&b, 0, -1, 33, 7);
   CHECKF(b.groups[0].x, 100); CHECKF(b.groups[0].y, 100);
-  board_free(&b);
+  test_board_free(&b);
 
   // Rotation about a pivot keeps the pivot fixed and moves pieces correctly
-  CHECK(board_init(&b, 4, 3, 10, 200, 150) == 0);
+  CHECK(test_board_grid(&b, 4, 3, 10, 200, 150) == 0);
   place(&b, 5, 50, 50, 0);             // piece 5 = (1,1): center at 50+15, 50+15
   board_rotate(&b, 5, 1, 65, 65);      // spin around its own center
   board_piece_center(&b, 5, &cx, &cy);
@@ -81,10 +104,10 @@ void test_board(void) {
   place(&b, 6, g4.x + 1, g4.y - 1, g4.rot);
   CHECK(board_drop(&b, 6, 3) == 1);
   CHECK(b.groups[6].count == 3 && b.groups[4].count == 0);
-  board_free(&b);
+  test_board_free(&b);
 
   // Cascade: whole puzzle at the same frame merges into one in a single drop
-  CHECK(board_init(&b, 5, 4, 10, 200, 150) == 0);
+  CHECK(test_board_grid(&b, 5, 4, 10, 200, 150) == 0);
   CHECK(!board_complete(&b));
   CHECK(board_drop(&b, 7, 3) == 19);
   CHECK(board_complete(&b));
@@ -92,20 +115,20 @@ void test_board(void) {
   int n = 0;
   for(uint16_t p = b.groups[7].first; p != BOARD_NONE; p = b.pieces[p].next) n++;
   CHECK(n == 20);
-  board_free(&b);
+  test_board_free(&b);
 
   // Raise moves a group to the top of draw order; pick prefers the top
-  CHECK(board_init(&b, 2, 1, 10, 100, 100) == 0);
+  CHECK(test_board_grid(&b, 2, 1, 10, 100, 100) == 0);
   place(&b, 0, 0, 0, 0);
   place(&b, 1, -10, 0, 0);   // piece 1 now overlaps piece 0's spot
   CHECK(board_pick(&b, 5, 5) == 1);
   board_raise(&b, 0);
   CHECK(b.order[1] == 0);
   CHECK(board_pick(&b, 5, 5) == 0);
-  board_free(&b);
+  test_board_free(&b);
 
   // Selection: rect marks whole groups by piece center; raise keeps marked order on top
-  CHECK(board_init(&b, 4, 3, 10, 200, 150) == 0);
+  CHECK(test_board_grid(&b, 4, 3, 10, 200, 150) == 0);
   place(&b, 1, 0, 0, 0);
   place(&b, 2, 0, 0, 0);
   for(uint32_t i = 0; i < b.count; i++) if(i != 1 && i != 2) place(&b, i, 100, 100, 0);
@@ -130,10 +153,10 @@ void test_board(void) {
   }
   uint8_t none[12] = {0};
   CHECK(!board_marked_bounds(&b, none, &bx0, &by0, &bx1, &by1));
-  board_free(&b);
+  test_board_free(&b);
 
   // Scatter: everything inside the table, all separate, deterministic per seed
-  CHECK(board_init(&b, 26, 19, 37, 26 * 37 * 3, 19 * 37 * 3) == 0);
+  CHECK(test_board_grid(&b, 26, 19, 37, 26 * 37 * 3, 19 * 37 * 3) == 0);
   board_scatter(&b, 1234, b.width / 4, b.height / 4, b.width / 2, b.height / 2);
   CHECK(b.ngroups == b.count);
   int inside = 1, rots[4] = {0};
@@ -151,12 +174,12 @@ void test_board(void) {
   int merged = 0;
   for(uint32_t i = 0; i < b.count; i++) merged += board_drop(&b, i, 37 * 0.3f);
   CHECK(merged == 0);
-  board_free(&b);
+  test_board_free(&b);
 }
 
 void test_boardsave(void) {
   Board b, c;
-  CHECK(board_init(&b, 6, 5, 20, 400, 300) == 0);
+  CHECK(test_board_grid(&b, 6, 5, 20, 400, 300) == 0);
   board_scatter(&b, 99, 0, 0, b.width, b.height);
   // Merge a few things to make the groups interesting
   b.groups[1].x = b.groups[0].x; b.groups[1].y = b.groups[0].y; b.groups[1].rot = b.groups[0].rot;
@@ -171,7 +194,7 @@ void test_boardsave(void) {
   CHECK(boardsave_peek(buf, len, &info) == 0);
   CHECK(info.cols == 6 && info.rows == 5 && info.ngroups == 28);
 
-  CHECK(board_init(&c, 6, 5, 20, 400, 300) == 0);
+  CHECK(test_board_grid(&c, 6, 5, 20, 400, 300) == 0);
   CHECK(boardsave_read(&c, buf, len) == 0);
   CHECK(c.ngroups == b.ngroups);
   // Every piece ends up at the same place with the same rotation
@@ -188,22 +211,22 @@ void test_boardsave(void) {
   CHECK(same);
   // Draw order preserved: top group in c holds the same pieces as top group in b
   CHECK(c.groups[c.order[c.ngroups - 1]].first == b.groups[b.order[b.ngroups - 1]].first);
-  board_free(&c);
+  test_board_free(&c);
 
   // Cell scaling
-  CHECK(board_init(&c, 6, 5, 40, 800, 600) == 0);
+  CHECK(test_board_grid(&c, 6, 5, 40, 800, 600) == 0);
   CHECK(boardsave_read(&c, buf, len) == 0);
   float x1, y1, x2, y2;
   board_piece_center(&b, 3, &x1, &y1);
   board_piece_center(&c, 3, &x2, &y2);
   CHECKF(x2, x1 * 2); CHECKF(y2, y1 * 2);
-  board_free(&c);
+  test_board_free(&c);
 
   // Rejections: wrong dims, truncation, corruption
-  CHECK(board_init(&c, 5, 6, 20, 400, 300) == 0);
+  CHECK(test_board_grid(&c, 5, 6, 20, 400, 300) == 0);
   CHECK(boardsave_read(&c, buf, len) != 0);
-  board_free(&c);
-  CHECK(board_init(&c, 6, 5, 20, 400, 300) == 0);
+  test_board_free(&c);
+  CHECK(test_board_grid(&c, 6, 5, 20, 400, 300) == 0);
   float before = c.groups[0].x;
   CHECK(boardsave_read(&c, buf, len - 1) != 0);
   buf[len - 2] = 0xFF;  // group index out of range
@@ -211,9 +234,9 @@ void test_boardsave(void) {
   CHECKF(c.groups[0].x, before);  // untouched on failure
   buf[0] = 'X';
   CHECK(boardsave_read(&c, buf, len) != 0);
-  board_free(&c);
+  test_board_free(&c);
   free(buf);
-  board_free(&b);
+  test_board_free(&b);
 }
 
 void test_camera(void) {

@@ -14,9 +14,9 @@ void board_rotvec(uint8_t rot, float x, float y, float * ox, float * oy) {
   }
 }
 
-int board_init(Board * b, uint16_t cols, uint16_t rows, float cell, float width, float height) {
+int board_init(Board * b, const PieceGeo * geo, float width, float height) {
   memset(b, 0, sizeof(Board));
-  uint32_t count = (uint32_t)cols * rows;
+  uint32_t count = geo->count;
   if(count == 0 || count > BOARD_MAXPIECES) return 1;
   b->pieces = malloc(sizeof(BoardPiece) * count);
   b->groups = malloc(sizeof(BoardGroup) * count);
@@ -27,9 +27,7 @@ int board_init(Board * b, uint16_t cols, uint16_t rows, float cell, float width,
   }
   b->count = count;
   b->ngroups = count;
-  b->cols = cols;
-  b->rows = rows;
-  b->cell = cell;
+  b->geo = geo;
   b->width = width;
   b->height = height;
   for(uint32_t i = 0; i < count; i++) {
@@ -55,10 +53,8 @@ void board_free(Board * b) {
 // Position a single-piece group so that piece's center lands on (cx, cy)
 static void board_place_single(Board * b, uint16_t piece, float cx, float cy, uint8_t rot) {
   BoardGroup * g = b->groups + b->pieces[piece].group;
-  float lx = ((piece % b->cols) + 0.5f) * b->cell;
-  float ly = ((piece / b->cols) + 0.5f) * b->cell;
   float rx, ry;
-  board_rotvec(rot, lx, ly, &rx, &ry);
+  board_rotvec(rot, b->geo->center[2 * piece], b->geo->center[2 * piece + 1], &rx, &ry);
   g->rot = rot & 3;
   g->x = cx - rx;
   g->y = cy - ry;
@@ -98,7 +94,7 @@ void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h)
     }
     // Pieces with tabs are ~1.7 cells across; jitter within whatever slack is left, but
     // always a little so it doesn't look like a grid
-    float slack = (slot - b->cell * 1.7f) / 2;
+    float slack = (slot - b->geo->cell * 1.7f) / 2;
     if(slack < slot * 0.08f) slack = slot * 0.08f;
     float offx = x + (w - scols * slot) / 2;
     float offy = y + (h - srows * slot) / 2;
@@ -122,14 +118,11 @@ int32_t board_pick(Board * b, float x, float y) {
   for(int32_t i = (int32_t)b->ngroups - 1; i >= 0; i--) {
     uint16_t gid = b->order[i];
     BoardGroup * g = b->groups + gid;
-    // Undo the group transform to land in grid space
+    // Undo the group transform to land in the puzzle frame
     float lx, ly;
     board_rotvec((4 - g->rot) & 3, x - g->x, y - g->y, &lx, &ly);
-    if(lx < 0 || ly < 0) continue;
-    uint32_t col = (uint32_t)(lx / b->cell);
-    uint32_t row = (uint32_t)(ly / b->cell);
-    if(col >= b->cols || row >= b->rows) continue;
-    if(b->pieces[row * b->cols + col].group == gid) return gid;
+    int32_t p = piecegeo_at(b->geo, lx, ly);
+    if(p >= 0 && b->pieces[p].group == gid) return gid;
   }
   return -1;
 }
@@ -192,16 +185,8 @@ static int32_t board_find_merge(Board * b, uint16_t gid, float snap) {
   BoardGroup * g = b->groups + gid;
   float snap2 = snap * snap;
   for(uint16_t p = g->first; p != BOARD_NONE; p = b->pieces[p].next) {
-    uint32_t col = p % b->cols, row = p / b->cols;
-    int32_t nb[4] = {
-      row > 0 ? (int32_t)(p - b->cols) : -1,
-      row + 1 < b->rows ? (int32_t)(p + b->cols) : -1,
-      col > 0 ? (int32_t)(p - 1) : -1,
-      col + 1 < b->cols ? (int32_t)(p + 1) : -1,
-    };
-    for(int i = 0; i < 4; i++) {
-      if(nb[i] < 0) continue;
-      uint16_t hid = b->pieces[nb[i]].group;
+    for(uint32_t i = b->geo->nbstart[p]; i < b->geo->nbstart[p + 1]; i++) {
+      uint16_t hid = b->pieces[b->geo->nb[i]].group;
       if(hid == gid) continue;
       BoardGroup * h = b->groups + hid;
       if(h->rot != g->rot) continue;
@@ -278,8 +263,7 @@ int board_marked_bounds(Board * b, const uint8_t * mark, float * x0, float * y0,
 void board_piece_center(Board * b, uint16_t piece, float * x, float * y) {
   BoardGroup * g = b->groups + b->pieces[piece].group;
   float rx, ry;
-  board_rotvec(g->rot, ((piece % b->cols) + 0.5f) * b->cell,
-      ((piece / b->cols) + 0.5f) * b->cell, &rx, &ry);
+  board_rotvec(g->rot, b->geo->center[2 * piece], b->geo->center[2 * piece + 1], &rx, &ry);
   *x = g->x + rx;
   *y = g->y + ry;
 }

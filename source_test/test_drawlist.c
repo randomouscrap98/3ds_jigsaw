@@ -85,7 +85,7 @@ void test_drawlist(void) {
   const uint32_t perpage = 16 * 16;
   Board b;
   DrawList d;
-  CHECK(board_init(&b, 22, 23, cell, 22 * cell * 3, 23 * cell * 3) == 0);
+  CHECK(test_board_grid(&b, 22, 23, cell, 22 * cell * 3, 23 * cell * 3) == 0);
   CHECK(drawlist_init(&d, b.count) == 0);
   board_scatter(&b, 99, b.width * 0.165f, b.height * 0.165f, b.width * 0.67f, b.height * 0.67f);
   drawlist_build(&d, &b, pad, perpage, 0);
@@ -101,8 +101,8 @@ void test_drawlist(void) {
   rng_init(&rng, 5);
   for(int i = 0; i < 150; i++) {
     uint16_t p = rng_below(&rng, b.count);
-    uint32_t c = p % b.cols, r = p / b.cols;
-    uint16_t nb = c + 1 < b.cols ? p + 1 : (r + 1 < b.rows ? p + b.cols : p);
+    uint32_t c = p % b.geo->cols, r = p / b.geo->cols;
+    uint16_t nb = c + 1 < b.geo->cols ? p + 1 : (r + 1 < b.geo->rows ? p + b.geo->cols : p);
     BoardGroup * g = b.groups + b.pieces[p].group, * h = b.groups + b.pieces[nb].group;
     if(g == h) continue;
     h->x = g->x; h->y = g->y; h->rot = g->rot;
@@ -143,5 +143,5 @@ void test_drawlist(void) {
   printf("  fresh build, %lu groups: grid %.3f ms, all pairs %.3f ms (host)\n", (unsigned long)b.ngroups,
       build_ms(&d, &b, pad, perpage, 0), build_ms(&d, &b, pad, perpage, 1));
   drawlist_free(&d);
-  board_free(&b);
+  test_board_free(&b);
 }

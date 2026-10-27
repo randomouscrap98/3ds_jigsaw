@@ -5,6 +5,8 @@
 #include <math.h>
 #include <stdint.h>
 
+#include "board.h"
+
 extern int test_failures;
 extern int test_checks;
 
@@ -12,7 +14,12 @@ extern int test_checks;
   printf("  FAIL %s:%d: %s\n", __FILE__, __LINE__, #cond); } } while(0)
 #define CHECKF(a, b) CHECK(fabsf((float)(a) - (float)(b)) < 0.001f)
 
+// Board on a straight grid PieceGeo (allocated here, freed by test_board_free)
+int test_board_grid(Board * b, uint16_t cols, uint16_t rows, float cell, float width, float height);
+void test_board_free(Board * b);
+
 void test_board(void);
+void test_piecegeo(void);
 void test_drawlist(void);
 void test_musicdec(void);
 void test_musicdec_files(const char * dir);
