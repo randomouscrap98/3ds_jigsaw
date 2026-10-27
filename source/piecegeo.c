@@ -39,8 +39,7 @@ static void piecegeo_span(const PieceGeo * g, uint32_t p, int32_t * x0, int32_t 
   if(*y1 >= g->lh) *y1 = g->lh - 1;
 }
 
-// Build the lookup grid from the hitboxes (square size = cell). Returns 0 on success.
-static int piecegeo_index(PieceGeo * g) {
+int piecegeo_index(PieceGeo * g) {
   g->ls = g->cell;
   g->lw = (uint16_t)(g->width / g->ls) + 1;
   g->lh = (uint16_t)(g->height / g->ls) + 1;

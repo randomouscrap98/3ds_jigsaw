@@ -26,3 +26,8 @@ build_host/prescale: tools/prescale.c source/imgscale.c source/imgscale.h
 build_host/makeart: tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c source/edgegen.h source/imgscale.h
 	@mkdir -p build_host
 	$(CC) -O2 -Wall -Isource -Itools tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c -lm -o $@
+
+# Random cut preview (tools/randcut_preview.c): renders every random style at 100/250/500
+build_host/randcut_preview: tools/randcut_preview.c source/randcut.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c $(wildcard source/*.h)
+	@mkdir -p build_host
+	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/randcut_preview.c source/randcut.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c -lm -o $@

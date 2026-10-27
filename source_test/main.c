@@ -27,6 +27,7 @@ int main(int argc, char ** argv) {
   }
   RUN(test_board);
   RUN(test_piecegeo);
+  RUN(test_randcut);
   RUN(test_drawlist);
   RUN(test_musicdec);
   RUN(test_boardsave);

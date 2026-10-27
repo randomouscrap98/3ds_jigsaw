@@ -35,6 +35,10 @@ typedef struct {
 // Returns 0 on success.
 int piecegeo_grid(PieceGeo * g, uint16_t cols, uint16_t rows, float cell, const float * corners);
 void piecegeo_free(PieceGeo * g);
+// For other builders: once count, cell, width, height, center, nbstart/nb and hbstart/hb
+// are filled in (malloc'd, freed by piecegeo_free), build the lookup grid. Returns 0 on
+// success.
+int piecegeo_index(PieceGeo * g);
 // PieceGeo <-> flat byte buffer, little endian, for the piece cache (the lookup grid is
 // rebuilt on read, not stored). Layout:
 //   "PGEO" u16 version, u16 cols, u16 rows, f32 cell, f32 width, f32 height,

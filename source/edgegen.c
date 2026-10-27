@@ -18,7 +18,7 @@ const EdgeStyle * edgegen_style(uint8_t style) {
   return edgegen_styles + (style < EDGEGEN_STYLES ? style : EDGEGEN_STYLE_CLASSIC);
 }
 
-static void edgegen_random(Rng * r, const EdgeStyle * st, EdgeTab * t) {
+void edgegen_randomtab(Rng * r, const EdgeStyle * st, EdgeTab * t) {
   t->size = EDGEGEN_TABSIZE + rng_range(r, -st->tabsize, st->tabsize);
   t->a = rng_range(r, -st->shape, st->shape);
   t->b = rng_range(r, -st->shape, st->shape);
@@ -43,10 +43,10 @@ static void edgegen_reroll(EdgeGen * eg, uint32_t seed, uint16_t col, uint16_t r
   uint16_t cols = eg->cols, rows = eg->rows;
   Rng r;
   rng_init(&r, seed ^ ((uint32_t)(row * cols + col) * 2654435761u) ^ ((uint32_t)(pass + 1) * 0x9E3779B9u));
-  if(row > 0) edgegen_random(&r, &eg->style, eg->h + (row - 1) * cols + col);
-  if(row + 1 < rows) edgegen_random(&r, &eg->style, eg->h + row * cols + col);
-  if(col > 0) edgegen_random(&r, &eg->style, eg->v + row * (cols - 1) + col - 1);
-  if(col + 1 < cols) edgegen_random(&r, &eg->style, eg->v + row * (cols - 1) + col);
+  if(row > 0) edgegen_randomtab(&r, &eg->style, eg->h + (row - 1) * cols + col);
+  if(row + 1 < rows) edgegen_randomtab(&r, &eg->style, eg->h + row * cols + col);
+  if(col > 0) edgegen_randomtab(&r, &eg->style, eg->v + row * (cols - 1) + col - 1);
+  if(col + 1 < cols) edgegen_randomtab(&r, &eg->style, eg->v + row * (cols - 1) + col);
   if(eg->style.corner > 0) edgegen_corners(eg, &r, col, row);
 }
 
@@ -103,8 +103,8 @@ int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, cons
   }
   Rng r;
   rng_init(&r, seed);
-  for(size_t i = 0; i < nh; i++) edgegen_random(&r, style, eg->h + i);
-  for(size_t i = 0; i < nv; i++) edgegen_random(&r, style, eg->v + i);
+  for(size_t i = 0; i < nh; i++) edgegen_randomtab(&r, style, eg->h + i);
+  for(size_t i = 0; i < nv; i++) edgegen_randomtab(&r, style, eg->v + i);
   // Corners come last so a classic cut (no jitter) is identical to before they existed
   memset(eg->corners, 0, sizeof(float) * 2 * nc);
   if(style->corner > 0) {
@@ -130,8 +130,7 @@ void edgegen_free(EdgeGen * eg) {
   eg->corners = NULL;
 }
 
-// Sample tab in edge space: out gets 3 * SEGMENTS + 1 (t, n) pairs, from t=0 to t=1.
-static int edgegen_sample(const EdgeTab * tab, float * out) {
+int edgegen_tabcurve(const EdgeTab * tab, float * out) {
   if(!tab) {
     out[0] = 0; out[1] = 0;
     out[2] = 1; out[3] = 0;
@@ -172,7 +171,7 @@ static int edgegen_sample(const EdgeTab * tab, float * out) {
 static int edgegen_side(const EdgeTab * tab, int reverse, int vertical, float cell,
     float ax, float ay, float bx, float by, float * xy) {
   float pts[(3 * EDGEGEN_SEGMENTS + 1) * 2];
-  int n = edgegen_sample(tab, pts);
+  int n = edgegen_tabcurve(tab, pts);
   float ux = bx - ax, uy = by - ay;
   float len = sqrtf(ux * ux + uy * uy);
   float nx = -uy / len, ny = ux / len;
@@ -234,10 +233,14 @@ static float edgegen_dist2(const float * p, const float * a, const float * b) {
 int edgegen_piece_ok(const EdgeGen * eg, uint16_t col, uint16_t row) {
   float xy[EDGEGEN_MAXPOINTS * 2];
   int n = edgegen_outline(eg, col, row, 1.0f, 0, 0, xy);
-  const float lo = -eg->style.reach, hi = 1 + eg->style.reach, cl = EDGEGEN_CLEARANCE;
+  const float lo = -eg->style.reach, hi = 1 + eg->style.reach;
   for(int i = 0; i < n; i++) {
     if(xy[i * 2] < lo || xy[i * 2] > hi || xy[i * 2 + 1] < lo || xy[i * 2 + 1] > hi) return 0;
   }
+  return edgegen_shape_ok(xy, n, EDGEGEN_CLEARANCE);
+}
+
+int edgegen_shape_ok(const float * xy, int n, float cl) {
   for(int i = 0; i < n; i++) {
     const float * a = xy + i * 2, * b = xy + ((i + 1) % n) * 2;
     for(int j = i + 2; j < n; j++) {

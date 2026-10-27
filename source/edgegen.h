@@ -1,6 +1,8 @@
 #ifndef __HEADER_JIGSAW_EDGEGEN__
 #define __HEADER_JIGSAW_EDGEGEN__
 
+#include "rng.h"
+
 #include <stdint.h>
 
 #define EDGEGEN_SEGMENTS 8   // Line segments per bezier curve (3 curves per tab)
@@ -56,6 +58,15 @@ int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, cons
 void edgegen_free(EdgeGen * eg);
 // 1 if the piece's outline passes the checks above
 int edgegen_piece_ok(const EdgeGen * eg, uint16_t col, uint16_t row);
+// 1 if closed outline xy (n points) doesn't cross itself or come closer than cl to another
+// part of itself (points within EDGEGEN_CLEARSKIP along the outline aren't checked)
+int edgegen_shape_ok(const float * xy, int n, float cl);
+
+// Building blocks for other cuts (randcut). Random tab shape for a style:
+void edgegen_randomtab(Rng * r, const EdgeStyle * st, EdgeTab * t);
+// Sample a tab (NULL = straight) in edge space: out gets 3 * EDGEGEN_SEGMENTS + 1 (t, n)
+// pairs from t = 0 to t = 1 (n in edge-length units, flip applied). Returns the count.
+int edgegen_tabcurve(const EdgeTab * tab, float * out);
 // Closed outline of piece (col, row), clockwise (y down), in coordinates where the
 // piece's cell spans (ox, oy) to (ox + cell, oy + cell). xy must hold EDGEGEN_MAXPOINTS
 // pairs. Returns number of points. Neighbouring pieces' outlines share edges exactly.
