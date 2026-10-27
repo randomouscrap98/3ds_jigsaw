@@ -201,8 +201,19 @@ static int game_release(Game * g) {
   return ev;
 }
 
-int game_update(Game * g, const GameInput * in) {
+int game_update(Game * g, const GameInput * gin) {
   int ev = 0;
+  // While the modifier is held the buttons do only their modifier jobs; the sticks and
+  // the stylus keep working as usual
+  GameInput fin = *gin;
+  const GameInput * in = &fin;
+  if(gin->held & GAME_MODKEY) {
+    if(gin->down & GAME_MOD_SKIPSONG) ev |= GAME_EV_SKIPSONG;
+    const u32 keep = KEY_TOUCH | GAME_MODKEY;
+    fin.down &= keep;
+    fin.held &= keep;
+    fin.repeat &= keep;
+  }
   Camera * c = &g->cam;
   u64 now = osGetTime();
   u64 dt = now - g->lastframe;
@@ -210,7 +221,7 @@ int game_update(Game * g, const GameInput * in) {
   g->lastframe = now;
   if(!board_complete(&g->board)) g->playms += dt;
   // Info overlay fades in while Y is held, out when let go
-  g->overlay += (in->held & KEY_Y ? 1.0f : -1.0f) * dt / GAME_OVERLAY_FADE_MS;
+  g->overlay += (in->held & GAME_MODKEY ? 1.0f : -1.0f) * dt / GAME_OVERLAY_FADE_MS;
   if(g->overlay < 0) g->overlay = 0;
   if(g->overlay > 1) g->overlay = 1;
 

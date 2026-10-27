@@ -39,6 +39,10 @@
 #define GAME_EV_MERGE    (1 << 0)
 #define GAME_EV_COMPLETE (1 << 1)
 #define GAME_EV_EXIT     (1 << 2)
+#define GAME_EV_SKIPSONG (1 << 3)
+
+#define GAME_MODKEY KEY_Y  // Modifier: held = overlay, buttons switch to the second set below
+#define GAME_MOD_SKIPSONG KEY_X
 
 // Input for one frame, gathered by the caller
 typedef struct {

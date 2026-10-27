@@ -91,9 +91,11 @@ static void app_start_game(App * app, PuzzleChoice choice) {
     return;
   }
   app->mode = MODE_GAME;
+  music_play(&app->music);
 }
 
 static void app_end_game(App * app) {
+  music_stop(&app->music);  // Fades out; the thread frees the decoder within a DSP frame (~5 ms)
   game_free(&app->game);
   app->mode = MODE_MENU;
   savewriter_flush(&app->writer);  // The menu reads saves back
@@ -151,6 +153,7 @@ int main(int argc, char ** argv) {
       main_smooth(&pf->update, main_ms(svcGetSystemTick() - tu));
       if(ev & GAME_EV_MERGE) sfx_play(&app.sfx, SFX_MERGE);
       if(ev & GAME_EV_COMPLETE) sfx_play_later(&app.sfx, SFX_COMPLETE, MAIN_CHIME_DELAY);
+      if(ev & GAME_EV_SKIPSONG) music_skip(&app.music);
       if(ev & GAME_EV_EXIT) app_end_game(&app);
     }
 
