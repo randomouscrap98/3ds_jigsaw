@@ -46,6 +46,7 @@
 #define GAME_MODKEY KEY_Y  // Modifier: held = overlay, buttons switch to the second set below
 #define GAME_MOD_SKIPSONG KEY_X
 #define GAME_MOD_MUSICMODE KEY_A  // Cycles off -> in order -> shuffled
+#define GAME_MOD_CONDENSE KEY_SELECT  // Squish the selection into a tidy block
 #define GAME_MOD_KEEPKEYS (KEY_DUP | KEY_DDOWN)  // Buttons that keep working with the modifier (zoom)
 
 // Input for one frame, gathered by the caller

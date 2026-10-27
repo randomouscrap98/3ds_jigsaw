@@ -275,3 +275,85 @@ void board_piece_center(Board * b, uint16_t piece, float * x, float * y) {
 uint8_t board_piece_rot(Board * b, uint16_t piece) {
   return b->groups[b->pieces[piece].group].rot;
 }
+
+typedef struct {
+  uint16_t group;
+  float x0, y0, x1, y1;   // Bounds of its piece centers
+  int32_t band;           // Order: row band (one slot tall), then x
+  float x;
+} BoardBox;
+
+static int board_boxcmp(const void * a, const void * b) {
+  const BoardBox * p = a, * q = b;
+  if(p->band != q->band) return p->band < q->band ? -1 : 1;
+  return p->x < q->x ? -1 : p->x > q->x;
+}
+
+int board_condense_marked(Board * b, const uint8_t * mark, float slot) {
+  float cx0, cy0, cx1, cy1;
+  if(!board_marked_bounds(b, mark, &cx0, &cy0, &cx1, &cy1)) return 0;
+  BoardBox * box = malloc(sizeof(BoardBox) * b->ngroups);
+  if(!box) return 1;
+  // Each marked group's bounds (piece centers)
+  uint32_t n = 0;
+  for(uint32_t i = 0; i < b->ngroups; i++) {
+    uint16_t gid = b->order[i];
+    if(!mark[gid]) continue;
+    BoardBox * bx = box + n++;
+    bx->group = gid;
+    bx->x0 = bx->y0 = 1e30f;
+    bx->x1 = bx->y1 = -1e30f;
+    for(uint16_t p = b->groups[gid].first; p != BOARD_NONE; p = b->pieces[p].next) {
+      float x, y;
+      board_piece_center(b, p, &x, &y);
+      bx->x0 = fminf(bx->x0, x); bx->x1 = fmaxf(bx->x1, x);
+      bx->y0 = fminf(bx->y0, y); bx->y1 = fmaxf(bx->y1, y);
+    }
+    // Rough reading order: bands one slot tall, left to right within a band
+    bx->band = (int32_t)floorf((bx->y0 + bx->y1) / 2 / slot);
+    bx->x = (bx->x0 + bx->x1) / 2;
+  }
+  qsort(box, n, sizeof(BoardBox), board_boxcmp);
+  // Rows about as wide as the block is tall (in whole slots, so n loose pieces make a
+  // ceil(sqrt(n)) wide square): each piece center gets a slot around it
+  float area = 0, widest = 0;
+  for(uint32_t i = 0; i < n; i++) {
+    float w = box[i].x1 - box[i].x0 + slot, h = box[i].y1 - box[i].y0 + slot;
+    area += w * h;
+    widest = fmaxf(widest, w);
+  }
+  float rowmax = fmaxf(ceilf(sqrtf(area) / slot - 1e-3f) * slot, widest);
+  // Lay out (block's top-left at 0,0), remembering where each box's top-left goes
+  float * at = malloc(sizeof(float) * 2 * (n ? n : 1));
+  if(!at) {
+    free(box);
+    return 1;
+  }
+  float x = 0, y = 0, rowh = 0, blockw = 0;
+  for(uint32_t i = 0; i < n; i++) {
+    float w = box[i].x1 - box[i].x0 + slot, h = box[i].y1 - box[i].y0 + slot;
+    if(x > 0 && x + w > rowmax) {
+      y += rowh;
+      x = 0;
+      rowh = 0;
+    }
+    at[2 * i] = x;
+    at[2 * i + 1] = y;
+    x += w;
+    rowh = fmaxf(rowh, h);
+    blockw = fmaxf(blockw, x);
+  }
+  float blockh = y + rowh;
+  // Centered on the selection, but kept on the table when it fits
+  float ox = (cx0 + cx1) / 2 - blockw / 2, oy = (cy0 + cy1) / 2 - blockh / 2;
+  if(blockw <= b->width) ox = fminf(fmaxf(ox, 0), b->width - blockw);
+  if(blockh <= b->height) oy = fminf(fmaxf(oy, 0), b->height - blockh);
+  for(uint32_t i = 0; i < n; i++) {
+    // The box's first piece center sits half a slot in from its corner
+    float tx = ox + at[2 * i] + slot / 2, ty = oy + at[2 * i + 1] + slot / 2;
+    board_move(b, box[i].group, tx - box[i].x0, ty - box[i].y0);
+  }
+  free(at);
+  free(box);
+  return 0;
+}

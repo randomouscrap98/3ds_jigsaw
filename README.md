@@ -29,6 +29,7 @@ you haven't). Without it the game just runs silently.
 | Hold Y | Show your time, progress, CPU use and the song playing |
 | Y + X | Next song |
 | Y + A | Music: off, in order, shuffled (saved with the puzzle) |
+| Y + SELECT | Squish the selection into a tidy block (it stays selected) |
 | SELECT | Change felt (saved with puzzle) |
 | START | Save and go back to the menu |
 

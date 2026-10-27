@@ -228,6 +228,17 @@ static int game_release(Game * g) {
   return ev;
 }
 
+// Squish the selected groups into a tidy block, spaced like the starting scatter, and keep
+// them selected (on top) so the block can be dragged away
+static void game_condense(Game * g) {
+  Board * b = &g->board;
+  float sw = b->width * GAME_SCATTER, sh = b->height * GAME_SCATTER;
+  if(board_condense_marked(b, g->sel, sqrtf(sw * sh / b->count))) return;
+  board_raise_marked(b, g->sel);
+  g->dldirty = 1;
+  g->dirty = 1;
+}
+
 int game_update(Game * g, const GameInput * gin) {
   int ev = 0;
   // While the modifier is held the buttons do only their modifier jobs; the sticks and
@@ -247,6 +258,7 @@ int game_update(Game * g, const GameInput * gin) {
       g->dirty = 1;
       ev |= GAME_EV_MUSICMODE;
     }
+    if((gin->down & GAME_MOD_CONDENSE) && g->nsel && g->held < 0 && !g->boxing) game_condense(g);
     const u32 keep = KEY_TOUCH | GAME_MODKEY | GAME_MOD_KEEPKEYS;
     fin.down &= keep;
     fin.held &= keep;

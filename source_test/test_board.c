@@ -145,6 +145,68 @@ void test_board(void) {
   CHECKF(b.groups[3].x, 5);
   test_board_free(&b);
 
+  // Condense: marked groups squish into a tidy block; nothing else changes
+  {
+    CHECK(test_board_grid(&b, 6, 5, 10, 600, 500) == 0);
+    board_scatter(&b, 3, 50, 50, 500, 400);
+    {   // Join pieces 0 and 1: put 1 in 0's frame and drop it
+      BoardGroup * g0 = b.groups + b.pieces[0].group;
+      place(&b, 1, g0->x, g0->y, g0->rot);
+      CHECK(board_drop(&b, b.pieces[1].group, 1) == 1);
+    }
+    uint8_t cmark[30] = {0};
+    float before[30][2];
+    uint8_t rots[30];
+    for(uint32_t p = 0; p < b.count; p++) {
+      board_piece_center(&b, p, &before[p][0], &before[p][1]);
+      rots[p] = board_piece_rot(&b, p);
+      if(p < 20) cmark[b.pieces[p].group] = 1;   // Pieces 0-19 (incl. the 0+1 chunk) selected
+    }
+    float sx0, sy0, sx1, sy1;
+    board_marked_bounds(&b, cmark, &sx0, &sy0, &sx1, &sy1);
+    const float slot = 20;
+    CHECK(board_condense_marked(&b, cmark, slot) == 0);
+    int still = 1, rotok = 1, ontable = 1, joined = b.pieces[0].group == b.pieces[1].group;
+    for(uint32_t p = 0; p < b.count; p++) {
+      float x, y;
+      board_piece_center(&b, p, &x, &y);
+      rotok &= board_piece_rot(&b, p) == rots[p];
+      if(!cmark[b.pieces[p].group]) still &= x == before[p][0] && y == before[p][1];
+      else ontable &= x >= 0 && y >= 0 && x <= b.width && y <= b.height;
+    }
+    CHECK(still && rotok && ontable && joined);
+    // No two selected groups' slots overlap (each piece center owns a slot x slot square)
+    int overlap = 0;
+    for(uint32_t p = 0; p < 20; p++) for(uint32_t q = 0; q < 20; q++) {
+      if(b.pieces[p].group == b.pieces[q].group) continue;
+      float px, py, qx, qy;
+      board_piece_center(&b, p, &px, &py);
+      board_piece_center(&b, q, &qx, &qy);
+      overlap += fabsf(px - qx) < slot - 0.01f && fabsf(py - qy) < slot - 0.01f;
+    }
+    CHECK(overlap == 0);
+    // Centered where the selection was, and much tighter than the scatter
+    float nx0, ny0, nx1, ny1;
+    board_marked_bounds(&b, cmark, &nx0, &ny0, &nx1, &ny1);
+    CHECK(fabsf((nx0 + nx1) / 2 - (sx0 + sx1) / 2) < slot && fabsf((ny0 + ny1) / 2 - (sy0 + sy1) / 2) < slot);
+    CHECK((nx1 - nx0) * (ny1 - ny0) < (sx1 - sx0) * (sy1 - sy0) / 2);
+    test_board_free(&b);
+    // Rough order kept: three loose pieces left to right stay left to right
+    CHECK(test_board_grid(&b, 3, 1, 10, 600, 500) == 0);
+    place(&b, 0, 300, 100, 0);
+    place(&b, 1, 100, 110, 0);
+    place(&b, 2, 400, 105, 0);
+    uint8_t omark[3] = { 1, 1, 1 };
+    CHECK(board_condense_marked(&b, omark, 20) == 0);
+    // 2 per row: 1 and 0 on the first row (1 left), 2 starting the second
+    float x0, x1, x2, y0, y1, y2;
+    board_piece_center(&b, 0, &x0, &y0);
+    board_piece_center(&b, 1, &x1, &y1);
+    board_piece_center(&b, 2, &x2, &y2);
+    CHECK(y0 == y1 && x1 < x0 && y2 > y0 && x2 == x1);
+    test_board_free(&b);
+  }
+
   // Raise moves a group to the top of draw order; pick prefers the top
   CHECK(test_board_grid(&b, 2, 1, 10, 100, 100) == 0);
   place(&b, 0, 0, 0, 0);

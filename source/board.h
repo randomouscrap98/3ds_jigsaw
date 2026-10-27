@@ -68,6 +68,11 @@ uint32_t board_mark_rect(Board * b, float x0, float y0, float x1, float y1, uint
 void board_raise_marked(Board * b, const uint8_t * mark);
 // Bounds of the piece centers of all marked groups. Returns 0 if nothing is marked.
 int board_marked_bounds(Board * b, const uint8_t * mark, float * x0, float * y0, float * x1, float * y1);
+// Squish the marked groups into a tidy block centered on the middle of their bounds (kept
+// on the table): rows, in their rough current order (top to bottom, then left to right),
+// each piece in a slot x slot square, chunks as big as they need. Moves only; rotations,
+// draw order and joins are unchanged. Returns 0 on success (1: out of memory, nothing moved).
+int board_condense_marked(Board * b, const uint8_t * mark, float slot);
 
 // Utility: world-space center of a piece, plus its rotation
 void board_piece_center(Board * b, uint16_t piece, float * x, float * y);
