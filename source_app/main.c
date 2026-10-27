@@ -9,7 +9,7 @@
 #include "defaults.h"
 #include "game.h"
 #include "music.h"
-#include "picrename.h"
+#include "picfiles.h"
 #include "puzzlemenu.h"
 #include "savewriter.h"
 #include "render.h"
@@ -127,11 +127,23 @@ static void app_rename(App * app, const char * name) {
   storage_cleanbase(typed, base, sizeof(base));
   app_progress(app, "Renaming...", 0, 1);
   PicDirs dirs = { STORAGE_PUZZLES, STORAGE_SAVES, STORAGE_CACHE };
-  int r = picrename(&dirs, old, base, newname, sizeof(newname));
+  int r = picfiles_rename(&dirs, old, base, newname, sizeof(newname));
   puzzlemenu_refresh(&app->menu);
-  puzzlemenu_select(&app->menu, r == PICRENAME_OK ? newname : old);
-  if(r == PICRENAME_TAKEN) puzzlemenu_setstatus(&app->menu, "There's already a picture with that name");
+  puzzlemenu_select(&app->menu, r == PICFILES_OK ? newname : old);
+  if(r == PICFILES_TAKEN) puzzlemenu_setstatus(&app->menu, "There's already a picture with that name");
   else if(r) puzzlemenu_setstatus(&app->menu, "Couldn't rename the picture");
+}
+
+// Delete a picture with its save and caches (the menu already asked)
+static void app_delete(App * app, const char * name) {
+  char old[PMENU_MAXNAME];
+  snprintf(old, sizeof(old), "%s", name);   // name is in the menu's list, which refresh frees
+  puzzlemenu_waitidle(&app->menu);          // The thumbnail thread may be reading the picture
+  savewriter_flush(&app->writer);
+  PicDirs dirs = { STORAGE_PUZZLES, STORAGE_SAVES, STORAGE_CACHE };
+  int r = picfiles_delete(&dirs, old);
+  puzzlemenu_refresh(&app->menu);           // The cursor stays put: on the next puzzle
+  if(r) puzzlemenu_setstatus(&app->menu, "Couldn't delete the picture");
 }
 
 static void app_end_game(App * app) {
@@ -191,6 +203,7 @@ int main(int argc, char ** argv) {
         app.mode = MODE_UPLOAD;
       }
       if(choice.name && choice.rename) app_rename(&app, choice.name);
+      else if(choice.name && choice.del) app_delete(&app, choice.name);
       else if(choice.name) app_start_game(&app, choice);
     } else if(app.mode == MODE_UPLOAD) {
       if(upload_update(&app.upload, in.down)) {

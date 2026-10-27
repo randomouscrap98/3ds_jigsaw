@@ -18,29 +18,34 @@ void textdraw_begin(TextDraw * td) {
   C2D_TextBufClear(td->buf);
 }
 
-static void textdraw_draw(TextDraw * td, float x, float y, float scale, u32 color, int center,
+static void textdraw_draw(TextDraw * td, float x, float y, float scale, u32 color, u32 align,
     const char * fmt, va_list args) {
   char line[TEXTDRAW_MAXLINE];
   vsnprintf(line, sizeof(line), fmt, args);
   C2D_Text text;
   if(!C2D_TextParse(&text, td->buf, line)) return;
   C2D_TextOptimize(&text);
-  u32 flags = C2D_WithColor;
-  if(center) flags |= C2D_AlignCenter;
-  C2D_DrawText(&text, flags, x, y, 0.9f, scale, scale, color);
+  C2D_DrawText(&text, C2D_WithColor | align, x, y, 0.9f, scale, scale, color);
 }
 
 void textdraw_print(TextDraw * td, float x, float y, float scale, u32 color, const char * fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  textdraw_draw(td, x, y, scale, color, 0, fmt, args);
+  textdraw_draw(td, x, y, scale, color, C2D_AlignLeft, fmt, args);
   va_end(args);
 }
 
 void textdraw_center(TextDraw * td, float x, float y, float scale, u32 color, const char * fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  textdraw_draw(td, x, y, scale, color, 1, fmt, args);
+  textdraw_draw(td, x, y, scale, color, C2D_AlignCenter, fmt, args);
+  va_end(args);
+}
+
+void textdraw_right(TextDraw * td, float x, float y, float scale, u32 color, const char * fmt, ...) {
+  va_list args;
+  va_start(args, fmt);
+  textdraw_draw(td, x, y, scale, color, C2D_AlignRight, fmt, args);
   va_end(args);
 }
 

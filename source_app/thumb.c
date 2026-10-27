@@ -2,6 +2,7 @@
 #include "imageload.h"
 #include "imgscale.h"
 #include "overlay.h"
+#include "picfiles.h"
 #include "swizzle.h"
 #include "texutil.h"
 
@@ -81,9 +82,19 @@ static void thumb_thread(void * arg) {
         t->donegen = gen;
         buf = NULL;
       }
-      t->busy = 0;
       LightLock_Unlock(&t->lock);
       free(buf);  // Stale: a newer request came in while decoding
+      // Then the disk use (path is <puzzles>/<name>)
+      const char * name = strrchr(path, '/');
+      PicDirs dirs = { STORAGE_PUZZLES, STORAGE_SAVES, STORAGE_CACHE };
+      uint64_t bytes = name ? picfiles_size(&dirs, name + 1) : 0;
+      LightLock_Lock(&t->lock);
+      if(t->want == gen) {
+        t->resultbytes = bytes;
+        t->bytesgen = gen;
+      }
+      t->busy = 0;
+      LightLock_Unlock(&t->lock);
     }
     if(t->quit) return;
   }
@@ -127,7 +138,10 @@ void thumb_request(Thumb * t, const char * path, u8 overlay) {
   t->want++;
   LightLock_Unlock(&t->lock);
   if(same) t->refresh = 1;
-  else t->state = THUMB_LOADING;
+  else {
+    t->state = THUMB_LOADING;
+    t->hasbytes = 0;
+  }
   LightEvent_Signal(&t->wake);
 }
 
@@ -142,6 +156,8 @@ void thumb_clear(Thumb * t, int wait) {
   LightLock_Unlock(&t->lock);
   t->state = THUMB_NONE;
   t->refresh = 0;
+  t->hasbytes = 0;
+  t->bytesgen = 0;
   while(wait && t->busy) svcSleepThread(2 * 1000 * 1000);  // 2ms
   if(wait) {
     // Idle with nothing to do: the kept picture can go too (its memory is wanted)
@@ -151,8 +167,17 @@ void thumb_clear(Thumb * t, int wait) {
 }
 
 int thumb_poll(Thumb * t) {
-  if(t->state != THUMB_LOADING && !t->refresh) return t->state;
+  if(t->state == THUMB_NONE) return t->state;
   LightLock_Lock(&t->lock);
+  if(t->bytesgen && t->bytesgen == t->want) {
+    t->bytes = t->resultbytes;
+    t->hasbytes = 1;
+    t->bytesgen = 0;
+  }
+  if(t->state != THUMB_LOADING && !t->refresh) {
+    LightLock_Unlock(&t->lock);
+    return t->state;
+  }
   if(t->donegen == t->want) {
     if(t->result) {
       memcpy(t->tex.data, t->result, t->tex.size);

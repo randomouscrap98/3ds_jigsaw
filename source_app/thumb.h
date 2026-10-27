@@ -20,7 +20,8 @@
 // A small picture of one image, decoded on a background thread, with a picture overlay
 // (OVERLAY_*) on it. Only the latest request matters: older ones still decoding are thrown
 // away when they finish. The worker keeps the last picture it decoded (plain), so asking
-// for the same picture with another overlay doesn't decode it again.
+// for the same picture with another overlay doesn't decode it again. After the picture, the
+// worker adds up the puzzle's disk use (picture + save + caches, picfiles_size).
 typedef struct {
   Thread thread;
   LightLock lock;
@@ -37,9 +38,13 @@ typedef struct {
   u32 taken;                    // Generation the worker last picked up
   u32 donegen;                  // Generation of result (0 = no result)
   uint32_t * result;            // Owned; swizzled THUMB_TEXW x THUMB_TEXH, NULL = failed
+  uint64_t resultbytes;         // Disk use, for generation bytesgen (0 = none yet)
+  u32 bytesgen;
   u16 resultw, resulth;
   u8 state;                     // THUMB_*, main thread only
   u8 refresh;                   // Main thread: READY, but a new overlay of it is on the way
+  uint64_t bytes;               // Main thread: the puzzle's disk use (valid when hasbytes)
+  u8 hasbytes;
   volatile u8 busy;
   volatile u8 quit;
   u8 running;

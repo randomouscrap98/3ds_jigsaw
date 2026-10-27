@@ -65,7 +65,8 @@ press B. Only one picture travels at a time; anyone on your network could reach 
 while that screen is open.
 
 To rename a picture later, pick it and choose **Rename picture**; its saved game and progress
-come along.
+come along. **Delete puzzle** removes the picture with its saved game and cached pieces (it
+asks first). The space a puzzle takes is shown in the corner of the top screen.
 
 Black and white pictures or line art? Set **Overlay** to **Hologram** when you start the
 puzzle: a soft color wash across the picture (blue, pink, green and yellow corners) gives

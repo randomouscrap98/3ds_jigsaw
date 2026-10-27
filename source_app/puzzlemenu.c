@@ -48,6 +48,25 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
   return &pm->confirm;
 }
 
+// Delete always asks; the yes line says what goes with it
+static tui_menu * puzzlemenu_create_delconfirm(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
+  PuzzleMenu * pm = data->ptr;
+  int sel = pm->root.current - PMENU_FIRST;
+  if(sel < 0 || sel >= pm->nentries) return NULL;
+  PuzzleEntry * e = pm->entries + sel;
+  char * yes = pm->delconfirm.items[1].name;
+  size_t len = sizeof(pm->delconfirm.items[1].name);
+  if(!e->hassave) snprintf(yes, len, "Yes, delete it");
+  else if(e->save.groups <= 1) snprintf(yes, len, "Yes, delete it and its finished save");
+  else {
+    char time[16];
+    textdraw_fmttime(time, sizeof(time), e->save.header.seconds);
+    snprintf(yes, len, "Yes, delete it and its save (%lu left, %s)", (unsigned long)e->save.groups, time);
+  }
+  tui_menu_reset_ui(&pm->delconfirm);
+  return &pm->delconfirm;
+}
+
 // Overlay the picture should show: the save's on its Continue line, otherwise the setting
 static u8 puzzlemenu_thumboverlay(PuzzleMenu * pm, const PuzzleEntry * e) {
   int opt = pm->options.current;
@@ -112,6 +131,13 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     TUIMITEM_BASIC(&pm->options, err, "Rename picture", 0);
     pm->optact[n++] = PMENU_ACT_RENAME;
   }
+  if(!err) {
+    tui_menu_item_data * idata;
+    TUIMITEM_SUBMENU(&pm->options, err, "Delete puzzle", puzzlemenu_create_delconfirm,
+        tui_menu_submenu_destroy_existing_menu, idata, 0);
+    if(!err) idata->ptr = pm;
+    pm->optact[n++] = PMENU_ACT_NONE;   // Acted on from delconfirm
+  }
   return err ? NULL : &pm->options;
 }
 
@@ -138,8 +164,10 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
         tui_menu_submenu_destroy_existing_menu, idata, 0);
     if(!err) idata->ptr = pm;
   }
-  // The cursor starts on the first puzzle, not on "Add pictures"
+  // The cursor starts on the first puzzle, not on "Add pictures"; past the end (the last
+  // one was deleted) it goes to the new last one
   if(cur <= 0 && pm->nentries) cur = PMENU_FIRST;
+  if(cur >= pm->nentries + PMENU_FIRST) cur = pm->nentries + PMENU_FIRST - 1;
   if(cur > 0) {
     tui_menu_run(&pm->root, (tui_menu_action) { .action = TUIMENU_ACTION_POSITION, .offset = cur });
   }
@@ -186,15 +214,19 @@ int puzzlemenu_init(PuzzleMenu * pm) {
   tui_menu_init(&pm->root, PMENU_HEIGHT);
   tui_menu_init(&pm->options, PMENU_HEIGHT);
   tui_menu_init(&pm->confirm, PMENU_HEIGHT);
+  tui_menu_init(&pm->delconfirm, PMENU_HEIGHT);
   pm->root.valuewidth = 0;
   pm->options.valuewidth = PMENU_VALUEWIDTH;
   pm->confirm.valuewidth = 0;
+  pm->delconfirm.valuewidth = 0;
   pm->music = PMENU_MUSIC_DEFAULT;
   pm->pieces = PMENU_PIECES_DEFAULT;
   thumb_init(&pm->thumb);  // On failure there's just no picture
   int err = 0;
   TUIMITEM_BASIC(&pm->confirm, err, "No, keep my save", 1);
   if(!err) TUIMITEM_BASIC(&pm->confirm, err, "Yes, erase it and start over", 0);  // Reworded on open
+  if(!err) TUIMITEM_BASIC(&pm->delconfirm, err, "No, keep it", 1);
+  if(!err) TUIMITEM_BASIC(&pm->delconfirm, err, "Yes, delete it", 0);           // Reworded on open
   if(err) return err;
   return puzzlemenu_refresh(pm);
 }
@@ -204,6 +236,7 @@ void puzzlemenu_free(PuzzleMenu * pm) {
   tui_menu_free(&pm->root);
   tui_menu_free(&pm->options);
   tui_menu_free(&pm->confirm);
+  tui_menu_free(&pm->delconfirm);
   free(pm->entries);
   pm->entries = NULL;
 }
@@ -283,6 +316,15 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     return choice;
   }
   if(ent < 0 || ent >= pm->nentries) return choice;
+  if(active == &pm->delconfirm) {
+    if(pm->delconfirm.current != 1) return choice;
+    choice.name = pm->entries[ent].name;
+    choice.del = 1;
+    thumb_clear(&pm->thumb, 0);  // Caller waits (puzzlemenu_waitidle) before deleting
+    tui_menu_reset(&pm->root);
+    tui_menu_run(&pm->root, (tui_menu_action) { .action = TUIMENU_ACTION_POSITION, .offset = sel });
+    return choice;
+  }
   int opt = pm->options.current;
   // Accepted inside options (no save, so no confirm) or "Yes" inside confirm
   if(active == &pm->options || (active == &pm->confirm && pm->confirm.current == 1)) {
@@ -309,9 +351,17 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   const u32 selbg = C2D_Color32(240, 200, 90, 255), title = C2D_Color32(240, 200, 90, 255);
   tui_menu * active = puzzlemenu_active(pm);
   const char * heading = active == &pm->root ? "Pick a puzzle" :
-      active == &pm->options ? pm->entries[pm->root.current - PMENU_FIRST].name : "Erase the saved game?";
-  int hlen = active == &pm->options ? puzzlemenu_namelen(heading) : (int)strlen(heading);
-  textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
+      active == &pm->confirm ? "Erase the saved game?" : pm->entries[pm->root.current - PMENU_FIRST].name;
+  int hlen = active == &pm->root || active == &pm->confirm ? (int)strlen(heading) : puzzlemenu_namelen(heading);
+  if(active == &pm->delconfirm) textdraw_print(td, 10, 6, 0.6f, title, "Delete %.*s?", hlen, heading);
+  else textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
+  // The puzzle's disk use (picture + save + caches), small in the corner like the version
+  if(active != &pm->root && pm->thumb.hasbytes) {
+    uint64_t b = pm->thumb.bytes;
+    const u32 dim = C2D_Color32(140, 140, 140, 255);
+    if(b < 1000 * 1024) textdraw_right(td, 394, 224, 0.4f, dim, "%lu KB", (unsigned long)((b + 1023) / 1024));
+    else textdraw_right(td, 394, 224, 0.4f, dim, "%.1f MB", b / (1024.0 * 1024.0));
+  }
   char line[PMENU_WIDTH + 1];
   for(int i = 0; i < PMENU_HEIGHT; i++) {
     tui_menu_renderline(&pm->root, line, PMENU_WIDTH, i);

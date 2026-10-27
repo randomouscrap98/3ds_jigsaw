@@ -24,6 +24,9 @@ void textdraw_print(TextDraw * td, float x, float y, float scale, u32 color, con
 // Same but horizontally centered on x
 void textdraw_center(TextDraw * td, float x, float y, float scale, u32 color, const char * fmt, ...)
   __attribute__((format(printf, 6, 7)));
+// Same but ending at x
+void textdraw_right(TextDraw * td, float x, float y, float scale, u32 color, const char * fmt, ...)
+  __attribute__((format(printf, 6, 7)));
 
 // Text in the box from x to x + w on the top screen. Fits: centered. Too long: rolls
 // left forever (scroll = pixels moved so far), clipped to the box. Ends the current

@@ -16,7 +16,8 @@
 #define PMENU_PIECES_NAMES "50\n100\n250\n500"  // Same as pmenu_counts in puzzlemenu.c
 #define PMENU_PIECES_DEFAULT 1                  // 100
 #define PMENU_FIRST 1        // List items before the puzzles ("Add pictures over Wi-Fi")
-#define PMENU_MAXOPTS 8      // Continue, Pieces, Piece style, Whimsies, Overlay, Music, Start new puzzle, Rename
+#define PMENU_MAXOPTS 9      // Continue, Pieces, Piece style, Whimsies, Overlay, Music, Start new puzzle, Rename,
+                             // Delete
 #define PMENU_ACT_CONTINUE 0
 #define PMENU_ACT_NEW 0xFFFFFFFE
 #define PMENU_ACT_RENAME 0xFFFFFFFD
@@ -46,15 +47,18 @@ typedef struct {
   uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
   u8 upload;            // "Add pictures over Wi-Fi" was picked
   u8 rename;            // "Rename picture" was picked (name is the picture)
+  u8 del;               // "Delete puzzle" was confirmed (name is the picture)
   u8 quit;
 } PuzzleChoice;
 
-// Puzzle list -> options (continue / new-puzzle settings / start new) -> confirm overwrite,
-// using littlemenu.
+// Puzzle list -> options (continue / new-puzzle settings / start new / rename / delete) ->
+// confirm overwrite or delete, using littlemenu. While the options are open, the bottom
+// screen shows the picture and the top screen the puzzle's disk use (both from thumb).
 typedef struct {
   tui_menu root;
   tui_menu options;
   tui_menu confirm;
+  tui_menu delconfirm;                   // "Delete this puzzle?"
   PuzzleEntry * entries;
   int nentries;
   uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
