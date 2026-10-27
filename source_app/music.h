@@ -34,8 +34,9 @@ typedef struct {
   s16 * pcm;            // MUSIC_BUFS * MUSIC_FRAMES stereo frames, linear memory
   ndspWaveBuf wave[MUSIC_BUFS];
   char name[MUSIC_MAXNAME];  // File playing now ("" = nothing)
-  u64 busy;             // System ticks spent decoding, total
-  u64 busyseen;         // busy at the last music_busy call
+  u64 busy;             // System ticks spent decoding, total (not counting file reads)
+  u64 sdbusy;           // System ticks spent in file reads, total (MP3 / FLAC only)
+  u64 busyseen, sdseen; // Totals at the last music_busy call
 } Music;
 
 // ndspok: ndsp was initialized (sfx_init succeeded). Call music_free before ndspExit.
@@ -48,7 +49,8 @@ void music_setmode(Music * m, int mode);
 void music_skip(Music * m);
 // Copy the current file name (may be "")
 void music_name(Music * m, char * out, size_t len);
-// System ticks spent decoding since the last call
-u64 music_busy(Music * m);
+// System ticks spent decoding and reading files since the last call (Ogg reads count
+// as decoding: stb_vorbis reads its file itself)
+void music_busy(Music * m, u64 * decode, u64 * sd);
 
 #endif

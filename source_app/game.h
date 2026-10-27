@@ -62,6 +62,7 @@ typedef struct {
   float update;           // game_update
   float bottom;           // game_render_bottom (table + pieces)
   float music;            // Music thread decoding, per frame
+  float musicsd;          // Music thread waiting on file reads, per frame
   char song[256];         // Music file playing ("" = none)
   uint32_t drawn, texswaps;
   float build;            // Last drawlist rebuild (not smoothed)

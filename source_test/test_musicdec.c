@@ -14,8 +14,12 @@ void test_musicdec(void) {
   CHECK(musicdec_kind("d.wav") == MUSICDEC_NONE);
   CHECK(musicdec_kind("noext") == MUSICDEC_NONE);
   MusicDec d;
-  CHECK(musicdec_open(&d, "/nonexistent/x.mp3", MUSICDEC_MP3) != 0);
+  CHECK(musicdec_open(&d, "/nonexistent/x.mp3", MUSICDEC_MP3, NULL) != 0);
   CHECK(d.kind == MUSICDEC_NONE);
+}
+
+static uint64_t test_clock(void) {
+  return (uint64_t)clock();
 }
 
 // Decode the files from tools/make_music_tests.sh; also prints decode speed
@@ -32,7 +36,7 @@ void test_musicdec_files(const char * dir) {
   for(size_t i = 0; i < sizeof(files) / sizeof(files[0]); i++) {
     snprintf(path, sizeof(path), "%s/%s", dir, files[i].name);
     MusicDec d;
-    int r = musicdec_open(&d, path, musicdec_kind(files[i].name));
+    int r = musicdec_open(&d, path, musicdec_kind(files[i].name), test_clock);
     if(!files[i].ok) {
       // Junk may "open" (MP3 sync words turn up in random data) but must give ~no audio
       uint64_t frames = 0;
@@ -60,9 +64,9 @@ void test_musicdec_files(const char * dir) {
     }
     double s = (double)(clock() - t) / CLOCKS_PER_SEC;
     double secs = (double)frames / d.rate;
-    printf("  %-14s %lu ch %lu Hz, %.2f s, peak %d, decoded at %.0fx real time (host)\n",
+    printf("  %-14s %lu ch %lu Hz, %.2f s, peak %d, decoded at %.0fx real time, reads %.1f%% (host)\n",
         files[i].name, (unsigned long)d.channels, (unsigned long)d.rate, secs, peak,
-        s > 0 ? secs / s : 0.0);
+        s > 0 ? secs / s : 0.0, s > 0 ? 100.0 * d.readtime / CLOCKS_PER_SEC / s : 0.0);
     CHECK(secs > TEST_MUSIC_SECONDS - 0.1 && secs < TEST_MUSIC_SECONDS + 0.1);
     CHECK(peak > 1000);  // ffmpeg's sine is 1/8 scale, less after stereo mixing
     musicdec_close(&d);

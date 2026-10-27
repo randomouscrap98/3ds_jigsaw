@@ -406,9 +406,9 @@ void game_render_top(Game * g, TextDraw * td) {
     const GamePerf * pf = &g->perf;
     u32 pc = C2D_Color32(170, 170, 170, a);
     int pct = pf->frame > 0 ? (int)(100 * pf->cpu / pf->frame) : 0;
-    int mpct = pf->frame > 0 ? (int)(100 * pf->music / pf->frame) : 0;
-    textdraw_center(td, 200, 128, 0.45f, pc, "CPU %.1f ms (%d%%)  music %.1f ms (%d%%)",
-        pf->cpu, pct, pf->music, mpct);
+    int mpct = pf->frame > 0 ? (int)(100 * (pf->music + pf->musicsd) / pf->frame) : 0;
+    textdraw_center(td, 200, 128, 0.45f, pc, "CPU %.1f ms (%d%%)  music %.1f+%.1fms (%d%%)",
+        pf->cpu, pct, pf->music, pf->musicsd, mpct);
     // Song name rolls if it's too long, starting over each time the song changes
     if(strcmp(g->lastsong, pf->song)) {
       snprintf(g->lastsong, sizeof(g->lastsong), "%s", pf->song);

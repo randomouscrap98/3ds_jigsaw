@@ -43,6 +43,49 @@ MusicKind musicdec_kind(const char * name) {
   return MUSICDEC_NONE;
 }
 
+// File callbacks for dr_mp3 / dr_flac (their seek origins are SET, CUR, END like stdio's)
+static size_t musicdec_fread(void * u, void * out, size_t n) {
+  MusicDec * d = u;
+  uint64_t t = d->now ? d->now() : 0;
+  size_t got = fread(out, 1, n, d->file);
+  if(d->now) d->readtime += d->now() - t;
+  return got;
+}
+
+static int musicdec_fseek(void * u, int offset, int origin) {
+  static const int whence[] = { SEEK_SET, SEEK_CUR, SEEK_END };
+  return origin >= 0 && origin <= 2 && fseek(((MusicDec *)u)->file, offset, whence[origin]) == 0;
+}
+
+static int musicdec_ftell(void * u, int64_t * pos) {
+  long p = ftell(((MusicDec *)u)->file);
+  if(p < 0) return 0;
+  *pos = p;
+  return 1;
+}
+
+static drmp3_bool32 musicdec_mp3seek(void * u, int offset, drmp3_seek_origin origin) {
+  return musicdec_fseek(u, offset, (int)origin);
+}
+
+static drmp3_bool32 musicdec_mp3tell(void * u, drmp3_int64 * pos) {
+  int64_t p;
+  if(!musicdec_ftell(u, &p)) return DRMP3_FALSE;
+  *pos = p;
+  return DRMP3_TRUE;
+}
+
+static drflac_bool32 musicdec_flacseek(void * u, int offset, drflac_seek_origin origin) {
+  return musicdec_fseek(u, offset, (int)origin);
+}
+
+static drflac_bool32 musicdec_flactell(void * u, drflac_int64 * pos) {
+  int64_t p;
+  if(!musicdec_ftell(u, &p)) return DRFLAC_FALSE;
+  *pos = p;
+  return DRFLAC_TRUE;
+}
+
 void musicdec_close(MusicDec * d) {
   if(d->mp3) {
     drmp3_uninit(MP3(d));
@@ -50,36 +93,42 @@ void musicdec_close(MusicDec * d) {
   }
   if(d->flac) drflac_close(FLAC(d));
   if(d->ogg) stb_vorbis_close(d->ogg);
-  if(d->oggfile) fclose(d->oggfile);
-  free(d->oggbuf);
+  if(d->file) fclose(d->file);
+  free(d->filebuf);
   memset(d, 0, sizeof(MusicDec));
 }
 
-int musicdec_open(MusicDec * d, const char * path, MusicKind kind) {
+int musicdec_open(MusicDec * d, const char * path, MusicKind kind, uint64_t (*now)(void)) {
   memset(d, 0, sizeof(MusicDec));
+  if(kind == MUSICDEC_NONE) return 1;
+  d->now = now;
+  d->file = fopen(path, "rb");
+  if(!d->file) return 1;
+  d->filebuf = malloc(MUSICDEC_FILEBUF);
+  if(d->filebuf) setvbuf(d->file, d->filebuf, _IOFBF, MUSICDEC_FILEBUF);
   uint32_t srcch = 0;
   if(kind == MUSICDEC_MP3) {
     d->mp3 = malloc(sizeof(drmp3));
-    if(!d->mp3) return 1;
-    if(!drmp3_init_file(MP3(d), path, &musicdec_mp3alloc)) {
+    if(!d->mp3 || !drmp3_init(MP3(d), musicdec_fread, musicdec_mp3seek, musicdec_mp3tell, NULL, d,
+        &musicdec_mp3alloc)) {
       free(d->mp3);
       d->mp3 = NULL;
+      musicdec_close(d);
       return 1;
     }
     srcch = MP3(d)->channels;
     d->rate = MP3(d)->sampleRate;
   } else if(kind == MUSICDEC_FLAC) {
-    d->flac = drflac_open_file(path, &musicdec_flacalloc);
-    if(!d->flac) return 1;
+    d->flac = drflac_open(musicdec_fread, musicdec_flacseek, musicdec_flactell, d, &musicdec_flacalloc);
+    if(!d->flac) {
+      musicdec_close(d);
+      return 1;
+    }
     srcch = FLAC(d)->channels;
     d->rate = FLAC(d)->sampleRate;
-  } else if(kind == MUSICDEC_OGG) {
-    d->oggfile = fopen(path, "rb");
-    if(!d->oggfile) return 1;
-    d->oggbuf = malloc(MUSICDEC_OGGBUF);
-    if(d->oggbuf) setvbuf(d->oggfile, d->oggbuf, _IOFBF, MUSICDEC_OGGBUF);
+  } else {
     int err = 0;
-    d->ogg = stb_vorbis_open_file(d->oggfile, 0, &err, NULL);
+    d->ogg = stb_vorbis_open_file(d->file, 0, &err, NULL);
     if(!d->ogg) {
       musicdec_close(d);
       return 1;
@@ -88,8 +137,6 @@ int musicdec_open(MusicDec * d, const char * path, MusicKind kind) {
     // stb_vorbis mixes anything over 2 channels down to the 2 we ask for
     srcch = info.channels > 2 ? 2 : info.channels;
     d->rate = info.sample_rate;
-  } else {
-    return 1;
   }
   d->kind = kind;
   d->channels = srcch;

@@ -127,7 +127,7 @@ static int music_opennext(Music * m, MusicPlay * p, int shuffle) {
   while(p->fails < p->nfiles) {
     const char * name = p->files[music_pick(m, p, shuffle)];
     snprintf(path, sizeof(path), "%s/%s", MUSIC_DIR, name);
-    if(musicdec_open(&p->dec, path, musicdec_kind(name))) {
+    if(musicdec_open(&p->dec, path, musicdec_kind(name), svcGetSystemTick)) {
       p->fails++;
       continue;
     }
@@ -149,11 +149,12 @@ static int music_refill(Music * m, MusicPlay * p) {
     ndspWaveBuf * w = m->wave + i;
     if(w->status != NDSP_WBUF_FREE && w->status != NDSP_WBUF_DONE) continue;
     s16 * buf = m->pcm + i * MUSIC_FRAMES * 2;
-    u64 t = svcGetSystemTick();
+    u64 t = svcGetSystemTick(), r = p->dec.readtime;
     uint32_t got = musicdec_read(&p->dec, buf, MUSIC_FRAMES);
-    u64 dt = svcGetSystemTick() - t;
+    u64 dt = svcGetSystemTick() - t, dr = p->dec.readtime - r;
     LightLock_Lock(&m->lock);
-    m->busy += dt;
+    m->busy += dt - dr;
+    m->sdbusy += dr;
     LightLock_Unlock(&m->lock);
     if(got == 0) {
       if(p->trackframes == 0) p->fails++;
@@ -295,11 +296,12 @@ void music_name(Music * m, char * out, size_t len) {
   LightLock_Unlock(&m->lock);
 }
 
-u64 music_busy(Music * m) {
+void music_busy(Music * m, u64 * decode, u64 * sd) {
   LightLock_Lock(&m->lock);
-  u64 b = m->busy;
+  u64 b = m->busy, s = m->sdbusy;
   LightLock_Unlock(&m->lock);
-  u64 d = b - m->busyseen;
+  *decode = b - m->busyseen;
+  *sd = s - m->sdseen;
   m->busyseen = b;
-  return d;
+  m->sdseen = s;
 }
