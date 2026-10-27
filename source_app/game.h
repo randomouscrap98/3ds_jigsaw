@@ -46,6 +46,7 @@
 #define GAME_MODKEY KEY_Y  // Modifier: held = overlay, buttons switch to the second set below
 #define GAME_MOD_SKIPSONG KEY_X
 #define GAME_MOD_MUSICMODE KEY_A  // Cycles off -> in order -> shuffled
+#define GAME_MOD_KEEPKEYS (KEY_DUP | KEY_DDOWN)  // Buttons that keep working with the modifier (zoom)
 
 // Input for one frame, gathered by the caller
 typedef struct {
@@ -92,7 +93,7 @@ typedef struct {
   u8 movingsel;           // held is part of the selection: the whole selection follows
   uint8_t * sel;          // Selected groups: one byte per group slot (board.count)
   uint32_t nsel;          // Number of selected groups
-  uint8_t * boxsel;       // Scratch: sel plus whatever the box being drawn covers (for display)
+  uint8_t * boxsel;       // Scratch: what the box being drawn covers (for display)
   float boxwx, boxwy;     // World point where the box started
   float boxsx, boxsy;     // Screen point where the box started
   float boxmove;          // Farthest the stylus got from the box start (pixels)

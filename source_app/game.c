@@ -167,7 +167,8 @@ static void game_movesel(Game * g, float dx, float dy) {
   }
 }
 
-// Stylus lifted while boxing: a tap toggles the group under it, a drag adds the box
+// Stylus lifted while boxing: a tap toggles the group under it, a drag replaces the
+// selection with what the box covers
 static void game_endbox(Game * g) {
   float wx, wy;
   camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
@@ -179,7 +180,8 @@ static void game_endbox(Game * g) {
       else g->nsel--;
     }
   } else {
-    g->nsel += board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->sel);
+    game_clearsel(g);
+    g->nsel = board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->sel);
   }
   g->boxing = 0;
 }
@@ -224,7 +226,7 @@ int game_update(Game * g, const GameInput * gin) {
       g->dirty = 1;
       ev |= GAME_EV_MUSICMODE;
     }
-    const u32 keep = KEY_TOUCH | GAME_MODKEY;
+    const u32 keep = KEY_TOUCH | GAME_MODKEY | GAME_MOD_KEEPKEYS;
     fin.down &= keep;
     fin.held &= keep;
     fin.repeat &= keep;
@@ -358,10 +360,10 @@ int game_update(Game * g, const GameInput * gin) {
 
 void game_render_bottom(Game * g, Render * r) {
   if(g->boxing && g->boxmove >= GAME_TAPDIST) {
-    // Show what the box would add while it's being drawn
+    // Show what the box would select while it's being drawn (it replaces the selection)
     float wx, wy;
     camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
-    memcpy(g->boxsel, g->sel, g->board.count);
+    memset(g->boxsel, 0, g->board.count);
     board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->boxsel);
     render_table(r, &g->board, &g->dl, &g->cam, &g->gfx, g->held, g->boxsel, g->table);
     render_box(&g->cam, g->boxwx, g->boxwy, wx, wy);
