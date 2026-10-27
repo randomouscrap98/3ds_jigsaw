@@ -14,6 +14,7 @@
 #define WEBUP_MAXHEAD 8192          // Request line + headers
 #define WEBUP_MAXBODY (8 << 20)     // Biggest upload (the page sends ~1024 px JPEGs: < 1 MB)
 #define WEBUP_TIMEOUT_MS 15000      // A client quiet this long is dropped
+#define WEBUP_LINGER_MS 2000        // After a response: wait this long for the client to hang up
 #define WEBUP_CHUNK 16384           // Read/write size
 #define WEBUP_FRAMEBYTES (256 << 10)  // Most bytes moved per webup_poll (keeps frames smooth)
 #define WEBUP_MSG 160

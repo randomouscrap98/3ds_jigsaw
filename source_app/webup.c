@@ -20,6 +20,9 @@
 #define WEBUP_HEAD 1    // Reading the request line and headers
 #define WEBUP_BODY 2    // Saving an upload
 #define WEBUP_SEND 3    // Sending the response
+#define WEBUP_LINGER 4  // Response sent: reading (and dropping) whatever the client still sends
+                        // until it hangs up. Closing with unread data or unsent bytes makes
+                        // some stacks reset the connection, and the browser loses the reply.
 
 #define WEBUP_MAXHEADERS 32
 
@@ -286,7 +289,9 @@ static int webup_step(WebUp * w, uint64_t now, size_t * moved) {
       left = w->extralen - done;
     }
     if(left == 0) {
-      webup_drop(w);
+      shutdown(w->csock, SHUT_WR);
+      w->state = WEBUP_LINGER;
+      w->last = now;
       return 0;
     }
     if(left > WEBUP_CHUNK) left = WEBUP_CHUNK;
@@ -299,6 +304,12 @@ static int webup_step(WebUp * w, uint64_t now, size_t * moved) {
     w->outsent += n;
     w->last = now;
     *moved = n;
+  }
+  if(w->state == WEBUP_LINGER) {
+    char buf[1024];
+    ssize_t n = recv(w->csock, buf, sizeof(buf), 0);
+    if(n == 0 || (n < 0 && !webup_wouldblock()) || now - w->last > WEBUP_LINGER_MS) webup_drop(w);
+    else if(n > 0) *moved = n;
   }
   return 0;
 }
