@@ -50,4 +50,18 @@ void test_overlay(void) {
   img = overlay_flat(w, h, 0, OVERLAY_HOLOGRAM);
   CHECK(overlay_luma(img) < 0.12f && img[2] > 10);
   free(img);
+
+  // Rainbow: gentle, brightness kept on grey; red at the top left, purple at the bottom right
+  img = overlay_flat(w, h, 128, OVERLAY_RAINBOW);
+  kept = 1;
+  for(size_t i = 0; i < (size_t)w * h; i++) {
+    float d = overlay_luma(img + i * 3) - 128 / 255.0f;
+    if(d > 0.01f || d < -0.01f) kept = 0;
+  }
+  CHECK(kept);
+  tl = img;
+  br = img + ((size_t)(h - 1) * w + w - 1) * 3;
+  CHECK(tl[0] > tl[1] && tl[0] > tl[2]);
+  CHECK(br[0] > br[1] && br[2] > br[1]);
+  free(img);
 }

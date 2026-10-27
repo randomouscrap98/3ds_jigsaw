@@ -23,7 +23,7 @@
 #define PMENU_ACT_NONE 0xFFFFFFFF
 #define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
 #define PMENU_VALUEX 200     // Pixel x of that value column (top screen)
-#define PMENU_OVERLAY_NAMES "None\nHologram"         // OVERLAY_* order
+#define PMENU_OVERLAY_NAMES "None\nHologram\nRainbow"         // OVERLAY_* order
 #define PMENU_MUSIC_NAMES "Off\nIn order\nShuffled"  // Menu order of the music modes
 #define PMENU_MUSIC_DEFAULT 1                         // In order
 #define PMENU_THUMBH THUMB_MAXH  // Bottom screen height used by the picture; controls below

@@ -1,6 +1,7 @@
 #include "thumb.h"
 #include "imageload.h"
 #include "imgscale.h"
+#include "overlay.h"
 #include "swizzle.h"
 #include "texutil.h"
 
@@ -8,25 +9,47 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Decode + shrink + swizzle into a new texture-sized buffer. NULL on any failure.
-static uint32_t * thumb_decode(const char * path, u16 * outw, u16 * outh) {
+// Decode + shrink into t->plain (worker thread), unless it already holds path. 0 = ok.
+static int thumb_decode(Thumb * t, const char * path) {
+  if(t->plain && !strcmp(t->plainpath, path)) return 0;
+  free(t->plain);
+  t->plain = NULL;
   int sw, sh;
   uint8_t * src = imageload_rgb(path, &sw, &sh, NULL, 0);
-  if(!src) return NULL;
+  if(!src) return 1;
   u16 w, h;
   imgscale_fit(sw, sh, THUMB_MAXW, THUMB_MAXH, &w, &h);
   uint8_t * small = malloc((size_t)w * h * 3);
-  uint32_t * tex = calloc(THUMB_TEXW * THUMB_TEXH, sizeof(uint32_t));
-  int ok = small && tex && !imgscale_area(src, sw, sh, 3, 0, 0, sw, sh, small, w, h);
+  int ok = small && !imgscale_area(src, sw, sh, 3, 0, 0, sw, sh, small, w, h);
   imageload_free(src);
-  if(ok) swizzle_copy_rgb(tex, THUMB_TEXW, 0, 0, small, w, h);
-  free(small);
   if(!ok) {
-    free(tex);
-    return NULL;
+    free(small);
+    return 1;
   }
-  *outw = w;
-  *outh = h;
+  t->plain = small;
+  t->plainw = w;
+  t->plainh = h;
+  snprintf(t->plainpath, sizeof(t->plainpath), "%s", path);
+  return 0;
+}
+
+// Thumbnail of path with overlay, swizzled into a new texture-sized buffer. NULL on any failure.
+static uint32_t * thumb_make(Thumb * t, const char * path, u8 overlay, u16 * outw, u16 * outh) {
+  if(thumb_decode(t, path)) return NULL;
+  size_t len = (size_t)t->plainw * t->plainh * 3;
+  uint8_t * small = malloc(len);
+  uint32_t * tex = calloc(THUMB_TEXW * THUMB_TEXH, sizeof(uint32_t));
+  if(small && tex) {
+    memcpy(small, t->plain, len);
+    overlay_apply(overlay, small, t->plainw, t->plainh);
+    swizzle_copy_rgb(tex, THUMB_TEXW, 0, 0, small, t->plainw, t->plainh);
+    *outw = t->plainw;
+    *outh = t->plainh;
+  } else {
+    free(tex);
+    tex = NULL;
+  }
+  free(small);
   return tex;
 }
 
@@ -40,6 +63,7 @@ static void thumb_thread(void * arg) {
       u32 gen = t->want;
       int work = gen != t->taken && t->path[0];
       t->taken = gen;
+      u8 overlay = t->overlay;
       if(work) {
         memcpy(path, t->path, sizeof(path));
         t->busy = 1;
@@ -47,7 +71,7 @@ static void thumb_thread(void * arg) {
       LightLock_Unlock(&t->lock);
       if(!work) break;
       u16 w = 0, h = 0;
-      uint32_t * buf = thumb_decode(path, &w, &h);
+      uint32_t * buf = thumb_make(t, path, overlay, &w, &h);
       LightLock_Lock(&t->lock);
       if(t->want == gen) {
         free(t->result);
@@ -89,16 +113,21 @@ void thumb_free(Thumb * t) {
   }
   if(t->hastex) C3D_TexDelete(&t->tex);
   free(t->result);
+  free(t->plain);
   memset(t, 0, sizeof(Thumb));
 }
 
-void thumb_request(Thumb * t, const char * path) {
+void thumb_request(Thumb * t, const char * path, u8 overlay) {
   if(!t->running || !t->hastex) return;
   LightLock_Lock(&t->lock);
+  // Same picture already showing: keep it up until the new overlay is ready
+  int same = t->state == THUMB_READY && !strcmp(t->path, path);
   snprintf(t->path, sizeof(t->path), "%s", path);
+  t->overlay = overlay;
   t->want++;
   LightLock_Unlock(&t->lock);
-  t->state = THUMB_LOADING;
+  if(same) t->refresh = 1;
+  else t->state = THUMB_LOADING;
   LightEvent_Signal(&t->wake);
 }
 
@@ -112,11 +141,17 @@ void thumb_clear(Thumb * t, int wait) {
   t->donegen = 0;
   LightLock_Unlock(&t->lock);
   t->state = THUMB_NONE;
+  t->refresh = 0;
   while(wait && t->busy) svcSleepThread(2 * 1000 * 1000);  // 2ms
+  if(wait) {
+    // Idle with nothing to do: the kept picture can go too (its memory is wanted)
+    free(t->plain);
+    t->plain = NULL;
+  }
 }
 
 int thumb_poll(Thumb * t) {
-  if(t->state != THUMB_LOADING) return t->state;
+  if(t->state != THUMB_LOADING && !t->refresh) return t->state;
   LightLock_Lock(&t->lock);
   if(t->donegen == t->want) {
     if(t->result) {
@@ -130,6 +165,7 @@ int thumb_poll(Thumb * t) {
       t->state = THUMB_FAILED;
     }
     t->donegen = 0;
+    t->refresh = 0;
   }
   LightLock_Unlock(&t->lock);
   return t->state;

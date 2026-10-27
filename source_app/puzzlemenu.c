@@ -15,7 +15,7 @@
 static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
 static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random" };  // CUT_STYLE_*
 static const char * const pmenu_whimsies[WHIMSY_LEVELS] = { "", ", few whimsies", ", many whimsies" };  // WHIMSY_*
-static const char * const pmenu_overlays[OVERLAYS] = { "", ", hologram" };  // OVERLAY_*
+static const char * const pmenu_overlays[OVERLAYS] = { "", ", hologram", ", rainbow" };  // OVERLAY_*
 
 static int puzzlemenu_isimage(const char * name) {
   const char * dot = strrchr(name, '.');
@@ -48,6 +48,15 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
   return &pm->confirm;
 }
 
+// Overlay the picture should show: the save's on its Continue line, otherwise the setting
+static u8 puzzlemenu_thumboverlay(PuzzleMenu * pm, const PuzzleEntry * e) {
+  int opt = pm->options.current;
+  if(e->hassave && opt >= 0 && opt < pm->options.numitems && pm->optact[opt] == PMENU_ACT_CONTINUE) {
+    return e->save.header.overlay;
+  }
+  return (unsigned)pm->overlay % OVERLAYS;
+}
+
 // Options are rebuilt for whichever puzzle was clicked
 static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
   PuzzleMenu * pm = data->ptr;
@@ -59,7 +68,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   char name[TUIMENU_MAXNAME];
   char path[STORAGE_MAXPATH];
   storage_puzzlepath(e->name, path);
-  thumb_request(&pm->thumb, path);
+  thumb_request(&pm->thumb, path, e->hassave ? e->save.header.overlay : (unsigned)pm->overlay % OVERLAYS);
   if(e->hassave) {
     char time[16];
     textdraw_fmttime(time, sizeof(time), e->save.header.seconds);
@@ -255,8 +264,17 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   if(act.action == TUIMENU_ACTION_ACCEPT || act.action == TUIMENU_ACTION_CANCEL) pm->status[0] = 0;
 
   tui_menu_result r = tui_menu_run(&pm->root, act);
-  // Backed out to the list: the picture goes away
+  // Backed out to the list: the picture goes away. In the options it follows the overlay.
   if(pm->thumb.state != THUMB_NONE && puzzlemenu_active(pm) == &pm->root) thumb_clear(&pm->thumb, 0);
+  int ent0 = pm->root.current - PMENU_FIRST;
+  if(pm->thumb.state != THUMB_NONE && ent0 >= 0 && ent0 < pm->nentries) {
+    u8 want = puzzlemenu_thumboverlay(pm, pm->entries + ent0);
+    if(want != pm->thumb.overlay) {
+      char path[STORAGE_MAXPATH];
+      storage_puzzlepath(pm->entries[ent0].name, path);
+      thumb_request(&pm->thumb, path, want);
+    }
+  }
   if(!(act.action & TUIMENU_ACTION_ACCEPT) || r.cancelled || r.result < 0) return choice;
   tui_menu * active = puzzlemenu_active(pm);
   int sel = pm->root.current, ent = sel - PMENU_FIRST;
