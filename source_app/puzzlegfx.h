@@ -38,11 +38,11 @@ typedef struct {
 } PuzzleGfx;
 
 // Load (from cache if valid, otherwise build + write cache). seed picks the cut, style is
-// CUT_STYLE_*, whimsy/set WHIMSY_* / WHIMSY_SET_*. The cut's piece geometry goes to geo (cached with the textures; the
+// CUT_STYLE_*, whimsy/set WHIMSY_* / WHIMSY_SET_*, overlay OVERLAY_*. The cut's piece geometry goes to geo (cached with the textures; the
 // caller frees it). On failure, a human readable reason is written to err and geo is left
 // empty. Returns 0 on success.
 int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset,
+    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay,
     progress_fn cb, void * udata, char * err, size_t errlen);
 void puzzlegfx_free(PuzzleGfx * pg);
 C2D_Image puzzlegfx_piece(PuzzleGfx * pg, uint32_t piece);

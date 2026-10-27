@@ -67,6 +67,10 @@ while that screen is open.
 To rename a picture later, pick it and choose **Rename picture**; its saved game and progress
 come along.
 
+Black and white pictures or line art? Set **Overlay** to **Hologram** when you start the
+puzzle: a soft color wash across the picture (blue, pink, green and yellow corners) gives
+every area its own tint, so pieces are easier to sort. Light and dark stay where they were.
+
 Or copy JPG, PNG or BMP files into `sdmc:/3ds/jigsaw/puzzles/` yourself. The first time you start a
 puzzle it gets cut and cached, which takes a few seconds; after that it loads quickly.
 

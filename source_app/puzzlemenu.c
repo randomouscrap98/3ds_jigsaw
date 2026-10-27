@@ -1,5 +1,6 @@
 #include "puzzlemenu.h"
 #include "cutter.h"
+#include "overlay.h"
 
 #include <citro2d.h>
 #include <ctype.h>
@@ -14,6 +15,7 @@
 static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
 static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random" };  // CUT_STYLE_*
 static const char * const pmenu_whimsies[WHIMSY_LEVELS] = { "", ", few whimsies", ", many whimsies" };  // WHIMSY_*
+static const char * const pmenu_overlays[OVERLAYS] = { "", ", hologram" };  // OVERLAY_*
 
 static int puzzlemenu_isimage(const char * name) {
   const char * dot = strrchr(name, '.');
@@ -39,9 +41,9 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
   int sel = pm->root.current - PMENU_FIRST;
   if(sel < 0 || sel >= pm->nentries || !pm->entries[sel].hassave) return NULL;
   // Say what's about to start, since the settings aren't on the line that was pressed
-  snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s%s",
+  snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s%s%s",
       (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], pmenu_styles[(unsigned)pm->style % CUT_STYLES],
-      pmenu_whimsies[(unsigned)pm->whimsy % WHIMSY_LEVELS]);
+      pmenu_whimsies[(unsigned)pm->whimsy % WHIMSY_LEVELS], pmenu_overlays[(unsigned)pm->overlay % OVERLAYS]);
   tui_menu_reset_ui(&pm->confirm);
   return &pm->confirm;
 }
@@ -80,6 +82,10 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Whimsies", &pm->whimsy, "None\nFew\nMany");
+    pm->optact[n++] = PMENU_ACT_NONE;
+  }
+  if(!err) {
+    TUIMITEM_ENUM(&pm->options, err, "Overlay", &pm->overlay, PMENU_OVERLAY_NAMES);
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
@@ -269,6 +275,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     choice.style = pm->style;
     choice.whimsy = (unsigned)pm->whimsy % WHIMSY_LEVELS;
     choice.whimsyset = WHIMSY_SET_CUTE;   // The only set for now (no menu option yet)
+    choice.overlay = (unsigned)pm->overlay % OVERLAYS;
     static const uint8_t modes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };
     choice.music = modes[(unsigned)pm->music % 3];
     thumb_clear(&pm->thumb, 0);  // Caller waits (puzzlemenu_waitidle) once Loading is showing

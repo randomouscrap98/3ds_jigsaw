@@ -75,16 +75,22 @@ void test_storage(void) {
   CHECK(!storage_iscache(n, "Wheat Field.jpg_100_w1_s1.bin"));
   // Old names are unchanged
   char old[STORAGE_MAXPATH];
-  storage_cachepath(n, 500, 2, 0, 0, old);
+  storage_cachepath(n, 500, 2, 0, 0, 0, old);
   CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_500_s2.bin"));
-  storage_cachepath(n, 48, 0, 0, 0, old);
+  storage_cachepath(n, 48, 0, 0, 0, 0, old);
   CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_48.bin"));
+  // Overlay goes last
+  storage_cachepath(n, 100, 1, 2, 1, 1, old);
+  CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_100_s1_w2_g1_o1.bin"));
+  CHECK(storage_iscache(n, "Wheat Field.jpg_100_o1.bin"));
+  CHECK(!storage_iscache(n, "Wheat Field.jpg_100_o1_s1.bin"));
+  CHECK(!storage_iscache(n, "Wheat Field.jpg_100_o.bin"));
   // Everything storage_cachepath makes is recognized
   int all = 1;
   uint32_t counts[4] = { 48, 108, 252, 500 };
-  for(int c = 0; c < 4; c++) for(uint8_t st = 0; st < 4; st++) for(uint8_t w = 0; w < 3; w++) for(uint8_t g = 0; g < 2; g++) {
+  for(int c = 0; c < 4; c++) for(uint8_t st = 0; st < 4; st++) for(uint8_t w = 0; w < 3; w++) for(uint8_t g = 0; g < 2; g++) for(uint8_t o = 0; o < 3; o++) {
     char path[STORAGE_MAXPATH];
-    storage_cachepath(n, counts[c], st, w, g, path);
+    storage_cachepath(n, counts[c], st, w, g, o, path);
     if(!storage_iscache(n, strrchr(path, '/') + 1)) all = 0;
   }
   CHECK(all);

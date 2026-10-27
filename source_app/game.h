@@ -89,6 +89,7 @@ typedef struct {
   uint8_t style;          // Cut style (CUT_STYLE_*)
   uint8_t whimsy;         // Whimsy level (WHIMSY_*)
   uint8_t whimsyset;      // Whimsy shapes (WHIMSY_SET_*)
+  uint8_t picoverlay;     // Picture overlay (OVERLAY_*; not the hold-Y info overlay)
   uint8_t table;          // Table color (palette index in render)
   uint8_t music;          // Music mode (SAVEFILE_MUSIC_*), saved with the puzzle
   SaveWriter * writer;    // Where saves go (NULL = write immediately)
@@ -117,8 +118,8 @@ typedef struct {
 
 // Start a puzzle. target = piece count for a new game (cut in the given style, with the
 // given music mode), or 0 to continue the save (style and music then come from the save).
-int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t music,
-    SaveWriter * writer,
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay,
+    uint8_t music, SaveWriter * writer,
     progress_fn cb, void * udata,
     char * err, size_t errlen);
 void game_free(Game * g);

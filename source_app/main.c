@@ -100,8 +100,8 @@ static void app_start_game(App * app, PuzzleChoice choice) {
   char err[256] = "";
   app_progress(app, "Loading", 0, 1);
   puzzlemenu_waitidle(&app->menu);
-  if(game_init(&app->game, choice.name, choice.target, choice.style, choice.whimsy, choice.whimsyset, choice.music, &app->writer,
-      app_progress, app, err, sizeof(err))) {
+  if(game_init(&app->game, choice.name, choice.target, choice.style, choice.whimsy, choice.whimsyset, choice.overlay,
+      choice.music, &app->writer, app_progress, app, err, sizeof(err))) {
     puzzlemenu_setstatus(&app->menu, err[0] ? err : "Couldn't start the puzzle");
     return;
   }
@@ -113,6 +113,7 @@ static void app_start_game(App * app, PuzzleChoice choice) {
 static void app_rename(App * app, const char * name) {
   char old[PMENU_MAXNAME], typed[STORAGE_MAXBASE * 4 + 1], base[STORAGE_MAXBASE + 1], newname[PMENU_MAXNAME];
   snprintf(old, sizeof(old), "%s", name);   // name is in the menu's list, which refresh frees
+  app_progress(app, "Opening the keyboard...", 0, 1);  // Takes a few seconds
   puzzlemenu_waitidle(&app->menu);          // The thumbnail thread may be reading the picture
   savewriter_flush(&app->writer);
   const char * dot = strrchr(old, '.');
@@ -124,6 +125,7 @@ static void app_rename(App * app, const char * name) {
   swkbdSetValidation(&kb, SWKBD_NOTEMPTY_NOTBLANK, 0, 0);
   if(swkbdInputText(&kb, typed, sizeof(typed)) != SWKBD_BUTTON_CONFIRM) return;
   storage_cleanbase(typed, base, sizeof(base));
+  app_progress(app, "Renaming...", 0, 1);
   PicDirs dirs = { STORAGE_PUZZLES, STORAGE_SAVES, STORAGE_CACHE };
   int r = picrename(&dirs, old, base, newname, sizeof(newname));
   puzzlemenu_refresh(&app->menu);

@@ -19,13 +19,15 @@ void storage_puzzlepath(const char * name, char * out) {
   snprintf(out, STORAGE_MAXPATH, "%s/%s", STORAGE_PUZZLES, name);
 }
 
-void storage_cachepath(const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t set, char * out) {
+void storage_cachepath(const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t set, uint8_t overlay,
+    char * out) {
   // Classic without whimsies keeps the original name
-  char st[8] = "", wh[16] = "";
+  char st[8] = "", wh[16] = "", ov[8] = "";
   if(style) snprintf(st, sizeof(st), "_s%u", style);
   if(whimsy && set) snprintf(wh, sizeof(wh), "_w%u_g%u", whimsy, set);
   else if(whimsy) snprintf(wh, sizeof(wh), "_w%u", whimsy);
-  snprintf(out, STORAGE_MAXPATH, "%s/%s_%lu%s%s.bin", STORAGE_CACHE, name, (unsigned long)target, st, wh);
+  if(overlay) snprintf(ov, sizeof(ov), "_o%u", overlay);
+  snprintf(out, STORAGE_MAXPATH, "%s/%s_%lu%s%s%s.bin", STORAGE_CACHE, name, (unsigned long)target, st, wh, ov);
 }
 
 void storage_savepath(const char * name, char * out) {
@@ -47,6 +49,7 @@ int storage_iscache(const char * name, const char * file) {
     p = storage_digits(p + 2);
     if(p && p[0] == '_' && p[1] == 'g') p = storage_digits(p + 2);
   }
+  if(p && p[0] == '_' && p[1] == 'o') p = storage_digits(p + 2);
   return p && !strcmp(p, ".bin");
 }
 

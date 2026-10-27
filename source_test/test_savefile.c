@@ -98,6 +98,11 @@ void test_savefile(void) {
   h.seed = 0x12345678;
   savefile_write(&h, &b, buf);
   CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.seed == 0x12345678 && buf[30] == 0x78);
+  // Overlay (byte 34)
+  CHECK(r.overlay == 0);
+  h.overlay = 1;
+  savefile_write(&h, &b, buf);
+  CHECK(buf[34] == 1 && savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.overlay == 1);
 
   // Old format (u32 prefix + "JIGS") isn't a save
   uint8_t old[32] = { 0xF4, 0x01, 0, 0, 'J', 'I', 'G', 'S' };

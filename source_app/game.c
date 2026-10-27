@@ -1,4 +1,5 @@
 #include "game.h"
+#include "overlay.h"
 #include "savefile.h"
 #include "rng.h"
 #include "whimsy.h"
@@ -11,8 +12,8 @@
 
 #define GAME_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
 
-int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t music,
-    SaveWriter * writer,
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay,
+    uint8_t music, SaveWriter * writer,
     progress_fn cb, void * udata,
     char * err, size_t errlen) {
   memset(g, 0, sizeof(Game));
@@ -40,6 +41,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     style = hdr.style;
     whimsy = hdr.whimsy;
     whimsyset = hdr.whimsyset;
+    overlay = hdr.overlay;
     g->table = hdr.table;
     g->music = hdr.music;
     g->playms = (u64)hdr.seconds * 1000;
@@ -50,14 +52,16 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   // Unknown values (a newer save, or junk) mean none/cute, as the cutter treats them
   if(whimsy >= WHIMSY_LEVELS) whimsy = WHIMSY_NONE;
   if(whimsyset >= WHIMSY_SETS) whimsyset = WHIMSY_SET_CUTE;
+  if(overlay >= OVERLAYS) overlay = OVERLAY_NONE;
   g->target = target;
   g->style = style;
   g->whimsy = whimsy;
   g->whimsyset = whimsyset;
+  g->picoverlay = overlay;
   char ipath[STORAGE_MAXPATH], cpath[STORAGE_MAXPATH];
   storage_puzzlepath(name, ipath);
-  storage_cachepath(name, target, style, whimsy, whimsyset, cpath);
-  if(puzzlegfx_load(&g->gfx, &g->geo, ipath, cpath, target, g->seed, style, whimsy, whimsyset,
+  storage_cachepath(name, target, style, whimsy, whimsyset, overlay, cpath);
+  if(puzzlegfx_load(&g->gfx, &g->geo, ipath, cpath, target, g->seed, style, whimsy, whimsyset, overlay,
       cb, udata, err, errlen)) {
     free(save);
     return 1;
@@ -138,6 +142,7 @@ int game_save(Game * g, int background) {
   sh.style = g->style;
   sh.whimsy = g->whimsy;
   sh.whimsyset = g->whimsyset;
+  sh.overlay = g->picoverlay;
   sh.cuthash = g->gfx.cuthash;
   sh.seed = g->seed;
   sh.target = g->target;

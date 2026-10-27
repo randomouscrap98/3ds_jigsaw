@@ -2,6 +2,7 @@
 #include "cutter.h"
 #include "imageload.h"
 #include "imgscale.h"
+#include "overlay.h"
 #include "piecebake.h"
 #include "storage.h"
 #include "swizzle.h"
@@ -17,7 +18,8 @@
 typedef struct {
   char magic[4];
   u32 version;
-  u16 headsize, layoutsize, tilesize, pad;
+  u16 headsize, layoutsize, tilesize;
+  u16 overlay;            // OVERLAY_* (was padding, zero: caches from before overlays are "none")
   u64 srcsize;
   u64 srcmtime;
   u32 target;
@@ -96,7 +98,8 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.headsize != want->headsize ||
      h.layoutsize != want->layoutsize || h.tilesize != want->tilesize || h.srcsize != want->srcsize ||
      h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed ||
-     h.style != want->style || h.whimsy != want->whimsy || h.whimsyset != want->whimsyset) goto done;
+     h.style != want->style || h.whimsy != want->whimsy || h.whimsyset != want->whimsyset ||
+     h.overlay != want->overlay) goto done;
   if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO ||
      h.count == 0 || h.count > 0xFFF0) goto done;
   pg->layout = h.layout;
@@ -218,6 +221,10 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   imageload_free(src);
   src = NULL;
+  if(h->overlay) {
+    if(cb) cb(udata, "Coloring image", 0, 1);
+    overlay_apply(h->overlay, img, l->width, l->height);
+  }
 
   if(puzzlegfx_alloc(pg, err, errlen)) goto done;
   for(int i = 0; i < pg->npages; i++) memset(pg->pages[i].data, 0, pg->pages[i].size);
@@ -276,7 +283,7 @@ done:
 }
 
 int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset,
+    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay,
     progress_fn cb, void * udata, char * err, size_t errlen) {
   puzzlegfx_zero(pg);
   memset(geo, 0, sizeof(PieceGeo));
@@ -293,6 +300,7 @@ int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const
   h.style = style;
   h.whimsy = whimsy;
   h.whimsyset = whimsyset;
+  h.overlay = overlay;
   puzzlegfx_srcinfo(imagepath, &h.srcsize, &h.srcmtime);
   if(h.srcsize == 0) {
     PGFX_ERR("Can't find image %s", imagepath);

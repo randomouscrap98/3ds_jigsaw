@@ -32,3 +32,8 @@ CUTSRCS := source/geom.c source/cutter.c source/randcut.c source/cutgraph.c sour
 build_host/cut_preview: tools/cut_preview.c $(CUTSRCS) $(wildcard source/*.h)
 	@mkdir -p build_host
 	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/cut_preview.c $(CUTSRCS) -lm -o $@
+
+# Rainbow wash preview (tools/rainbow_preview.c): rainbow_preview OUTDIR IMAGE MODE PALETTE [strength minlight mindark]...
+build_host/rainbow_preview: tools/rainbow_preview.c source/rainbow.c source/rainbow.h
+	@mkdir -p build_host
+	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/rainbow_preview.c source/rainbow.c -lm -o $@

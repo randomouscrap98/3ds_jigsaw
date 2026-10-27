@@ -33,6 +33,7 @@ void test_sfxgen(void);
 void test_storage(void);
 void test_webup(void);
 void test_picrename(void);
+void test_overlay(void);
 void test_dump_sfx(const char * dir);
 void test_camera(void);
 void test_stick(void);

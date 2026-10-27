@@ -27,7 +27,8 @@
 //   26 u32 cut hash (cutter_hash of the cut the board was saved with; 1.2, 0 = unknown)
 //   30 u32 cut seed (1.2, 0 = unknown: savefile_cutseed of the picture's name). Kept so a
 //      renamed picture still cuts the same way.
-//   34.. reserved, zero
+//   34 u8 overlay (OVERLAY_*; 1.2, 0 = none)
+//   35.. reserved, zero
 typedef struct {
   uint16_t version;
   uint16_t size;
@@ -41,6 +42,7 @@ typedef struct {
   uint8_t whimsyset;  // WHIMSY_SET_*
   uint32_t cuthash;   // The cut's fingerprint (0 = unknown, from before 1.2)
   uint32_t seed;      // The cut's seed (0 = unknown: savefile_cutseed of the name)
+  uint8_t overlay;    // OVERLAY_*
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board
