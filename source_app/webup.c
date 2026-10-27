@@ -67,13 +67,8 @@ int webup_start(WebUp * w, int port, const char * page, size_t pagelen, const ch
 
 // Drop the client; an unfinished upload is thrown away
 static void webup_drop(WebUp * w) {
-  if(w->body) {
-    fclose(w->body);
-    w->body = NULL;
-    char path[STORAGE_MAXPATH];
-    snprintf(path, sizeof(path), "%s/%s", w->dir, w->name);
-    storage_commit(path, 0);   // Removes the temp file
-  }
+  free(w->body);
+  w->body = NULL;
   if(w->csock >= 0) close(w->csock);
   w->csock = -1;
   w->state = WEBUP_IDLE;
@@ -148,16 +143,19 @@ static int webup_fail(WebUp * w, int code, const char * reason, const char * why
   return WEBUP_EV_ERROR;
 }
 
-// Whole upload received: keep it if it's a usable picture
+// Whole upload received (in RAM): write it out, keep it if it's a usable picture
 static int webup_finish(WebUp * w) {
   char path[STORAGE_MAXPATH], tmp[STORAGE_MAXTMP];
   snprintf(path, sizeof(path), "%s/%s", w->dir, w->name);
   storage_tmppath(path, tmp);
-  int ok = fclose(w->body) == 0;
+  FILE * f = fopen(tmp, "wb");
+  int ok = f && fwrite(w->body, 1, w->expect, f) == w->expect;
+  if(f && fclose(f)) ok = 0;
+  free(w->body);
   w->body = NULL;
   if(!ok) {
     storage_commit(path, 0);
-    return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card");
+    return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (full?)");
   }
   if(w->check && !w->check(tmp)) {
     storage_commit(path, 0);
@@ -171,17 +169,10 @@ static int webup_finish(WebUp * w) {
   return WEBUP_EV_SAVED;
 }
 
-// Save body bytes; finishes when all are in
+// Body bytes that came with the headers; finishes when all are in
 static int webup_body(WebUp * w, const char * data, size_t len) {
   if(len > w->expect - w->received) len = w->expect - w->received;
-  if(len && fwrite(data, 1, len, w->body) != len) {
-    char path[STORAGE_MAXPATH];
-    snprintf(path, sizeof(path), "%s/%s", w->dir, w->name);
-    fclose(w->body);
-    w->body = NULL;
-    storage_commit(path, 0);
-    return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (full?)");
-  }
+  memcpy(w->body + w->received, data, len);
   w->received += len;
   return w->received >= w->expect ? webup_finish(w) : WEBUP_EV_BUSY;
 }
@@ -221,11 +212,10 @@ static int webup_route(WebUp * w, size_t hlen, const char * method, size_t mlen,
   if(storage_freename(w->dir, base, ".jpg", w->name, sizeof(w->name))) {
     return webup_fail(w, 409, "Conflict", "Too many pictures with that name");
   }
-  char p[STORAGE_MAXPATH], tmp[STORAGE_MAXTMP];
-  snprintf(p, sizeof(p), "%s/%s", w->dir, w->name);
-  storage_tmppath(p, tmp);
-  w->body = fopen(tmp, "wb");
-  if(!w->body) return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card");
+  // The body goes to RAM and is written in one go at the end: SD writes while receiving
+  // stalled the 3DS's tiny (~8 KB) receive window. length was checked against WEBUP_MAXBODY.
+  w->body = malloc(length);
+  if(!w->body) return webup_fail(w, 503, "Service Unavailable", "Not enough memory for that picture");
   w->expect = length;
   w->received = 0;
   w->state = WEBUP_BODY;
@@ -264,9 +254,8 @@ static int webup_step(WebUp * w, uint64_t now, size_t * moved) {
     return webup_route(w, r, method, mlen, path, plen, hd, nh);
   }
   if(w->state == WEBUP_BODY) {
-    char buf[WEBUP_CHUNK];
-    size_t want = w->expect - w->received < sizeof(buf) ? w->expect - w->received : sizeof(buf);
-    ssize_t n = recv(w->csock, buf, want, 0);
+    size_t want = w->expect - w->received < WEBUP_CHUNK ? w->expect - w->received : WEBUP_CHUNK;
+    ssize_t n = recv(w->csock, w->body + w->received, want, 0);
     if(n == 0 || (n < 0 && !webup_wouldblock())) {
       WEBUP_MSG_SET(w, "Upload cut off");
       webup_drop(w);
@@ -275,7 +264,8 @@ static int webup_step(WebUp * w, uint64_t now, size_t * moved) {
     if(n < 0) return 0;
     w->last = now;
     *moved = n;
-    return webup_body(w, buf, n);
+    w->received += n;
+    return w->received >= w->expect ? webup_finish(w) : WEBUP_EV_BUSY;
   }
   if(w->state == WEBUP_SEND) {
     const char * data;

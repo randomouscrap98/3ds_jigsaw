@@ -49,7 +49,38 @@ static void upload_loadpage(Upload * u) {
   romfsExit();
 }
 
+// One server step plus its events. Caller holds the lock.
+static int upload_poll(Upload * u) {
+  int ev = webup_poll(&u->web, osGetTime());
+  u->busy = (ev & WEBUP_EV_BUSY) != 0;
+  if(ev & WEBUP_EV_SAVED) {
+    u->added++;
+    upload_line(u, 1, "Added %s", u->web.message);
+  }
+  if(ev & WEBUP_EV_ERROR) upload_line(u, 0, "%s", u->web.message);
+  return u->web.csock >= 0;
+}
+
+static void upload_thread(void * arg) {
+  Upload * u = arg;
+  while(!u->quit) {
+    LightLock_Lock(&u->lock);
+    int client = upload_poll(u);
+    LightLock_Unlock(&u->lock);
+    svcSleepThread(client ? UPLOAD_CLIENT_NS : UPLOAD_IDLE_NS);
+  }
+}
+
+static void upload_stopthread(Upload * u) {
+  if(!u->thread) return;
+  u->quit = 1;
+  threadJoin(u->thread, U64_MAX);
+  threadFree(u->thread);
+  u->thread = NULL;
+}
+
 static void upload_stopnet(Upload * u) {
+  upload_stopthread(u);
   if(u->running) webup_stop(&u->web);
   u->running = 0;
   if(u->socok) socExit();
@@ -86,6 +117,12 @@ static void upload_startnet(Upload * u) {
   }
   u->running = 1;
   u->problem[0] = 0;
+  // Higher priority than the main thread (it mostly sleeps), same core. If it can't be
+  // made, upload_update polls once a frame instead.
+  s32 prio = 0x30;
+  svcGetThreadPriority(&prio, CUR_THREAD_HANDLE);
+  u->quit = 0;
+  u->thread = threadCreate(upload_thread, u, UPLOAD_STACK, prio - 1, -2, false);
   snprintf(u->url, sizeof(u->url), "http://%s/", inet_ntoa(ip));
   uint8_t tmp[qrcodegen_BUFFER_LEN_MAX];
   u->qrok = qrcodegen_encodeText(u->url, tmp, u->qr, qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN,
@@ -94,6 +131,7 @@ static void upload_startnet(Upload * u) {
 
 void upload_open(Upload * u) {
   memset(u, 0, sizeof(Upload));
+  LightLock_Init(&u->lock);
   upload_loadpage(u);
   upload_startnet(u);
 }
@@ -122,14 +160,7 @@ int upload_update(Upload * u, u32 down) {
   if(down & (KEY_B | KEY_START)) return 1;
   u64 now = osGetTime();
   if(!u->running && !u->paused && now - u->lastretry >= UPLOAD_RETRY_MS) upload_startnet(u);
-  if(!u->running) return 0;
-  int ev = webup_poll(&u->web, now);
-  u->busy = (ev & WEBUP_EV_BUSY) != 0;
-  if(ev & WEBUP_EV_SAVED) {
-    u->added++;
-    upload_line(u, 1, "Added %s", u->web.message);
-  }
-  if(ev & WEBUP_EV_ERROR) upload_line(u, 0, "%s", u->web.message);
+  if(u->running && !u->thread) upload_poll(u);
   return 0;
 }
 
@@ -142,6 +173,7 @@ void upload_render_top(Upload * u, TextDraw * td) {
   } else {
     textdraw_print(td, 10, 40, 0.5f, UPLOAD_BAD, "%s", u->paused ? "Paused" : u->problem);
   }
+  LightLock_Lock(&u->lock);
   float y = 108;
   if(u->busy && u->web.expect) {
     textdraw_print(td, 10, y, 0.5f, UPLOAD_WHITE, "Receiving %s... %d%%", u->web.name,
@@ -152,6 +184,7 @@ void upload_render_top(Upload * u, TextDraw * td) {
     textdraw_print(td, 10, y, 0.45f, u->linegood[i] ? UPLOAD_GOOD : UPLOAD_BAD, "%s", u->lines[i]);
   }
   textdraw_print(td, 10, 222, 0.5f, UPLOAD_DIM, "B: done%s", u->added ? " (new pictures are in the list)" : "");
+  LightLock_Unlock(&u->lock);
 }
 
 void upload_render_bottom(Upload * u, TextDraw * td) {

@@ -115,7 +115,8 @@ void test_webup(void) {
   http(&w, port, garbage, strlen(garbage), reply, sizeof(reply), &clock);
   CHECK(!strncmp(reply, "HTTP/1.1 400", 12));
 
-  // A client that stops halfway is dropped after the timeout, and its partial file removed
+  // A client that stops halfway is dropped after the timeout; nothing reaches the SD (the
+  // body is kept in RAM until complete)
   int s = socket(AF_INET, SOCK_STREAM, 0);
   struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(port) };
   a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -124,7 +125,7 @@ void test_webup(void) {
   CHECK(send(s, part, strlen(part), MSG_NOSIGNAL) > 0);
   ev = 0;
   for(int i = 0; i < 1000; i++) ev |= webup_poll(&w, ++clock);
-  CHECK((ev & WEBUP_EV_BUSY) && exists(dir, "stuck.jpg.tmp") >= 0);
+  CHECK((ev & WEBUP_EV_BUSY) && exists(dir, "stuck.jpg.tmp") < 0);
   clock += WEBUP_TIMEOUT_MS + 1;
   ev = webup_poll(&w, clock);
   CHECK((ev & WEBUP_EV_ERROR) && exists(dir, "stuck.jpg.tmp") < 0 && exists(dir, "stuck.jpg") < 0);

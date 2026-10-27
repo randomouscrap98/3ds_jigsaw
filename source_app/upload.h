@@ -12,9 +12,12 @@
 
 #define UPLOAD_PORT 80
 #define UPLOAD_PAGE "romfs:/upload.html"
-#define UPLOAD_LINES 7                    // Last events shown
+#define UPLOAD_LINES 6                    // Last events shown
 #define UPLOAD_RETRY_MS 2000              // Try again this often while the network isn't up
 #define UPLOAD_SOCBUF 0x100000            // Network service buffer (socInit)
+#define UPLOAD_STACK (64 * 1024)          // Server thread (webup reads in 16 KB stack chunks)
+#define UPLOAD_IDLE_NS (10 * 1000 * 1000)   // Server thread sleep: no client
+#define UPLOAD_CLIENT_NS (1000 * 1000)      // Server thread sleep: client connected (drain fast)
 
 typedef struct {
   u32 * socbuf;
@@ -25,6 +28,12 @@ typedef struct {
   char * page;
   size_t pagelen;
   WebUp web;
+  // The server runs on its own thread so the socket is drained as soon as data comes (once
+  // a frame was too slow: the 3DS dropped packets and uploads stalled). lock covers web,
+  // lines, added and busy.
+  Thread thread;
+  LightLock lock;
+  volatile int quit;
   char url[48];
   uint8_t qr[qrcodegen_BUFFER_LEN_MAX];
   int qrok;

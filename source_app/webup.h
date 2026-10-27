@@ -34,7 +34,7 @@ typedef struct {
   char head[WEBUP_MAXHEAD + 1];
   size_t headlen;
   // Upload being received
-  FILE * body;
+  char * body;              // expect bytes (RAM; written to the SD when complete)
   char name[128];           // Final file name
   size_t expect, received;
   // Response being sent
