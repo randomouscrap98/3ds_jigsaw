@@ -81,21 +81,27 @@ static void app_hook(APT_HookType type, void * param) {
   }
 }
 
+// Music follows the game's mode
+static void app_music(App * app) {
+  uint8_t m = app->game.music;
+  music_setmode(&app->music, m == SAVEFILE_MUSIC_OFF ? MUSIC_OFF : m == SAVEFILE_MUSIC_SHUFFLE ? MUSIC_SHUFFLE : MUSIC_ORDER);
+}
+
 static void app_start_game(App * app, PuzzleChoice choice) {
   char err[256] = "";
   app_progress(app, "Loading", 0, 1);
   puzzlemenu_waitidle(&app->menu);
-  if(game_init(&app->game, choice.name, choice.target, choice.style, &app->writer,
+  if(game_init(&app->game, choice.name, choice.target, choice.style, choice.music, &app->writer,
       app_progress, app, err, sizeof(err))) {
     puzzlemenu_setstatus(&app->menu, err[0] ? err : "Couldn't start the puzzle");
     return;
   }
   app->mode = MODE_GAME;
-  music_play(&app->music);
+  app_music(app);
 }
 
 static void app_end_game(App * app) {
-  music_stop(&app->music);  // Fades out; the thread frees the decoder within a DSP frame (~5 ms)
+  music_setmode(&app->music, MUSIC_OFF);  // Fades out; the thread frees the decoder within a DSP frame (~5 ms)
   game_free(&app->game);
   app->mode = MODE_MENU;
   savewriter_flush(&app->writer);  // The menu reads saves back
@@ -154,6 +160,7 @@ int main(int argc, char ** argv) {
       if(ev & GAME_EV_MERGE) sfx_play(&app.sfx, SFX_MERGE);
       if(ev & GAME_EV_COMPLETE) sfx_play_later(&app.sfx, SFX_COMPLETE, MAIN_CHIME_DELAY);
       if(ev & GAME_EV_SKIPSONG) music_skip(&app.music);
+      if(ev & GAME_EV_MUSICMODE) app_music(&app);
       if(ev & GAME_EV_EXIT) app_end_game(&app);
     }
 

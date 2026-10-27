@@ -14,12 +14,14 @@ static uint32_t game_cutseed(const char * name, uint32_t target, uint8_t style) 
   return rng_hashstr(name) ^ (target * 2654435761u) ^ (style * 0x9E3779B9u);
 }
 
-int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveWriter * writer,
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t music,
+    SaveWriter * writer,
     progress_fn cb, void * udata,
     char * err, size_t errlen) {
   memset(g, 0, sizeof(Game));
   g->held = -1;
   g->writer = writer;
+  g->music = music;
   snprintf(g->name, sizeof(g->name), "%s", name);
   int cont = target == 0;
   // Continuing: read the save once. The header picks the cut; the board is restored
@@ -40,6 +42,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     target = hdr.target;
     style = hdr.style;
     g->table = hdr.table;
+    g->music = hdr.music;
     g->playms = (u64)hdr.seconds * 1000;
   }
   g->target = target;
@@ -118,6 +121,7 @@ int game_save(Game * g, int background) {
   sh.style = g->style;
   sh.target = g->target;
   sh.table = g->table;
+  sh.music = g->music;
   sh.seconds = g->playms / 1000;
   savefile_write(&sh, &g->board, buf);
   char path[STORAGE_MAXPATH];
@@ -209,6 +213,17 @@ int game_update(Game * g, const GameInput * gin) {
   const GameInput * in = &fin;
   if(gin->held & GAME_MODKEY) {
     if(gin->down & GAME_MOD_SKIPSONG) ev |= GAME_EV_SKIPSONG;
+    if(gin->down & GAME_MOD_MUSICMODE) {
+      // Saved with the next autosave, like the table color
+      static const uint8_t next[] = {
+        [SAVEFILE_MUSIC_OFF] = SAVEFILE_MUSIC_ORDER,
+        [SAVEFILE_MUSIC_ORDER] = SAVEFILE_MUSIC_SHUFFLE,
+        [SAVEFILE_MUSIC_SHUFFLE] = SAVEFILE_MUSIC_OFF,
+      };
+      g->music = next[g->music % 3];
+      g->dirty = 1;
+      ev |= GAME_EV_MUSICMODE;
+    }
     const u32 keep = KEY_TOUCH | GAME_MODKEY;
     fin.down &= keep;
     fin.held &= keep;
@@ -399,8 +414,10 @@ void game_render_top(Game * g, TextDraw * td) {
       snprintf(g->lastsong, sizeof(g->lastsong), "%s", pf->song);
       g->songstart = osGetTime();
     }
-    char song[272];
-    snprintf(song, sizeof(song), "Music: %s", pf->song[0] ? pf->song : "none");
+    char song[300];
+    if(g->music == SAVEFILE_MUSIC_OFF) snprintf(song, sizeof(song), "Music: off");
+    else snprintf(song, sizeof(song), "Music%s: %s", g->music == SAVEFILE_MUSIC_SHUFFLE ? " (shuffled)" : "",
+        pf->song[0] ? pf->song : "none");
     textdraw_marquee(td, 80, 144, 240, 0.45f, pc,
         (osGetTime() - g->songstart) * GAME_MARQUEE_SPEED / 1000, song);
   }

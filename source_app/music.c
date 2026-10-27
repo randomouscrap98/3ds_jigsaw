@@ -1,4 +1,6 @@
 #include "music.h"
+#include "musicdec.h"
+#include "rng.h"
 
 #include <dirent.h>
 #include <stdio.h>
@@ -6,31 +8,11 @@
 #include <string.h>
 #include <strings.h>
 
-static void * music_malloc(size_t sz, void * u) {
-  return sz > MUSIC_MAXALLOC ? NULL : malloc(sz);
-}
-
-static void * music_realloc(void * p, size_t sz, void * u) {
-  return sz > MUSIC_MAXALLOC ? NULL : realloc(p, sz);
-}
-
-static void music_mfree(void * p, void * u) {
-  free(p);
-}
-
-// The one dr_mp3 implementation in the app
-#define DR_MP3_IMPLEMENTATION
-#include "dr_mp3.h"
-
-static const drmp3_allocation_callbacks music_alloc = {
-  .onMalloc = music_malloc, .onRealloc = music_realloc, .onFree = music_mfree,
-};
-
 static int music_cmp(const void * a, const void * b) {
   return strcasecmp(*(char * const *)a, *(char * const *)b);
 }
 
-// Sorted .mp3 names in MUSIC_DIR. Returns count; *out = NULL if none.
+// Sorted playable file names in MUSIC_DIR. Returns count; *out = NULL if none.
 static uint32_t music_list(char *** out) {
   *out = NULL;
   DIR * d = opendir(MUSIC_DIR);
@@ -39,8 +21,7 @@ static uint32_t music_list(char *** out) {
   uint32_t n = 0, cap = 0;
   struct dirent * de;
   while((de = readdir(d))) {
-    const char * dot = strrchr(de->d_name, '.');
-    if(!dot || strcasecmp(dot, ".mp3")) continue;
+    if(musicdec_kind(de->d_name) == MUSICDEC_NONE) continue;
     if(n == cap) {
       uint32_t nc = cap ? cap * 2 : 16;
       char ** nn = realloc(names, sizeof(char *) * nc);
@@ -91,43 +72,62 @@ static void music_callback(void * data) {
 typedef struct {
   char ** files;
   uint32_t nfiles;
-  drmp3 * mp3;          // Non-NULL = a track is open
+  MusicDec dec;          // kind != MUSICDEC_NONE = a track is open
   uint32_t fails;       // Files in a row that gave no audio
   u64 trackframes;
+  uint32_t * perm;      // Shuffled play order (NULL = couldn't allocate: play in order)
+  uint32_t spos;        // Next position in perm
+  uint32_t last;        // Index of the file played last
+  Rng rng;
 } MusicPlay;
 
-static void music_close(MusicPlay * p) {
-  if(p->mp3) {
-    drmp3_uninit(p->mp3);
-    free(p->mp3);
-    p->mp3 = NULL;
+// New random order, not starting with the file just played
+static void music_shuffle(MusicPlay * p) {
+  for(uint32_t i = 0; i < p->nfiles; i++) p->perm[i] = i;
+  for(uint32_t i = p->nfiles - 1; i > 0; i--) {
+    uint32_t j = rng_below(&p->rng, i + 1);
+    uint32_t t = p->perm[i]; p->perm[i] = p->perm[j]; p->perm[j] = t;
   }
+  if(p->nfiles > 1 && p->perm[0] == p->last) {
+    p->perm[0] = p->perm[1];
+    p->perm[1] = p->last;
+  }
+  p->spos = 0;
+}
+
+// Which file to play next. In order continues after whatever played last, shuffled or not.
+static uint32_t music_pick(Music * m, MusicPlay * p, int shuffle) {
+  uint32_t i;
+  if(shuffle && p->perm) {
+    if(p->spos >= p->nfiles) music_shuffle(p);
+    i = p->perm[p->spos++];
+  } else {
+    i = m->next % p->nfiles;
+  }
+  m->next = (i + 1) % p->nfiles;
+  p->last = i;
+  return i;
+}
+
+static void music_close(MusicPlay * p) {
+  musicdec_close(&p->dec);
 }
 
 static void music_release(MusicPlay * p) {
   music_close(p);
   for(uint32_t i = 0; i < p->nfiles; i++) free(p->files[i]);
   free(p->files);
+  free(p->perm);
   memset(p, 0, sizeof(MusicPlay));
 }
 
 // Open the next file that works. Returns 0 if there's nothing playable.
-static int music_opennext(Music * m, MusicPlay * p) {
+static int music_opennext(Music * m, MusicPlay * p, int shuffle) {
   char path[STORAGE_MAXPATH];
   while(p->fails < p->nfiles) {
-    const char * name = p->files[m->next % p->nfiles];
-    m->next = (m->next + 1) % p->nfiles;
+    const char * name = p->files[music_pick(m, p, shuffle)];
     snprintf(path, sizeof(path), "%s/%s", MUSIC_DIR, name);
-    p->mp3 = malloc(sizeof(drmp3));
-    if(!p->mp3) return 0;
-    if(!drmp3_init_file(p->mp3, path, &music_alloc)) {
-      free(p->mp3);
-      p->mp3 = NULL;
-      p->fails++;
-      continue;
-    }
-    if(p->mp3->channels < 1 || p->mp3->channels > 2) {
-      music_close(p);
+    if(musicdec_open(&p->dec, path, musicdec_kind(name))) {
       p->fails++;
       continue;
     }
@@ -135,8 +135,8 @@ static int music_opennext(Music * m, MusicPlay * p) {
     music_setname(m, name);
     ndspChnReset(MUSIC_CHANNEL);
     ndspChnSetInterp(MUSIC_CHANNEL, NDSP_INTERP_LINEAR);
-    ndspChnSetRate(MUSIC_CHANNEL, p->mp3->sampleRate);
-    ndspChnSetFormat(MUSIC_CHANNEL, p->mp3->channels == 2 ? NDSP_FORMAT_STEREO_PCM16 : NDSP_FORMAT_MONO_PCM16);
+    ndspChnSetRate(MUSIC_CHANNEL, p->dec.rate);
+    ndspChnSetFormat(MUSIC_CHANNEL, p->dec.channels == 2 ? NDSP_FORMAT_STEREO_PCM16 : NDSP_FORMAT_MONO_PCM16);
     music_setvol(1);
     return 1;
   }
@@ -150,7 +150,7 @@ static int music_refill(Music * m, MusicPlay * p) {
     if(w->status != NDSP_WBUF_FREE && w->status != NDSP_WBUF_DONE) continue;
     s16 * buf = m->pcm + i * MUSIC_FRAMES * 2;
     u64 t = svcGetSystemTick();
-    drmp3_uint64 got = drmp3_read_pcm_frames_s16(p->mp3, MUSIC_FRAMES, buf);
+    uint32_t got = musicdec_read(&p->dec, buf, MUSIC_FRAMES);
     u64 dt = svcGetSystemTick() - t;
     LightLock_Lock(&m->lock);
     m->busy += dt;
@@ -161,7 +161,7 @@ static int music_refill(Music * m, MusicPlay * p) {
     }
     p->trackframes += got;
     p->fails = 0;
-    DSP_FlushDataCache(buf, got * p->mp3->channels * sizeof(s16));
+    DSP_FlushDataCache(buf, got * p->dec.channels * sizeof(s16));
     w->data_pcm16 = buf;
     w->nsamples = got;
     w->looping = false;
@@ -179,7 +179,7 @@ static void music_thread(void * arg) {
   for(;;) {
     LightEvent_Wait(&m->wake);
     LightLock_Lock(&m->lock);
-    u8 quit = m->quit, want = m->want, skip = m->skip;
+    u8 quit = m->quit, want = m->mode != MUSIC_OFF, shuffle = m->mode == MUSIC_SHUFFLE, skip = m->skip;
     m->skip = 0;
     LightLock_Unlock(&m->lock);
     if(quit) break;
@@ -188,6 +188,12 @@ static void music_thread(void * arg) {
       music_clear(m);
       p.nfiles = music_list(&p.files);
       p.fails = 0;
+      p.last = UINT32_MAX;
+      p.perm = p.nfiles ? malloc(sizeof(uint32_t) * p.nfiles) : NULL;
+      if(p.perm) {
+        rng_init(&p.rng, (uint32_t)svcGetSystemTick());
+        music_shuffle(&p);
+      }
       state = PLAYING;
     } else if(!want && state == PLAYING) {
       // Stop: the decoder goes now, what's already decoded plays out fading
@@ -208,14 +214,14 @@ static void music_thread(void * arg) {
       continue;
     }
     if(state != PLAYING) continue;
-    if(skip && p.mp3) {
+    if(skip && p.dec.kind) {
       music_clear(m);
       music_close(&p);
     }
-    if(!p.mp3) {
+    if(!p.dec.kind) {
       // Let the last track finish before changing rate / format
       if(music_queued(m)) continue;
-      if(!music_opennext(m, &p)) {
+      if(!music_opennext(m, &p, shuffle)) {
         // Nothing playable: stay quiet until the next start
         music_release(&p);
         music_setname(m, "");
@@ -267,20 +273,16 @@ void music_free(Music * m) {
   memset(m, 0, sizeof(Music));
 }
 
-static void music_request(Music * m, int want, int skip) {
+static void music_request(Music * m, int mode, int skip) {
   LightLock_Lock(&m->lock);
-  if(want >= 0) m->want = want;
+  if(mode >= 0) m->mode = mode;
   if(skip) m->skip = 1;
   LightLock_Unlock(&m->lock);
   LightEvent_Signal(&m->wake);
 }
 
-void music_play(Music * m) {
-  music_request(m, 1, 0);
-}
-
-void music_stop(Music * m) {
-  music_request(m, 0, 0);
+void music_setmode(Music * m, int mode) {
+  music_request(m, mode, 0);
 }
 
 void music_skip(Music * m) {

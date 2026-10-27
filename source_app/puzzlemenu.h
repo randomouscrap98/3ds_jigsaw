@@ -16,6 +16,8 @@
 #define PMENU_ACT_CONTINUE 0
 #define PMENU_ACT_NONE 0xFFFFFFFF
 #define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
+#define PMENU_MUSIC_NAMES "Off\nIn order\nShuffled"  // Menu order of the music modes
+#define PMENU_MUSIC_DEFAULT 1                         // In order
 #define PMENU_THUMBH THUMB_MAXH  // Bottom screen height used by the picture; controls below
 #define PMENU_PEEKBYTES 256     // Start of a save read to summarize it (header + board header)
 
@@ -30,6 +32,7 @@ typedef struct {
   const char * name;    // NULL = nothing picked yet
   uint32_t target;      // Piece count for a new game, 0 = continue
   uint8_t style;        // Cut style for a new game (EDGEGEN_STYLE_*)
+  uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
   u8 quit;
 } PuzzleChoice;
 
@@ -40,8 +43,9 @@ typedef struct {
   tui_menu confirm;
   PuzzleEntry * entries;
   int nentries;
-  uint32_t optact[PMENU_NUMCOUNTS + 2];  // Action for each options item
+  uint32_t optact[PMENU_NUMCOUNTS + 3];  // Action for each options item
   tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
+  tui_menu_number_t music;               // Music picked in options: PMENU_MUSIC_* order
   char status[128];                      // Shown under the menu (errors etc.)
   Thumb thumb;                           // Picture of the puzzle being set up (bottom screen)
 } PuzzleMenu;

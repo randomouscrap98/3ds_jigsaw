@@ -9,7 +9,11 @@
 #define SAVEFILE_MAGIC   "3DSJGSAW"
 #define SAVEFILE_VERSION 1
 #define SAVEFILE_HEADER  64      // Header size written by this version
-#define SAVEFILE_MINHEADER 23    // Smallest header we can read (fields below)
+#define SAVEFILE_MINHEADER 23    // Smallest header we can read (fields below; later ones
+                                 // default to 0 when the header is shorter)
+#define SAVEFILE_MUSIC_ORDER   0 // Zero so saves from before the field play in order
+#define SAVEFILE_MUSIC_OFF     1
+#define SAVEFILE_MUSIC_SHUFFLE 2
 
 // A whole save file: this header, then a boardsave blob. Little endian. Header layout:
 //   0  char[8] "3DSJGSAW"
@@ -17,7 +21,8 @@
 //   12 u8[3] app version that wrote it (major, minor, micro)
 //   15 u8 cut style              16 u16 target piece count
 //   18 u8 table color            19 u32 play time, seconds
-//   23.. reserved, zero
+//   23 u8 music mode (SAVEFILE_MUSIC_*; 1.1, was reserved = 0 = in order)
+//   24.. reserved, zero
 typedef struct {
   uint16_t version;
   uint16_t size;
@@ -26,6 +31,7 @@ typedef struct {
   uint16_t target;
   uint8_t table;
   uint32_t seconds;   // Play time
+  uint8_t music;      // SAVEFILE_MUSIC_*
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board

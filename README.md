@@ -70,8 +70,8 @@ Tests for the platform independent code run on your PC with `make -f Makefile.ho
 - Bundled paintings: The Metropolitan Museum of Art Open Access, CC0 (see
   `romfs/puzzles/CREDITS.txt`)
 - [Cinzel](https://github.com/NDISCOVER/Cinzel) font on the banner, SIL Open Font License
-- [stb_image, stb_image_write, stb_truetype](https://github.com/nothings/stb), public domain
-- [dr_mp3](https://github.com/mackron/dr_libs) (MP3 decoding), public domain
+- [stb_image, stb_image_write, stb_truetype, stb_vorbis](https://github.com/nothings/stb), public domain
+- [dr_mp3, dr_flac](https://github.com/mackron/dr_libs) (MP3 and FLAC decoding), public domain
 - littlemenu, from [littletui](https://git.shsbs.xyz/haloopdy/littletui)
 - [devkitPro](https://devkitpro.org/): libctru, citro2d, citro3d
 - Sounds are synthesized in code

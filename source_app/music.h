@@ -12,12 +12,14 @@
                                         // (>= MUSIC_FADE_S, so a fade can play out of it)
 #define MUSIC_FADE_S    1.0f            // Fade out when stopped
 #define MUSIC_STACK     (64 * 1024)     // minimp3 keeps its scratch on the stack
-#define MUSIC_MAXALLOC  (256 * 1024)    // Biggest decoder allocation allowed (a non-MP3 file
-                                        // would otherwise be read in whole looking for a frame)
 #define MUSIC_MAXNAME   256
 
-// Background music: every .mp3 in MUSIC_DIR, alphabetical, looping the folder, while
-// started. Decoded on a thread above the main thread, one small buffer per DSP frame, so
+#define MUSIC_OFF     0
+#define MUSIC_ORDER   1
+#define MUSIC_SHUFFLE 2  // A new random order each start, reshuffled when it runs out
+
+// Background music: every .mp3 / .flac / .ogg in MUSIC_DIR, alphabetical or shuffled,
+// looping the folder, while started. Decoded on a thread above the main thread, one small buffer per DSP frame, so
 // the work comes in even slices. Stopping frees the decoder (and the file list) at once
 // and fades out what's already decoded. Each start picks up at the next file. Files that
 // fail to open or decode are skipped. Everything is a no-op if ndsp isn't available or
@@ -26,7 +28,7 @@ typedef struct {
   Thread thread;
   LightEvent wake;      // Signalled every DSP frame, and on quit
   LightLock lock;       // Guards name, busy and the requests
-  u8 quit, want, skip;  // Requests to the thread (under lock)
+  u8 quit, mode, skip;  // Requests to the thread (under lock); mode = MUSIC_OFF etc.
   u8 running;
   uint32_t next;        // Index of the next file to play (thread only)
   s16 * pcm;            // MUSIC_BUFS * MUSIC_FRAMES stereo frames, linear memory
@@ -39,9 +41,10 @@ typedef struct {
 // ndspok: ndsp was initialized (sfx_init succeeded). Call music_free before ndspExit.
 int music_init(Music * m, int ndspok);
 void music_free(Music * m);
-// Start playing / fade out and stop / go to the next file. Return at once.
-void music_play(Music * m);
-void music_stop(Music * m);
+// MUSIC_OFF fades out and stops; the others start playing if stopped. Switching between
+// in order and shuffled only changes how the next file is picked. Returns at once.
+void music_setmode(Music * m, int mode);
+// Go to the next file. Returns at once.
 void music_skip(Music * m);
 // Copy the current file name (may be "")
 void music_name(Music * m, char * out, size_t len);

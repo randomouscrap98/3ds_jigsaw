@@ -13,6 +13,11 @@ int main(int argc, char ** argv) {
     test_dump_sfx(argv[2]);
     return 0;
   }
+  if(argc > 2 && !strcmp(argv[1], "musicdec")) {
+    test_musicdec_files(argv[2]);
+    printf("%d checks, %d failures\n", test_checks, test_failures);
+    return test_failures ? 1 : 0;
+  }
   if(argc > 2 && !strcmp(argv[1], "dump")) {
     uint8_t style = EDGEGEN_STYLE_CLASSIC;
     if(argc > 3 && !strcmp(argv[3], "irregular")) style = EDGEGEN_STYLE_IRREGULAR;
@@ -22,6 +27,7 @@ int main(int argc, char ** argv) {
   }
   RUN(test_board);
   RUN(test_drawlist);
+  RUN(test_musicdec);
   RUN(test_boardsave);
   RUN(test_savefile);
   RUN(test_sfxgen);

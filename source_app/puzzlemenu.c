@@ -65,6 +65,10 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild");
     pm->optact[n++] = PMENU_ACT_NONE;
   }
+  if(!err) {
+    TUIMITEM_ENUM(&pm->options, err, "Music", &pm->music, PMENU_MUSIC_NAMES);
+    pm->optact[n++] = PMENU_ACT_NONE;
+  }
   for(int i = 0; i < PMENU_NUMCOUNTS && !err; i++) {
     snprintf(name, sizeof(name), "New: %lu pieces", (unsigned long)pmenu_counts[i]);
     tui_menu_item_data * idata;
@@ -147,6 +151,7 @@ int puzzlemenu_init(PuzzleMenu * pm) {
   pm->root.valuewidth = 0;
   pm->options.valuewidth = PMENU_VALUEWIDTH;
   pm->confirm.valuewidth = 0;
+  pm->music = PMENU_MUSIC_DEFAULT;
   thumb_init(&pm->thumb);  // On failure there's just no picture
   int err = 0;
   TUIMITEM_BASIC(&pm->confirm, err, "No, keep my save", 1);
@@ -224,6 +229,8 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     choice.name = pm->entries[sel].name;
     choice.target = pm->optact[opt];
     choice.style = pm->style;
+    static const uint8_t modes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };
+    choice.music = modes[(unsigned)pm->music % 3];
     thumb_clear(&pm->thumb, 0);  // Caller waits (puzzlemenu_waitidle) once Loading is showing
     tui_menu_reset(&pm->root);
     // Keep the cursor on this puzzle when we come back

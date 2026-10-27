@@ -41,9 +41,11 @@
 #define GAME_EV_COMPLETE (1 << 1)
 #define GAME_EV_EXIT     (1 << 2)
 #define GAME_EV_SKIPSONG (1 << 3)
+#define GAME_EV_MUSICMODE (1 << 4)  // g->music changed
 
 #define GAME_MODKEY KEY_Y  // Modifier: held = overlay, buttons switch to the second set below
 #define GAME_MOD_SKIPSONG KEY_X
+#define GAME_MOD_MUSICMODE KEY_A  // Cycles off -> in order -> shuffled
 
 // Input for one frame, gathered by the caller
 typedef struct {
@@ -81,6 +83,7 @@ typedef struct {
   uint32_t target;
   uint8_t style;          // Cut style (EDGEGEN_STYLE_*)
   uint8_t table;          // Table color (palette index in render)
+  uint8_t music;          // Music mode (SAVEFILE_MUSIC_*), saved with the puzzle
   SaveWriter * writer;    // Where saves go (NULL = write immediately)
   int32_t held;           // Group being dragged, or -1
   u8 panning;             // Stylus is dragging the table
@@ -105,9 +108,10 @@ typedef struct {
   u64 songstart;
 } Game;
 
-// Start a puzzle. target = piece count for a new game (cut in the given style), or 0 to
-// continue the save (style then comes from the save).
-int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveWriter * writer,
+// Start a puzzle. target = piece count for a new game (cut in the given style, with the
+// given music mode), or 0 to continue the save (style and music then come from the save).
+int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t music,
+    SaveWriter * writer,
     progress_fn cb, void * udata,
     char * err, size_t errlen);
 void game_free(Game * g);

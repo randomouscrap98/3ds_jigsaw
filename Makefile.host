@@ -2,7 +2,7 @@
 #   make -f Makefile.host        build + run tests
 CC      ?= gcc
 CFLAGS  := -g -O1 -Wall -Wextra -Wno-unused-parameter -std=gnu11 -Isource -Isource/external -Isource_app -fsanitize=address,undefined
-SRCS    := $(wildcard source/*.c) source/external/littlemenu.c source_app/storage.c $(wildcard source_test/*.c)
+SRCS    := $(wildcard source/*.c) source/external/littlemenu.c source/external/stb_vorbis.c source_app/storage.c $(wildcard source_test/*.c)
 OUT     := build_host/tests
 
 .PHONY: test clean

@@ -14,6 +14,8 @@ extern int test_checks;
 
 void test_board(void);
 void test_drawlist(void);
+void test_musicdec(void);
+void test_musicdec_files(const char * dir);
 void test_boardsave(void);
 void test_savefile(void);
 void test_sfxgen(void);

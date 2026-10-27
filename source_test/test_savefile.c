@@ -15,14 +15,16 @@ void test_savefile(void) {
   h.target = 500;
   h.table = 7;
   h.seconds = 0x01020304;
+  h.music = SAVEFILE_MUSIC_SHUFFLE;
   size_t len = savefile_size(&b);
   uint8_t * buf = malloc(len);
   savefile_write(&h, &b, buf);
   CHECK(memcmp(buf, "3DSJGSAW", 8) == 0);
   CHECK(buf[8] == SAVEFILE_VERSION && buf[9] == 0 && buf[10] == SAVEFILE_HEADER && buf[11] == 0);
   int zero = 1;
-  for(int i = SAVEFILE_MINHEADER; i < SAVEFILE_HEADER; i++) if(buf[i]) zero = 0;
+  for(int i = 24; i < SAVEFILE_HEADER; i++) if(buf[i]) zero = 0;
   CHECK(zero);
+  CHECK(buf[23] == SAVEFILE_MUSIC_SHUFFLE);
   CHECK(memcmp(buf + SAVEFILE_HEADER, "JIGS", 4) == 0);
 
   CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK);
@@ -30,6 +32,13 @@ void test_savefile(void) {
   CHECK(r.appver[0] == 1 && r.appver[1] == 2 && r.appver[2] == 3);
   CHECK(r.style == 1 && r.target == 500 && r.table == 7 && r.seconds == 0x01020304);
   CHECK(buf[19] == 4 && buf[22] == 1);
+  CHECK(r.music == SAVEFILE_MUSIC_SHUFFLE);
+  // Saves from before the music field (byte 23 zero) play in order; junk values too
+  buf[23] = 0;
+  CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.music == SAVEFILE_MUSIC_ORDER);
+  buf[23] = 200;
+  CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.music == SAVEFILE_MUSIC_ORDER);
+  buf[23] = SAVEFILE_MUSIC_SHUFFLE;
 
   // Peek works from just the start of the file, like the menu reads it
   SaveInfo info;
