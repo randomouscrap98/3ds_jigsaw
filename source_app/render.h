@@ -5,6 +5,7 @@
 
 #include "board.h"
 #include "camera.h"
+#include "drawlist.h"
 #include "puzzlegfx.h"
 
 // If pieces turn out rotated the wrong way on hardware, flip this to -1
@@ -36,12 +37,12 @@ typedef struct {
 
 int render_init(Render * r);
 void render_free(Render * r);
-// Draw the table and every piece as seen through the camera. held is the group being
+// Draw the table and every piece as seen through the camera, pieces in drawlist order. held is the group being
 // dragged (gets a soft offset shadow on the table, underneath everything) or -1. sel is
 // one byte per group slot, nonzero = selected (tinted; if held is selected, the whole
 // selection gets the shadow). table is an index into the table color palette (wraps).
-void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held,
-    const uint8_t * sel, int table);
+void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, PuzzleGfx * pg,
+    int32_t held, const uint8_t * sel, int table);
 // Selection box between two world points, on top of everything
 void render_box(Camera * c, float wx0, float wy0, float wx1, float wy1);
 // Draw the preview picture centered in the given box, scaled down to fit if needed

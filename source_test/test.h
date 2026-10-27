@@ -13,6 +13,7 @@ extern int test_checks;
 #define CHECKF(a, b) CHECK(fabsf((float)(a) - (float)(b)) < 0.001f)
 
 void test_board(void);
+void test_drawlist(void);
 void test_boardsave(void);
 void test_savefile(void);
 void test_sfxgen(void);

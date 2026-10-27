@@ -80,26 +80,8 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   }
 }
 
-static void render_group(Render * r, Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid, const C2D_ImageTint * tint) {
-  BoardGroup * g = b->groups + gid;
-  float angle = RENDER_ANGLE_SIGN * g->rot * (float)M_PI_2;
-  float zoom = c->zoom;
-  float half = pg->layout.tile * zoom * 0.75f;  // Generous: rotated tile corner reach
-  for(uint16_t p = g->first; p != BOARD_NONE; p = b->pieces[p].next) {
-    float wx, wy, sx, sy;
-    board_piece_center(b, p, &wx, &wy);
-    camera_to_screen(c, wx, wy, &sx, &sy);
-    if(sx < -half || sy < -half || sx > c->sw + half || sy > c->sh + half) continue;
-    C2D_Image img = puzzlegfx_piece(pg, p);
-    if(img.tex != r->lasttex) r->texswaps++;
-    r->lasttex = img.tex;
-    r->drawn++;
-    C2D_DrawImageAtRotated(img, sx, sy, 0.5f, angle, tint, zoom, zoom);
-  }
-}
-
-void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held,
-    const uint8_t * sel, int table) {
+void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, PuzzleGfx * pg,
+    int32_t held, const uint8_t * sel, int table) {
   float x0, y0, x1, y1;
   camera_to_screen(c, 0, 0, &x0, &y0);
   camera_to_screen(c, b->width, b->height, &x1, &y1);
@@ -117,9 +99,21 @@ void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t hel
   r->lasttex = NULL;
   C2D_ImageTint seltint;
   C2D_PlainImageTint(&seltint, RENDER_COLOR_SELECT, RENDER_SELECT_BLEND);
-  for(uint32_t i = 0; i < b->ngroups; i++) {
-    uint16_t gid = b->order[i];
-    render_group(r, b, c, pg, gid, sel[gid] ? &seltint : NULL);
+  float zoom = c->zoom;
+  float half = pg->layout.tile * zoom * 0.75f;  // Generous: rotated tile corner reach
+  for(uint32_t i = 0; i < dl->count; i++) {
+    uint16_t p = dl->pieces[i];
+    uint16_t gid = b->pieces[p].group;
+    float wx, wy, sx, sy;
+    board_piece_center(b, p, &wx, &wy);
+    camera_to_screen(c, wx, wy, &sx, &sy);
+    if(sx < -half || sy < -half || sx > c->sw + half || sy > c->sh + half) continue;
+    C2D_Image img = puzzlegfx_piece(pg, p);
+    if(img.tex != r->lasttex) r->texswaps++;
+    r->lasttex = img.tex;
+    r->drawn++;
+    float angle = RENDER_ANGLE_SIGN * b->groups[gid].rot * (float)M_PI_2;
+    C2D_DrawImageAtRotated(img, sx, sy, 0.5f, angle, sel[gid] ? &seltint : NULL, zoom, zoom);
   }
 }
 

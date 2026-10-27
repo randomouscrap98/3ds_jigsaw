@@ -64,7 +64,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
   }
   g->sel = calloc(g->board.count, 1);
   g->boxsel = calloc(g->board.count, 1);
-  if(!g->sel || !g->boxsel) {
+  if(!g->sel || !g->boxsel || drawlist_init(&g->dl, g->board.count)) {
     GAME_ERR("Out of memory (selection)");
     game_free(g);
     free(save);
@@ -87,6 +87,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
   stick_init(&g->stick, GAME_CIRCLE_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
   stick_init(&g->cstick, GAME_CSTICK_RANGE, GAME_STICK_DEADZONE, GAME_STICK_CURVE, GAME_PANMIN / GAME_PANSPEED);
   camera_set(&g->cam, tw / 2, th / 2, GAME_STARTCELL / l->cell);
+  g->dldirty = 1;
   g->lastsave = osGetTime();
   g->lastframe = g->lastsave;
   if(!cont) game_save(g, 1);
@@ -96,6 +97,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
 void game_free(Game * g) {
   board_free(&g->board);
   puzzlegfx_free(&g->gfx);
+  drawlist_free(&g->dl);
   free(g->sel);
   free(g->boxsel);
   g->sel = NULL;
@@ -191,7 +193,9 @@ static int game_release(Game * g) {
     if(merges && board_complete(&g->board)) ev |= GAME_EV_COMPLETE;
     g->dirty = 1;
   }
+  if(g->held >= 0) g->dldirty = 1;
   g->held = -1;
+  g->ntop = 0;
   g->panning = 0;
   g->movingsel = 0;
   return ev;
@@ -247,12 +251,16 @@ int game_update(Game * g, const GameInput * in) {
       g->held = gid;
       g->movingsel = 1;
       board_raise_marked(&g->board, g->sel);
+      g->ntop = g->nsel;
+      g->dldirty = 1;
     } else {
       // Touching anything outside the selection drops it, then acts as usual
       game_clearsel(g);
       if(gid >= 0) {
         g->held = gid;
         board_raise(&g->board, gid);
+        g->ntop = 1;
+        g->dldirty = 1;
       } else {
         g->panning = 1;
       }
@@ -304,12 +312,20 @@ int game_update(Game * g, const GameInput * in) {
           if(g->sel[i]) board_rotate(&g->board, i, 1, wx, wy);
         }
         game_movesel(g, 0, 0);
+        g->dldirty = 1;   // Selected groups moved relative to each other
       } else {
         board_rotate(&g->board, g->held, 1, wx, wy);
       }
     }
   }
 
+  if(g->dldirty) {
+    u64 t = svcGetSystemTick();
+    drawlist_build(&g->dl, &g->board, g->gfx.layout.tile / 2.0f, g->gfx.layout.perpage, g->ntop);
+    g->perf.build = (svcGetSystemTick() - t) / (SYSCLOCK_ARM11 / 1000.0f);
+    g->perf.layers = g->dl.layers;
+    g->dldirty = 0;
+  }
   if(g->dirty && osGetTime() - g->lastsave > GAME_AUTOSAVE_MS) game_save(g, 1);
   return ev;
 }
@@ -321,10 +337,10 @@ void game_render_bottom(Game * g, Render * r) {
     camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
     memcpy(g->boxsel, g->sel, g->board.count);
     board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->boxsel);
-    render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->boxsel, g->table);
+    render_table(r, &g->board, &g->dl, &g->cam, &g->gfx, g->held, g->boxsel, g->table);
     render_box(&g->cam, g->boxwx, g->boxwy, wx, wy);
   } else {
-    render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->sel, g->table);
+    render_table(r, &g->board, &g->dl, &g->cam, &g->gfx, g->held, g->sel, g->table);
   }
 }
 
@@ -356,7 +372,7 @@ void game_render_top(Game * g, TextDraw * td) {
     u8 a = (u8)(g->overlay * 255);
     char time[16];
     textdraw_fmttime(time, sizeof(time), g->playms / 1000);
-    C2D_DrawRectSolid(90, 66, 0.7f, 220, 110, C2D_Color32(16, 16, 20, (u8)(g->overlay * 210)));
+    C2D_DrawRectSolid(90, 66, 0.7f, 220, 124, C2D_Color32(16, 16, 20, (u8)(g->overlay * 210)));
     textdraw_center(td, 200, 74, 0.8f, C2D_Color32(255, 220, 90, a), "%s", time);
     textdraw_center(td, 200, 108, 0.5f, C2D_Color32(230, 230, 230, a), "%lu pieces, %lu groups left",
         (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
@@ -369,5 +385,7 @@ void game_render_top(Game * g, TextDraw * td) {
         pf->update, pf->bottom);
     textdraw_center(td, 200, 156, 0.45f, pc, "%lu sprites, %lu texture switches",
         (unsigned long)pf->drawn, (unsigned long)pf->texswaps);
+    textdraw_center(td, 200, 170, 0.45f, pc, "draw order: %lu layers, rebuilt in %.2f ms",
+        (unsigned long)pf->layers, pf->build);
   }
 }

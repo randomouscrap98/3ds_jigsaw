@@ -5,6 +5,7 @@
 
 #include "board.h"
 #include "camera.h"
+#include "drawlist.h"
 #include "stick.h"
 #include "puzzlegfx.h"
 #include "render.h"
@@ -55,12 +56,17 @@ typedef struct {
   float bottom;           // game_render_bottom (table + pieces)
   float gpu;              // C3D_GetDrawingTime
   uint32_t drawn, texswaps;
+  float build;            // Last drawlist rebuild (not smoothed)
+  uint32_t layers;        // Drawlist layers
 } GamePerf;
 
 // One puzzle being played: the board, the view onto it, its graphics, and the
 // stylus state.
 typedef struct {
   Board board;
+  DrawList dl;            // Piece draw order (batched by texture page)
+  u8 dldirty;             // Rebuild dl before the next draw
+  uint32_t ntop;          // Groups on top of the board order that are moving (dl's ntop)
   Camera cam;
   Stick stick;
   Stick cstick;

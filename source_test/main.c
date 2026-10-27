@@ -21,6 +21,7 @@ int main(int argc, char ** argv) {
     return 0;
   }
   RUN(test_board);
+  RUN(test_drawlist);
   RUN(test_boardsave);
   RUN(test_savefile);
   RUN(test_sfxgen);
