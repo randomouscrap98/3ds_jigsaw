@@ -14,7 +14,7 @@ static void place(Board * b, uint16_t p, float ox, float oy, uint8_t rot) {
 
 int test_board_grid(Board * b, uint16_t cols, uint16_t rows, float cell, float width, float height) {
   PieceGeo * g = malloc(sizeof(PieceGeo));
-  if(!g || piecegeo_grid(g, cols, rows, cell)) {
+  if(!g || piecegeo_grid(g, cols, rows, cell, NULL)) {
     free(g);
     return 1;
   }

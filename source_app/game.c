@@ -50,7 +50,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   char ipath[STORAGE_MAXPATH], cpath[STORAGE_MAXPATH];
   storage_puzzlepath(name, ipath);
   storage_cachepath(name, target, style, cpath);
-  if(puzzlegfx_load(&g->gfx, ipath, cpath, target, game_cutseed(name, target, style), style,
+  if(puzzlegfx_load(&g->gfx, &g->geo, ipath, cpath, target, game_cutseed(name, target, style), style,
       cb, udata, err, errlen)) {
     free(save);
     return 1;
@@ -59,7 +59,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   storage_cleancaches(name, cpath);
   Layout * l = &g->gfx.layout;
   float tw = l->width * GAME_TABLESCALE, th = l->height * GAME_TABLESCALE;
-  if(piecegeo_grid(&g->geo, l->cols, l->rows, l->cell) || board_init(&g->board, &g->geo, tw, th)) {
+  if(board_init(&g->board, &g->geo, tw, th)) {
     GAME_ERR("Out of memory (board)");
     piecegeo_free(&g->geo);
     puzzlegfx_free(&g->gfx);

@@ -5,6 +5,7 @@
 #include <citro2d.h>
 
 #include "layout.h"
+#include "piecegeo.h"
 #include "progress.h"
 
 #define PGFX_MAXPAGES 3
@@ -13,7 +14,8 @@
 #define PGFX_PREVIEW_TEXH 256
 #define PGFX_PREVIEW_MAXW 400
 #define PGFX_PREVIEW_MAXH 240
-#define PGFX_CACHE_VERSION 3     // 3: validated cuts, Wild style, 3 pages
+#define PGFX_CACHE_VERSION 4     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo
+#define PGFX_MAXGEO (4 << 20)    // Sanity limit on the cached PieceGeo size
 
 
 // All the textures for one puzzle: piece tiles packed into pages, and a preview of the
@@ -29,8 +31,10 @@ typedef struct {
 } PuzzleGfx;
 
 // Load (from cache if valid, otherwise build + write cache). seed picks the cut, style is
-// EDGEGEN_STYLE_*. On failure, a human readable reason is written to err. Returns 0 on success.
-int puzzlegfx_load(PuzzleGfx * pg, const char * imagepath, const char * cachepath,
+// EDGEGEN_STYLE_*. The cut's piece geometry goes to geo (cached with the textures; the
+// caller frees it). On failure, a human readable reason is written to err and geo is left
+// empty. Returns 0 on success.
+int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
     uint32_t target, uint32_t seed, uint8_t style, progress_fn cb, void * udata, char * err, size_t errlen);
 void puzzlegfx_free(PuzzleGfx * pg);
 C2D_Image puzzlegfx_piece(PuzzleGfx * pg, uint32_t piece);

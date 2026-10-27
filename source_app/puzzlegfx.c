@@ -23,6 +23,7 @@ typedef struct {
   u32 style;
   Layout layout;
   u16 previeww, previewh;
+  u32 geosize;            // PieceGeo blob after the preview (piecegeo_write)
 } PuzzleCacheHeader;
 
 #define PGFX_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
@@ -77,17 +78,18 @@ static void puzzlegfx_srcinfo(const char * path, u64 * size, u64 * mtime) {
   archive_getmtime(path, mtime);
 }
 
-static int puzzlegfx_readcache(PuzzleGfx * pg, const char * cachepath, const PuzzleCacheHeader * want,
-    char * err, size_t errlen) {
+static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cachepath,
+    const PuzzleCacheHeader * want, char * err, size_t errlen) {
   FILE * f = fopen(cachepath, "rb");
   if(!f) return 1;
   PuzzleCacheHeader h;
+  uint8_t * gbuf = NULL;
   int result = 1;
   if(fread(&h, sizeof(h), 1, f) != 1) goto done;
   if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.srcsize != want->srcsize ||
      h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed ||
      h.style != want->style) goto done;
-  if(h.layout.pages > PGFX_MAXPAGES) goto done;
+  if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO) goto done;
   pg->layout = h.layout;
   if(puzzlegfx_alloc(pg, err, errlen)) { result = 2; goto done; }
   for(int i = 0; i < pg->npages; i++) {
@@ -97,29 +99,47 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, const char * cachepath, const Puz
   if(fread(pg->preview.data, 1, pg->preview.size, f) != pg->preview.size) goto done;
   C3D_TexFlush(&pg->preview);
   puzzlegfx_setpreview(pg, h.previeww, h.previewh);
+  gbuf = malloc(h.geosize);
+  if(!gbuf) { PGFX_ERR("Out of memory (piece geometry)"); result = 2; goto done; }
+  if(fread(gbuf, 1, h.geosize, f) != h.geosize || piecegeo_read(geo, gbuf, h.geosize)) goto done;
+  // The textures have one tile per grid cell
+  if(geo->count != (uint32_t)h.layout.cols * h.layout.rows) goto done;
   result = 0;
 done:
   fclose(f);
-  if(result) puzzlegfx_free(pg);
+  free(gbuf);
+  if(result) {
+    puzzlegfx_free(pg);
+    piecegeo_free(geo);
+  }
   return result;
 }
 
-static void puzzlegfx_writecache(PuzzleGfx * pg, const char * cachepath, PuzzleCacheHeader * h) {
+static void puzzlegfx_writecache(PuzzleGfx * pg, const PieceGeo * geo, const char * cachepath, PuzzleCacheHeader * h) {
   // Cache failures are not fatal; we just rebuild next time
+  h->geosize = piecegeo_size(geo);
+  uint8_t * gbuf = malloc(h->geosize);
+  if(!gbuf) return;
+  piecegeo_write(geo, gbuf);
   char tmp[STORAGE_MAXTMP];
   storage_tmppath(cachepath, tmp);
   FILE * f = fopen(tmp, "wb");
-  if(!f) return;
+  if(!f) {
+    free(gbuf);
+    return;
+  }
   int ok = fwrite(h, sizeof(*h), 1, f) == 1;
   for(int i = 0; ok && i < pg->npages; i++) {
     ok = fwrite(pg->pages[i].data, 1, pg->pages[i].size, f) == pg->pages[i].size;
   }
   if(ok) ok = fwrite(pg->preview.data, 1, pg->preview.size, f) == pg->preview.size;
+  if(ok) ok = fwrite(gbuf, 1, h->geosize, f) == h->geosize;
+  free(gbuf);
   if(fclose(f) != 0) ok = 0;
   storage_commit(cachepath, ok);
 }
 
-static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHeader * h,
+static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, PuzzleCacheHeader * h,
     progress_fn cb, void * udata, char * err, size_t errlen) {
   int result = 1;
   uint8_t * src = NULL, * img = NULL, * prev = NULL;
@@ -151,7 +171,8 @@ static int puzzlegfx_build(PuzzleGfx * pg, const char * imagepath, PuzzleCacheHe
   for(int i = 0; i < pg->npages; i++) memset(pg->pages[i].data, 0, pg->pages[i].size);
   memset(pg->preview.data, 0, pg->preview.size);
 
-  if(edgegen_init(&eg, l->cols, l->rows, h->seed, style) || piecebake_init(&pb, l->tile)) {
+  if(edgegen_init(&eg, l->cols, l->rows, h->seed, style) || piecebake_init(&pb, l->tile) ||
+     piecegeo_grid(geo, l->cols, l->rows, l->cell, eg.corners)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }
@@ -193,13 +214,17 @@ done:
   free(tile);
   edgegen_free(&eg);
   piecebake_free(&pb);
-  if(result) puzzlegfx_free(pg);
+  if(result) {
+    puzzlegfx_free(pg);
+    piecegeo_free(geo);
+  }
   return result;
 }
 
-int puzzlegfx_load(PuzzleGfx * pg, const char * imagepath, const char * cachepath,
+int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
     uint32_t target, uint32_t seed, uint8_t style, progress_fn cb, void * udata, char * err, size_t errlen) {
   puzzlegfx_zero(pg);
+  memset(geo, 0, sizeof(PieceGeo));
   err[0] = 0;
   PuzzleCacheHeader h;
   memset(&h, 0, sizeof(h));
@@ -214,12 +239,12 @@ int puzzlegfx_load(PuzzleGfx * pg, const char * imagepath, const char * cachepat
     return 1;
   }
   if(cb) cb(udata, "Loading", 0, 1);
-  int r = puzzlegfx_readcache(pg, cachepath, &h, err, errlen);
+  int r = puzzlegfx_readcache(pg, geo, cachepath, &h, err, errlen);
   if(r == 0) return 0;
   if(r == 2) return 1; // Out of memory; rebuilding won't help
-  if(puzzlegfx_build(pg, imagepath, &h, cb, udata, err, errlen)) return 1;
+  if(puzzlegfx_build(pg, geo, imagepath, &h, cb, udata, err, errlen)) return 1;
   if(cb) cb(udata, "Saving cache", 0, 1);
-  puzzlegfx_writecache(pg, cachepath, &h);
+  puzzlegfx_writecache(pg, geo, cachepath, &h);
   return 0;
 }
 
