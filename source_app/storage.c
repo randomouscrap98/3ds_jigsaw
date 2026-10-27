@@ -50,6 +50,47 @@ int storage_iscache(const char * name, const char * file) {
   return p && !strcmp(p, ".bin");
 }
 
+void storage_cleanname(const char * raw, char * out, size_t outlen) {
+  // Last path part only (browsers send just the name, but don't trust it)
+  const char * start = raw;
+  for(const char * p = raw; *p; p++) if(*p == '/' || *p == '\\') start = p + 1;
+  // Drop the extension
+  const char * end = start + strlen(start);
+  for(const char * p = end; p > start; p--) {
+    if(p[-1] == '.') {
+      end = p - 1;
+      break;
+    }
+  }
+  size_t n = 0, max = outlen - 1 < STORAGE_MAXBASE ? outlen - 1 : STORAGE_MAXBASE;
+  for(const char * p = start; p < end && n < max; p++) {
+    char c = *p;
+    int ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || strchr(" -_()',", c);
+    if(c == 0) break;
+    out[n++] = ok ? c : '_';
+  }
+  // No leading or trailing spaces/dots
+  while(n > 0 && out[n - 1] == ' ') n--;
+  size_t lead = 0;
+  while(lead < n && out[lead] == ' ') lead++;
+  memmove(out, out + lead, n - lead);
+  n -= lead;
+  out[n] = 0;
+  if(!n) snprintf(out, outlen, "picture");
+}
+
+int storage_freename(const char * dir, const char * base, const char * ext, char * name, size_t namelen) {
+  for(int i = 1; i <= 999; i++) {
+    if(i == 1) snprintf(name, namelen, "%s%s", base, ext);
+    else snprintf(name, namelen, "%s (%d)%s", base, i, ext);
+    char path[STORAGE_MAXPATH];
+    snprintf(path, sizeof(path), "%s/%s", dir, name);
+    struct stat st;
+    if(stat(path, &st) != 0) return 0;
+  }
+  return 1;
+}
+
 int storage_iscachetmp(const char * name, const char * file) {
   size_t n = strlen(file);
   if(n < 4 || strcmp(file + n - 4, ".tmp") || n - 4 >= STORAGE_MAXPATH) return 0;

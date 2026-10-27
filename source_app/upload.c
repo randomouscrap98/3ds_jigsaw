@@ -1,0 +1,174 @@
+#include "upload.h"
+#include "imageload.h"
+#include "storage.h"
+
+#include <citro2d.h>
+#include <malloc.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+#define UPLOAD_WHITE C2D_Color32(230, 230, 230, 255)
+#define UPLOAD_DIM   C2D_Color32(150, 150, 150, 255)
+#define UPLOAD_TITLE C2D_Color32(240, 200, 90, 255)
+#define UPLOAD_GOOD  C2D_Color32(143, 216, 143, 255)
+#define UPLOAD_BAD   C2D_Color32(255, 140, 120, 255)
+
+static void upload_line(Upload * u, int good, const char * fmt, const char * text) {
+  if(u->nlines == UPLOAD_LINES) {
+    memmove(u->lines, u->lines + 1, sizeof(u->lines[0]) * (UPLOAD_LINES - 1));
+    memmove(u->linegood, u->linegood + 1, UPLOAD_LINES - 1);
+    u->nlines--;
+  }
+  snprintf(u->lines[u->nlines], sizeof(u->lines[0]), fmt, text);
+  u->linegood[u->nlines++] = good;
+}
+
+static int upload_check(const char * path) {
+  return imageload_check(path);
+}
+
+// The page, read once from romfs
+static void upload_loadpage(Upload * u) {
+  if(u->page || R_FAILED(romfsInit())) return;
+  FILE * f = fopen(UPLOAD_PAGE, "rb");
+  if(f) {
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    u->page = len > 0 ? malloc(len) : NULL;
+    if(u->page && fread(u->page, 1, len, f) == (size_t)len) u->pagelen = len;
+    else {
+      free(u->page);
+      u->page = NULL;
+    }
+    fclose(f);
+  }
+  romfsExit();
+}
+
+static void upload_stopnet(Upload * u) {
+  if(u->running) webup_stop(&u->web);
+  u->running = 0;
+  if(u->socok) socExit();
+  u->socok = 0;
+}
+
+// Network up, address known, server listening (or problem says why not)
+static void upload_startnet(Upload * u) {
+  u->lastretry = osGetTime();
+  if(!u->page) {
+    snprintf(u->problem, sizeof(u->problem), "Can't find the upload page in the app");
+    return;
+  }
+  if(!u->socbuf) u->socbuf = memalign(0x1000, UPLOAD_SOCBUF);
+  if(!u->socbuf) {
+    snprintf(u->problem, sizeof(u->problem), "Not enough memory for networking");
+    return;
+  }
+  if(!u->socok) {
+    if(R_FAILED(socInit(u->socbuf, UPLOAD_SOCBUF))) {
+      snprintf(u->problem, sizeof(u->problem), "Can't start networking");
+      return;
+    }
+    u->socok = 1;
+  }
+  struct in_addr ip = { .s_addr = gethostid() };
+  if(ip.s_addr == 0) {
+    snprintf(u->problem, sizeof(u->problem), "Not connected to Wi-Fi (still trying)");
+    return;
+  }
+  if(webup_start(&u->web, UPLOAD_PORT, u->page, u->pagelen, STORAGE_PUZZLES, upload_check)) {
+    snprintf(u->problem, sizeof(u->problem), "%s", u->web.message);
+    return;
+  }
+  u->running = 1;
+  u->problem[0] = 0;
+  snprintf(u->url, sizeof(u->url), "http://%s/", inet_ntoa(ip));
+  uint8_t tmp[qrcodegen_BUFFER_LEN_MAX];
+  u->qrok = qrcodegen_encodeText(u->url, tmp, u->qr, qrcodegen_Ecc_MEDIUM, qrcodegen_VERSION_MIN,
+      qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true);
+}
+
+void upload_open(Upload * u) {
+  memset(u, 0, sizeof(Upload));
+  upload_loadpage(u);
+  upload_startnet(u);
+}
+
+void upload_close(Upload * u) {
+  upload_stopnet(u);
+  free(u->socbuf);
+  free(u->page);
+  u->socbuf = NULL;
+  u->page = NULL;
+}
+
+void upload_pause(Upload * u) {
+  if(u->paused) return;
+  upload_stopnet(u);
+  u->paused = 1;
+}
+
+void upload_resume(Upload * u) {
+  if(!u->paused) return;
+  u->paused = 0;
+  u->lastretry = 0;   // Start again on the next update
+}
+
+int upload_update(Upload * u, u32 down) {
+  if(down & (KEY_B | KEY_START)) return 1;
+  u64 now = osGetTime();
+  if(!u->running && !u->paused && now - u->lastretry >= UPLOAD_RETRY_MS) upload_startnet(u);
+  if(!u->running) return 0;
+  int ev = webup_poll(&u->web, now);
+  u->busy = (ev & WEBUP_EV_BUSY) != 0;
+  if(ev & WEBUP_EV_SAVED) {
+    u->added++;
+    upload_line(u, 1, "Added %s", u->web.message);
+  }
+  if(ev & WEBUP_EV_ERROR) upload_line(u, 0, "%s", u->web.message);
+  return 0;
+}
+
+void upload_render_top(Upload * u, TextDraw * td) {
+  textdraw_print(td, 10, 6, 0.6f, UPLOAD_TITLE, "Add pictures over Wi-Fi");
+  if(u->running) {
+    textdraw_print(td, 10, 34, 0.5f, UPLOAD_DIM, "On a phone or computer on the same Wi-Fi, open:");
+    textdraw_center(td, 200, 52, 0.9f, UPLOAD_WHITE, "%s", u->url);
+    textdraw_print(td, 10, 84, 0.5f, UPLOAD_DIM, "or scan the code on the bottom screen.");
+  } else {
+    textdraw_print(td, 10, 40, 0.5f, UPLOAD_BAD, "%s", u->paused ? "Paused" : u->problem);
+  }
+  float y = 108;
+  if(u->busy && u->web.expect) {
+    textdraw_print(td, 10, y, 0.5f, UPLOAD_WHITE, "Receiving %s... %d%%", u->web.name,
+        (int)(100.0 * u->web.received / u->web.expect));
+  }
+  y += 18;
+  for(int i = 0; i < u->nlines; i++, y += 15) {
+    textdraw_print(td, 10, y, 0.45f, u->linegood[i] ? UPLOAD_GOOD : UPLOAD_BAD, "%s", u->lines[i]);
+  }
+  textdraw_print(td, 10, 222, 0.5f, UPLOAD_DIM, "B: done%s", u->added ? " (new pictures are in the list)" : "");
+}
+
+void upload_render_bottom(Upload * u, TextDraw * td) {
+  if(!u->running || !u->qrok) {
+    textdraw_center(td, 160, 110, 0.5f, UPLOAD_DIM, u->running ? "Open the address on the top screen" : "Waiting for Wi-Fi");
+    return;
+  }
+  // White square with a 4-module quiet zone, black modules, as big as fits
+  int n = qrcodegen_getSize(u->qr), full = n + 8;
+  int scale = 220 / full;
+  if(scale < 1) scale = 1;
+  float side = full * scale, x0 = (320 - side) / 2, y0 = (240 - side) / 2;
+  C2D_DrawRectSolid(x0, y0, 0.5f, side, side, C2D_Color32(255, 255, 255, 255));
+  for(int y = 0; y < n; y++) {
+    for(int x = 0; x < n; x++) {
+      if(!qrcodegen_getModule(u->qr, x, y)) continue;
+      C2D_DrawRectSolid(x0 + (x + 4) * scale, y0 + (y + 4) * scale, 0.6f, scale, scale, C2D_Color32(0, 0, 0, 255));
+    }
+  }
+}

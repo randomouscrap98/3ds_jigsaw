@@ -36,7 +36,7 @@ static int puzzlemenu_cmp(const void * a, const void * b) {
 // littlemenu treat the item as a plain click.
 static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
   PuzzleMenu * pm = data->ptr;
-  int sel = pm->root.current;
+  int sel = pm->root.current - PMENU_FIRST;
   if(sel < 0 || sel >= pm->nentries || !pm->entries[sel].hassave) return NULL;
   // Say what's about to start, since the settings aren't on the line that was pressed
   snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s%s",
@@ -49,6 +49,7 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
 // Options are rebuilt for whichever puzzle was clicked
 static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
   PuzzleMenu * pm = data->ptr;
+  pos -= PMENU_FIRST;
   if(pos < 0 || pos >= pm->nentries) return NULL;
   PuzzleEntry * e = pm->entries + pos;
   tui_menu_clear(&pm->options);
@@ -99,6 +100,7 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
   tui_menu_unit_t cur = pm->root.current;
   tui_menu_clear(&pm->root);
   int err = 0;
+  TUIMITEM_BASIC(&pm->root, err, "+ Add pictures over Wi-Fi", 0);
   if(pm->nentries == 0) {
     // littlemenu can't cope with an empty menu, so always have something
     TUIMITEM_BASIC(&pm->root, err, "(no images in /3ds/jigsaw/puzzles)", 0);
@@ -117,6 +119,8 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
         tui_menu_submenu_destroy_existing_menu, idata, 0);
     if(!err) idata->ptr = pm;
   }
+  // The cursor starts on the first puzzle, not on "Add pictures"
+  if(cur <= 0 && pm->nentries) cur = PMENU_FIRST;
   if(cur > 0) {
     tui_menu_run(&pm->root, (tui_menu_action) { .action = TUIMENU_ACTION_POSITION, .offset = cur });
   }
@@ -236,13 +240,17 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   if(pm->thumb.state != THUMB_NONE && puzzlemenu_active(pm) == &pm->root) thumb_clear(&pm->thumb, 0);
   if(!(act.action & TUIMENU_ACTION_ACCEPT) || r.cancelled || r.result < 0) return choice;
   tui_menu * active = puzzlemenu_active(pm);
-  int sel = pm->root.current;
-  if(sel < 0 || sel >= pm->nentries) return choice;
+  int sel = pm->root.current, ent = sel - PMENU_FIRST;
+  if(active == &pm->root && sel == 0) {
+    choice.upload = 1;
+    return choice;
+  }
+  if(ent < 0 || ent >= pm->nentries) return choice;
   int opt = pm->options.current;
   // Accepted inside options (no save, so no confirm) or "Yes" inside confirm
   if(active == &pm->options || (active == &pm->confirm && pm->confirm.current == 1)) {
     if(opt < 0 || opt >= pm->options.numitems || pm->optact[opt] == PMENU_ACT_NONE) return choice;
-    choice.name = pm->entries[sel].name;
+    choice.name = pm->entries[ent].name;
     choice.target = pm->optact[opt] == PMENU_ACT_NEW ? pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS] : 0;
     choice.style = pm->style;
     choice.whimsy = (unsigned)pm->whimsy % WHIMSY_LEVELS;
@@ -262,7 +270,7 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   const u32 selbg = C2D_Color32(240, 200, 90, 255), title = C2D_Color32(240, 200, 90, 255);
   tui_menu * active = puzzlemenu_active(pm);
   const char * heading = active == &pm->root ? "Pick a puzzle" :
-      active == &pm->options ? pm->entries[pm->root.current].name : "Erase the saved game?";
+      active == &pm->options ? pm->entries[pm->root.current - PMENU_FIRST].name : "Erase the saved game?";
   int hlen = active == &pm->options ? puzzlemenu_namelen(heading) : (int)strlen(heading);
   textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
   char line[PMENU_WIDTH + 1];
@@ -301,8 +309,9 @@ void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td) {
     return;
   }
   textdraw_center(td, 160, 20, 0.9f, white, "3DS Jigsaw");
-  textdraw_print(td, 12, 70, 0.5f, dim, "Put .jpg/.png images in");
-  textdraw_print(td, 12, 86, 0.5f, white, "  sdmc:/3ds/jigsaw/puzzles/");
+  textdraw_print(td, 12, 70, 0.5f, dim, "Add pictures over Wi-Fi (top of the list),");
+  textdraw_print(td, 12, 86, 0.5f, dim, "or put them in");
+  textdraw_print(td, 100, 86, 0.5f, white, "sdmc:/3ds/jigsaw/puzzles/");
   textdraw_print(td, 12, 116, 0.5f, dim, PMENU_HELP_MOVE);
   textdraw_print(td, 12, 132, 0.5f, dim, "Left/Right: change option   L/R: page");
   textdraw_print(td, 12, 148, 0.5f, dim, "START: quit");

@@ -15,6 +15,7 @@
 #include "sfx.h"
 #include "storage.h"
 #include "textdraw.h"
+#include "upload.h"
 
 #define MAIN_BG_TOP    C2D_Color32(30, 32, 38, 255)
 #define MAIN_BG_BOTTOM C2D_Color32(24, 26, 30, 255)
@@ -32,7 +33,7 @@ static void main_smooth(float * avg, float v) {
   *avg += (v - *avg) * MAIN_PERF_SMOOTH;
 }
 
-typedef enum { MODE_MENU, MODE_GAME } MainMode;
+typedef enum { MODE_MENU, MODE_GAME, MODE_UPLOAD } MainMode;
 
 // Everything the app owns, so hooks and callbacks can reach it
 typedef struct {
@@ -45,6 +46,7 @@ typedef struct {
   Game game;
   Sfx sfx;
   Music music;
+  Upload upload;
   MainMode mode;
   aptHookCookie hook;
 } App;
@@ -73,6 +75,12 @@ static void app_progress(void * udata, const char * msg, int done, int total) {
 
 static void app_hook(APT_HookType type, void * param) {
   App * app = param;
+  if(app->mode == MODE_UPLOAD) {
+    // The network doesn't survive sleep or HOME: stop it, start again on the way back
+    if(type == APTHOOK_ONSUSPEND || type == APTHOOK_ONSLEEP) upload_pause(&app->upload);
+    if(type == APTHOOK_ONRESTORE || type == APTHOOK_ONWAKEUP) upload_resume(&app->upload);
+    return;
+  }
   if(app->mode != MODE_GAME) return;
   if(type == APTHOOK_ONSUSPEND || type == APTHOOK_ONSLEEP || type == APTHOOK_ONEXIT) {
     // Synchronous: it must be on the SD before we might be killed
@@ -152,7 +160,17 @@ int main(int argc, char ** argv) {
     if(app.mode == MODE_MENU) {
       PuzzleChoice choice = puzzlemenu_update(&app.menu, in.down, in.repeat);
       if(choice.quit) break;
+      if(choice.upload) {
+        upload_open(&app.upload);
+        app.mode = MODE_UPLOAD;
+      }
       if(choice.name) app_start_game(&app, choice);
+    } else if(app.mode == MODE_UPLOAD) {
+      if(upload_update(&app.upload, in.down)) {
+        upload_close(&app.upload);
+        app.mode = MODE_MENU;
+        puzzlemenu_refresh(&app.menu);   // New pictures show up
+      }
     } else {
       u64 tu = svcGetSystemTick();
       int ev = game_update(&app.game, &in);
@@ -170,9 +188,11 @@ int main(int argc, char ** argv) {
     u64 t2 = svcGetSystemTick();
     C2D_SceneBegin(app.top);
     if(app.mode == MODE_MENU) puzzlemenu_render_top(&app.menu, &app.td);
+    else if(app.mode == MODE_UPLOAD) upload_render_top(&app.upload, &app.td);
     else game_render_top(&app.game, &app.td);
     C2D_SceneBegin(app.bottom);
     if(app.mode == MODE_MENU) puzzlemenu_render_bottom(&app.menu, &app.td);
+    else if(app.mode == MODE_UPLOAD) upload_render_bottom(&app.upload, &app.td);
     else {
       u64 tb = svcGetSystemTick();
       game_render_bottom(&app.game, &app.render);
@@ -194,6 +214,7 @@ int main(int argc, char ** argv) {
     game_save(&app.game, 0);
     game_free(&app.game);
   }
+  if(app.mode == MODE_UPLOAD) upload_close(&app.upload);
   aptUnhook(&app.hook);
   savewriter_free(&app.writer);
   puzzlemenu_free(&app.menu);

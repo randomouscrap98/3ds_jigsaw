@@ -57,7 +57,14 @@ with the music off.
 
 ## Adding pictures
 
-Copy JPG, PNG or BMP files into `sdmc:/3ds/jigsaw/puzzles/`. The first time you start a
+The easy way: pick **+ Add pictures over Wi-Fi** at the top of the puzzle list. With the 3DS
+on Wi-Fi, open the address it shows (or scan the QR code) in a browser on a phone or
+computer on the same network, choose pictures and press Send. The page shrinks them to
+1024 pixels and turns them into JPGs before sending, and they show up in the list when you
+press B. Only one picture travels at a time; anyone on your network could reach the page
+while that screen is open.
+
+Or copy JPG, PNG or BMP files into `sdmc:/3ds/jigsaw/puzzles/` yourself. The first time you start a
 puzzle it gets cut and cached, which takes a few seconds; after that it loads quickly.
 
 - The game only uses up to 1024 pixels on the long side, so anything bigger is wasted space
@@ -97,6 +104,8 @@ Tests for the platform independent code run on your PC with `make -f Makefile.ho
 - [stb_image, stb_image_write, stb_truetype, stb_vorbis](https://github.com/nothings/stb), public domain
 - [dr_mp3, dr_flac](https://github.com/mackron/dr_libs) (MP3 and FLAC decoding), public domain
 - littlemenu, from [littletui](https://git.shsbs.xyz/haloopdy/littletui)
+- [picohttpparser](https://github.com/h2o/picohttpparser) (HTTP parsing for the upload page), MIT
+- [QR Code generator](https://github.com/nayuki/QR-Code-generator) by Project Nayuki, MIT
 - [devkitPro](https://devkitpro.org/): libctru, citro2d, citro3d
 - Sounds are synthesized in code
 

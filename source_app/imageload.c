@@ -26,6 +26,11 @@ uint8_t * imageload_rgb(const char * path, int * w, int * h, char * err, size_t 
   return px;
 }
 
+int imageload_check(const char * path) {
+  int w, h, comp;
+  return stbi_info(path, &w, &h, &comp) && (uint64_t)w * h <= (uint64_t)IMAGELOAD_MAXSIDE * IMAGELOAD_MAXSIDE;
+}
+
 void imageload_free(uint8_t * px) {
   stbi_image_free(px);
 }

@@ -24,6 +24,14 @@ int storage_iscache(const char * name, const char * file);
 // 1 if file is a leftover temp file of one of image name's caches ("<cache>.bin.tmp": a
 // cache write cut short by a crash or power off)
 int storage_iscachetmp(const char * name, const char * file);
+// An uploaded file's name made safe for a picture: no folder parts or extension, only
+// letters, digits, spaces and - _ ( ) ' ,, at most STORAGE_MAXBASE characters, never empty
+// ("picture" if nothing usable is left)
+#define STORAGE_MAXBASE 60
+void storage_cleanname(const char * raw, char * out, size_t outlen);
+// A file name in dir not yet taken: "<base><ext>", else "<base> (2)<ext>", "<base> (3)<ext>"...
+// Returns 0 on success, 1 if none is free (after 999).
+int storage_freename(const char * dir, const char * base, const char * ext, char * name, size_t namelen);
 // Delete every cache of image name except the file at keep (a full cache path), and any
 // leftover cache temp files of it
 void storage_cleancaches(const char * name, const char * keep);

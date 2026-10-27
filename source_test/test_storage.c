@@ -1,9 +1,50 @@
 #include "test.h"
 #include "storage.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+// Upload names: safe, and never clobbering an existing picture
+static void test_storage_names(void) {
+  char out[STORAGE_MAXBASE + 1];
+  storage_cleanname("Cat photo.jpg", out, sizeof(out));
+  CHECK(!strcmp(out, "Cat photo"));
+  storage_cleanname("C:\\Users\\me\\IMG_0001.HEIC", out, sizeof(out));
+  CHECK(!strcmp(out, "IMG_0001"));
+  storage_cleanname("../../evil/../x.png", out, sizeof(out));
+  CHECK(!strcmp(out, "x"));
+  storage_cleanname("  s\xc3\xa9rie: <1>?.jpg", out, sizeof(out));
+  CHECK(!strcmp(out, "s__rie_ _1__"));
+  storage_cleanname("", out, sizeof(out));
+  CHECK(!strcmp(out, "picture"));
+  storage_cleanname(".jpg", out, sizeof(out));
+  CHECK(!strcmp(out, "picture"));
+  char longname[200];
+  memset(longname, 'a', sizeof(longname) - 1);
+  longname[sizeof(longname) - 1] = 0;
+  storage_cleanname(longname, out, sizeof(out));
+  CHECK(strlen(out) == STORAGE_MAXBASE);
+  // Free names in a scratch folder
+  char dir[] = "/tmp/jigsaw_test_XXXXXX";
+  CHECK(mkdtemp(dir) != NULL);
+  char name[128], path[256];
+  CHECK(storage_freename(dir, "Cat", ".jpg", name, sizeof(name)) == 0 && !strcmp(name, "Cat.jpg"));
+  for(int i = 0; i < 2; i++) {
+    snprintf(path, sizeof(path), "%s/%s", dir, name);
+    FILE * f = fopen(path, "wb");
+    if(f) fclose(f);
+    CHECK(storage_freename(dir, "Cat", ".jpg", name, sizeof(name)) == 0);
+  }
+  CHECK(!strcmp(name, "Cat (3).jpg"));
+  snprintf(path, sizeof(path), "%s/Cat.jpg", dir); remove(path);
+  snprintf(path, sizeof(path), "%s/Cat (2).jpg", dir); remove(path);
+  rmdir(dir);
+}
 
 void test_storage(void) {
+  test_storage_names();
   const char * n = "Wheat Field.jpg";
   CHECK(storage_iscache(n, "Wheat Field.jpg_48.bin"));
   CHECK(storage_iscache(n, "Wheat Field.jpg_500_s2.bin"));

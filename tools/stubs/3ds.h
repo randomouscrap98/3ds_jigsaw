@@ -43,6 +43,7 @@ void ndspChnSetFormat(int id, u16 format); void ndspChnSetMix(int id, float mix[
 void ndspChnWaveBufClear(int id); void ndspChnWaveBufAdd(int id, ndspWaveBuf * buf);
 #define R_SUCCEEDED(r) ((r) >= 0)
 Result romfsInit(void); Result romfsExit(void);
+Result socInit(u32 * context_addr, u32 context_size); Result socExit(void);
 typedef struct Thread_tag * Thread;
 typedef void (*ThreadFunc)(void *);
 Thread threadCreate(ThreadFunc entrypoint, void * arg, size_t stack_size, int prio, int core_id, bool detached);

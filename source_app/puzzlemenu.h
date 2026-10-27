@@ -15,6 +15,7 @@
 #define PMENU_NUMCOUNTS 4
 #define PMENU_PIECES_NAMES "50\n100\n250\n500"  // Same as pmenu_counts in puzzlemenu.c
 #define PMENU_PIECES_DEFAULT 1                  // 100
+#define PMENU_FIRST 1        // List items before the puzzles ("Add pictures over Wi-Fi")
 #define PMENU_MAXOPTS 6      // Continue, Pieces, Piece style, Whimsies, Music, Start new puzzle
 #define PMENU_ACT_CONTINUE 0
 #define PMENU_ACT_NEW 0xFFFFFFFE
@@ -40,6 +41,7 @@ typedef struct {
   uint8_t whimsy;       // Whimsies for a new game (WHIMSY_*)
   uint8_t whimsyset;    // Whimsy shapes for a new game (WHIMSY_SET_*)
   uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
+  u8 upload;            // "Add pictures over Wi-Fi" was picked
   u8 quit;
 } PuzzleChoice;
 

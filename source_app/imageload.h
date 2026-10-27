@@ -10,5 +10,7 @@
 // (free with imageload_free) or NULL, with a human readable reason in err if it's not NULL.
 uint8_t * imageload_rgb(const char * path, int * w, int * h, char * err, size_t errlen);
 void imageload_free(uint8_t * px);
+// 1 if path looks like a picture imageload_rgb would take (header and size only, no decode)
+int imageload_check(const char * path);
 
 #endif
