@@ -1,6 +1,6 @@
 # 3DS Jigsaw
 
-Jigsaw puzzles on the 3DS, made from your own pictures. Pick a picture, choose 48 to 500
+Jigsaw puzzles on the 3DS, made from your own pictures. Pick a picture, choose 50 to 500
 pieces and a cut style, and put it together on the touch screen. A dozen paintings come
 with it to get you started.
 

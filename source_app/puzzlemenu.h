@@ -13,9 +13,14 @@
 #define PMENU_WIDTH 46
 #define PMENU_MAXNAME 128
 #define PMENU_NUMCOUNTS 4
+#define PMENU_PIECES_NAMES "50\n100\n250\n500"  // Same as pmenu_counts in puzzlemenu.c
+#define PMENU_PIECES_DEFAULT 1                  // 100
+#define PMENU_MAXOPTS 5      // Continue, Pieces, Piece style, Music, Start new puzzle
 #define PMENU_ACT_CONTINUE 0
+#define PMENU_ACT_NEW 0xFFFFFFFE
 #define PMENU_ACT_NONE 0xFFFFFFFF
 #define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
+#define PMENU_VALUEX 200     // Pixel x of that value column (top screen)
 #define PMENU_MUSIC_NAMES "Off\nIn order\nShuffled"  // Menu order of the music modes
 #define PMENU_MUSIC_DEFAULT 1                         // In order
 #define PMENU_THUMBH THUMB_MAXH  // Bottom screen height used by the picture; controls below
@@ -36,14 +41,16 @@ typedef struct {
   u8 quit;
 } PuzzleChoice;
 
-// Puzzle list -> options (continue / new N pieces) -> confirm overwrite, using littlemenu.
+// Puzzle list -> options (continue / new-puzzle settings / start new) -> confirm overwrite,
+// using littlemenu.
 typedef struct {
   tui_menu root;
   tui_menu options;
   tui_menu confirm;
   PuzzleEntry * entries;
   int nentries;
-  uint32_t optact[PMENU_NUMCOUNTS + 3];  // Action for each options item
+  uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
+  tui_menu_number_t pieces;              // Piece count picked in options: index into the counts
   tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
   tui_menu_number_t music;               // Music picked in options: PMENU_MUSIC_* order
   char status[128];                      // Shown under the menu (errors etc.)

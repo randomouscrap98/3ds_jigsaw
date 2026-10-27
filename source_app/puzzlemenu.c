@@ -10,7 +10,8 @@
 
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
 
-static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 48, 108, 252, 500 };
+static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
+static const char * const pmenu_styles[] = { "Classic", "Irregular", "Wild" };  // EDGEGEN_STYLE_*
 
 static int puzzlemenu_isimage(const char * name) {
   const char * dot = strrchr(name, '.');
@@ -35,6 +36,9 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
   PuzzleMenu * pm = data->ptr;
   int sel = pm->root.current;
   if(sel < 0 || sel >= pm->nentries || !pm->entries[sel].hassave) return NULL;
+  // Say what's about to start, since the settings aren't on the line that was pressed
+  snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s",
+      (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], pmenu_styles[(unsigned)pm->style % 3]);
   tui_menu_reset_ui(&pm->confirm);
   return &pm->confirm;
 }
@@ -61,6 +65,11 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     TUIMITEM_BASIC(&pm->options, err, name, 0);
     pm->optact[n++] = PMENU_ACT_CONTINUE;
   }
+  // Settings for a new puzzle (Continue uses the save's), then the button that starts it
+  if(!err) {
+    TUIMITEM_ENUM(&pm->options, err, "Pieces", &pm->pieces, PMENU_PIECES_NAMES);
+    pm->optact[n++] = PMENU_ACT_NONE;
+  }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild");
     pm->optact[n++] = PMENU_ACT_NONE;
@@ -69,13 +78,12 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     TUIMITEM_ENUM(&pm->options, err, "Music", &pm->music, PMENU_MUSIC_NAMES);
     pm->optact[n++] = PMENU_ACT_NONE;
   }
-  for(int i = 0; i < PMENU_NUMCOUNTS && !err; i++) {
-    snprintf(name, sizeof(name), "New: %lu pieces", (unsigned long)pmenu_counts[i]);
+  if(!err) {
     tui_menu_item_data * idata;
-    TUIMITEM_SUBMENU(&pm->options, err, name, puzzlemenu_create_confirm,
+    TUIMITEM_SUBMENU(&pm->options, err, "Start new puzzle", puzzlemenu_create_confirm,
         tui_menu_submenu_destroy_existing_menu, idata, 0);
     if(!err) idata->ptr = pm;
-    pm->optact[n++] = pmenu_counts[i];
+    pm->optact[n++] = PMENU_ACT_NEW;
   }
   return err ? NULL : &pm->options;
 }
@@ -152,10 +160,11 @@ int puzzlemenu_init(PuzzleMenu * pm) {
   pm->options.valuewidth = PMENU_VALUEWIDTH;
   pm->confirm.valuewidth = 0;
   pm->music = PMENU_MUSIC_DEFAULT;
+  pm->pieces = PMENU_PIECES_DEFAULT;
   thumb_init(&pm->thumb);  // On failure there's just no picture
   int err = 0;
   TUIMITEM_BASIC(&pm->confirm, err, "No, keep my save", 1);
-  if(!err) TUIMITEM_BASIC(&pm->confirm, err, "Yes, erase it and start over", 0);
+  if(!err) TUIMITEM_BASIC(&pm->confirm, err, "Yes, erase it and start over", 0);  // Reworded on open
   if(err) return err;
   return puzzlemenu_refresh(pm);
 }
@@ -227,7 +236,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   if(active == &pm->options || (active == &pm->confirm && pm->confirm.current == 1)) {
     if(opt < 0 || opt >= pm->options.numitems || pm->optact[opt] == PMENU_ACT_NONE) return choice;
     choice.name = pm->entries[sel].name;
-    choice.target = pm->optact[opt];
+    choice.target = pm->optact[opt] == PMENU_ACT_NEW ? pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS] : 0;
     choice.style = pm->style;
     static const uint8_t modes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };
     choice.music = modes[(unsigned)pm->music % 3];
@@ -253,7 +262,15 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
     float y = 32 + i * 16;
     int cur = tui_menu_iscurrent(&pm->root, i) && active->numitems > 0 && active->top + i < active->numitems;
     if(cur) C2D_DrawRectSolid(6, y, 0.5f, 388, 16, selbg);
-    textdraw_print(td, 10, y + 1, 0.5f, cur ? sel : white, "%s", line);
+    // littlemenu pads to character columns, but the system font is proportional, so the
+    // value column gets its own fixed x or values drift with the label widths
+    int split = PMENU_WIDTH - active->valuewidth;
+    if(active->valuewidth > 0 && split > 0) {
+      textdraw_print(td, 10, y + 1, 0.5f, cur ? sel : white, "%.*s", split, line);
+      textdraw_print(td, PMENU_VALUEX, y + 1, 0.5f, cur ? sel : white, "%s", line + split);
+    } else {
+      textdraw_print(td, 10, y + 1, 0.5f, cur ? sel : white, "%s", line);
+    }
   }
 }
 
