@@ -117,6 +117,34 @@ void test_board(void) {
   CHECK(n == 20);
   test_board_free(&b);
 
+  // Cascades: the dropped piece lines up with the first group it meets; after that the
+  // bigger group stays put. Row of 5: pieces 0-2 are a chunk at (0,0); piece 3 is dropped
+  // 1 off it; piece 4 sits 2 off. 3 snaps to the chunk first (left neighbours come first),
+  // then the cascade pulls 4 onto the chunk, not the chunk onto 4.
+  CHECK(test_board_grid(&b, 5, 1, 10, 200, 150) == 0);
+  place(&b, 3, 100, 100, 0);    // A fresh board starts solved: move 3 and 4 away first
+  place(&b, 4, 100, 100, 0);
+  CHECK(board_drop(&b, 0, 0.5f) == 2);
+  place(&b, 3, 1, 0, 0);
+  place(&b, 4, 2, 0, 0);
+  CHECK(board_drop(&b, 3, 3) == 2);
+  CHECK(b.groups[3].count == 5);
+  CHECKF(b.groups[3].x, 0); CHECKF(b.groups[3].y, 0);
+  test_board_free(&b);
+  // And the reverse: dropped onto a lone piece first, then the chunk: the pair moves onto it
+  CHECK(test_board_grid(&b, 5, 1, 10, 200, 150) == 0);
+  place(&b, 0, 5, 0, 0);
+  place(&b, 1, 5, 0, 0);
+  place(&b, 2, 5, 0, 0);
+  CHECK(board_drop(&b, 0, 0.5f) == 2);
+  place(&b, 4, 3, 0, 0);
+  place(&b, 3, 3.5f, 0, 0);     // 0.5 off piece 4, 1.5 off the chunk
+  CHECK(board_drop(&b, 3, 0.6f) == 1);   // only 4 is close enough at first
+  CHECKF(b.groups[3].x, 3);
+  CHECK(board_drop(&b, 3, 3) == 1);      // a second drop: the dropped pair moves to the chunk
+  CHECKF(b.groups[3].x, 5);
+  test_board_free(&b);
+
   // Raise moves a group to the top of draw order; pick prefers the top
   CHECK(test_board_grid(&b, 2, 1, 10, 100, 100) == 0);
   place(&b, 0, 0, 0, 0);

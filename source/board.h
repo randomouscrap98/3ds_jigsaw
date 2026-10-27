@@ -54,7 +54,9 @@ void board_move(Board * b, uint16_t group, float dx, float dy);
 void board_rotate(Board * b, uint16_t group, int dir, float px, float py);
 // Let go of a group: snap/merge it with any matching neighbours within snap distance.
 // Repeats until nothing else merges. The dropped group keeps its id and absorbs the
-// others (it moves to line up with them). Returns number of merges done.
+// others. It moves to line up with the first one it snaps to; in the merges that follow
+// (cascades) the bigger of the two stays put (ties: the dropped one), so a late cascade never
+// shifts a big chunk. Returns number of merges done.
 int board_drop(Board * b, uint16_t group, float snap);
 int board_complete(Board * b);
 

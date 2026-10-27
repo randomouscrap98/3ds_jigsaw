@@ -202,8 +202,12 @@ int board_drop(Board * b, uint16_t group, float snap) {
   for(;;) {
     int32_t other = board_find_merge(b, group, snap);
     if(other < 0) break;
-    b->groups[group].x = b->groups[other].x;
-    b->groups[group].y = b->groups[other].y;
+    // The merged group keeps the dropped group's frame unless the dropped group moves
+    BoardGroup * g = b->groups + group, * o = b->groups + other;
+    if(merges == 0 || g->count < o->count) {
+      g->x = o->x;
+      g->y = o->y;
+    }
     board_merge(b, group, other);
     merges++;
   }
