@@ -46,7 +46,7 @@ APP_AUTHOR := haloopdy
 # App version: the only place to change it (shown in the menu, stamped in saves, CIA
 # version). Objects depend on this Makefile, so changing it rebuilds everything.
 APP_VERSION_MAJOR := 1
-APP_VERSION_MINOR := 0
+APP_VERSION_MINOR := 1
 APP_VERSION_MICRO := 0
 APP_VERSION_STRING := $(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_MICRO)
 

@@ -229,6 +229,52 @@ int board_complete(Board * b) {
   return b->ngroups == 1;
 }
 
+uint32_t board_mark_rect(Board * b, float x0, float y0, float x1, float y1, uint8_t * mark) {
+  if(x0 > x1) { float t = x0; x0 = x1; x1 = t; }
+  if(y0 > y1) { float t = y0; y0 = y1; y1 = t; }
+  uint32_t n = 0;
+  for(uint32_t p = 0; p < b->count; p++) {
+    uint16_t gid = b->pieces[p].group;
+    if(mark[gid]) continue;
+    float x, y;
+    board_piece_center(b, p, &x, &y);
+    if(x >= x0 && x <= x1 && y >= y0 && y <= y1) {
+      mark[gid] = 1;
+      n++;
+    }
+  }
+  return n;
+}
+
+void board_raise_marked(Board * b, const uint8_t * mark) {
+  // Each raise shifts the rest down, so the next unvisited group lands at the same index
+  uint32_t i = 0, raised = 0;
+  while(i + raised < b->ngroups) {
+    uint16_t gid = b->order[i];
+    if(mark[gid]) {
+      board_raise(b, gid);
+      raised++;
+    } else {
+      i++;
+    }
+  }
+}
+
+int board_marked_bounds(Board * b, const uint8_t * mark, float * x0, float * y0, float * x1, float * y1) {
+  int any = 0;
+  for(uint32_t p = 0; p < b->count; p++) {
+    if(!mark[b->pieces[p].group]) continue;
+    float x, y;
+    board_piece_center(b, p, &x, &y);
+    if(!any || x < *x0) *x0 = x;
+    if(!any || y < *y0) *y0 = y;
+    if(!any || x > *x1) *x1 = x;
+    if(!any || y > *y1) *y1 = y;
+    any = 1;
+  }
+  return any;
+}
+
 void board_piece_center(Board * b, uint16_t piece, float * x, float * y) {
   BoardGroup * g = b->groups + b->pieces[piece].group;
   float rx, ry;

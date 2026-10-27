@@ -80,7 +80,7 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   }
 }
 
-static void render_group(Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid) {
+static void render_group(Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid, const C2D_ImageTint * tint) {
   BoardGroup * g = b->groups + gid;
   float angle = RENDER_ANGLE_SIGN * g->rot * (float)M_PI_2;
   float zoom = c->zoom;
@@ -90,17 +90,45 @@ static void render_group(Board * b, Camera * c, PuzzleGfx * pg, uint16_t gid) {
     board_piece_center(b, p, &wx, &wy);
     camera_to_screen(c, wx, wy, &sx, &sy);
     if(sx < -half || sy < -half || sx > c->sw + half || sy > c->sh + half) continue;
-    C2D_DrawImageAtRotated(puzzlegfx_piece(pg, p), sx, sy, 0.5f, angle, NULL, zoom, zoom);
+    C2D_DrawImageAtRotated(puzzlegfx_piece(pg, p), sx, sy, 0.5f, angle, tint, zoom, zoom);
   }
 }
 
-void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held, int table) {
+void render_table(Render * r, Board * b, Camera * c, PuzzleGfx * pg, int32_t held,
+    const uint8_t * sel, int table) {
   float x0, y0, x1, y1;
   camera_to_screen(c, 0, 0, &x0, &y0);
   camera_to_screen(c, b->width, b->height, &x1, &y1);
   C2D_DrawRectSolid(x0, y0, 0.1f, x1 - x0, y1 - y0, render_tablecolors[(unsigned)table % RENDER_TABLECOLORS]);
-  if(held >= 0) render_glow(r, b, c, held);
-  for(uint32_t i = 0; i < b->ngroups; i++) render_group(b, c, pg, b->order[i]);
+  if(held >= 0) {
+    if(sel[held]) {
+      for(uint32_t i = 0; i < b->ngroups; i++) {
+        if(sel[b->order[i]]) render_glow(r, b, c, b->order[i]);
+      }
+    } else {
+      render_glow(r, b, c, held);
+    }
+  }
+  C2D_ImageTint seltint;
+  C2D_PlainImageTint(&seltint, RENDER_COLOR_SELECT, RENDER_SELECT_BLEND);
+  for(uint32_t i = 0; i < b->ngroups; i++) {
+    uint16_t gid = b->order[i];
+    render_group(b, c, pg, gid, sel[gid] ? &seltint : NULL);
+  }
+}
+
+void render_box(Camera * c, float wx0, float wy0, float wx1, float wy1) {
+  float x0, y0, x1, y1;
+  camera_to_screen(c, wx0, wy0, &x0, &y0);
+  camera_to_screen(c, wx1, wy1, &x1, &y1);
+  if(x0 > x1) { float t = x0; x0 = x1; x1 = t; }
+  if(y0 > y1) { float t = y0; y0 = y1; y1 = t; }
+  float w = x1 - x0, h = y1 - y0;
+  C2D_DrawRectSolid(x0, y0, 0.8f, w, h, RENDER_COLOR_BOX);
+  C2D_DrawRectSolid(x0, y0, 0.8f, w, 1, RENDER_COLOR_BOXEDGE);
+  C2D_DrawRectSolid(x0, y1 - 1, 0.8f, w, 1, RENDER_COLOR_BOXEDGE);
+  C2D_DrawRectSolid(x0, y0, 0.8f, 1, h, RENDER_COLOR_BOXEDGE);
+  C2D_DrawRectSolid(x1 - 1, y0, 0.8f, 1, h, RENDER_COLOR_BOXEDGE);
 }
 
 void render_preview(PuzzleGfx * pg, float x, float y, float w, float h) {

@@ -104,6 +104,34 @@ void test_board(void) {
   CHECK(board_pick(&b, 5, 5) == 0);
   board_free(&b);
 
+  // Selection: rect marks whole groups by piece center; raise keeps marked order on top
+  CHECK(board_init(&b, 4, 3, 10, 200, 150) == 0);
+  place(&b, 1, 0, 0, 0);
+  place(&b, 2, 0, 0, 0);
+  for(uint32_t i = 0; i < b.count; i++) if(i != 1 && i != 2) place(&b, i, 100, 100, 0);
+  CHECK(board_drop(&b, 1, 0.5f) == 1);             // 1+2 merged; the rest sit far away
+  uint8_t mark[12] = {0};
+  CHECK(board_mark_rect(&b, 13, 1, 18, 9, mark) == 1);   // only piece 1's center (15,5)
+  CHECK(mark[1] && !mark[2]);                      // group 1 now holds piece 2 too
+  CHECK(board_mark_rect(&b, 18, 9, 13, 1, mark) == 0);   // reversed corners, already marked
+  CHECK(board_mark_rect(&b, 100, 100, 117, 117, mark) == 3);  // pieces 0, 4, 5 (not 6 at 125,115)
+  CHECK(mark[0] && mark[4] && mark[5] && !mark[6]);
+  float bx0, by0, bx1, by1;
+  CHECK(board_marked_bounds(&b, mark, &bx0, &by0, &bx1, &by1));
+  CHECKF(bx0, 15); CHECKF(by0, 5); CHECKF(bx1, 115); CHECKF(by1, 115);
+  uint16_t before[11];
+  for(uint32_t i = 0; i < b.ngroups; i++) before[i] = b.order[i];
+  board_raise_marked(&b, mark);
+  uint32_t k = b.ngroups - 4, w = 0;
+  for(uint32_t i = 0; i < b.ngroups; i++) {
+    uint16_t gid = before[i];
+    if(mark[gid]) CHECK(b.order[k++] == gid);     // marked: on top, same relative order
+    else CHECK(b.order[w++] == gid);              // the rest: below, same relative order
+  }
+  uint8_t none[12] = {0};
+  CHECK(!board_marked_bounds(&b, none, &bx0, &by0, &bx1, &by1));
+  board_free(&b);
+
   // Scatter: everything inside the table, all separate, deterministic per seed
   CHECK(board_init(&b, 26, 19, 37, 26 * 37 * 3, 19 * 37 * 3) == 0);
   board_scatter(&b, 1234, b.width / 4, b.height / 4, b.width / 2, b.height / 2);

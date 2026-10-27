@@ -57,6 +57,15 @@ void board_rotate(Board * b, uint16_t group, int dir, float px, float py);
 int board_drop(Board * b, uint16_t group, float snap);
 int board_complete(Board * b);
 
+// Multi-group selection. mark is one byte per group slot (b->count), nonzero = selected.
+// Mark every group with a piece center inside the rectangle (corners in any order).
+// Returns how many groups were newly marked.
+uint32_t board_mark_rect(Board * b, float x0, float y0, float x1, float y1, uint8_t * mark);
+// Move all marked groups to the top of the draw order, keeping their order among themselves
+void board_raise_marked(Board * b, const uint8_t * mark);
+// Bounds of the piece centers of all marked groups. Returns 0 if nothing is marked.
+int board_marked_bounds(Board * b, const uint8_t * mark, float * x0, float * y0, float * x1, float * y1);
+
 // Utility: world-space center of a piece, plus its rotation
 void board_piece_center(Board * b, uint16_t piece, float * x, float * y);
 uint8_t board_piece_rot(Board * b, uint16_t piece);

@@ -32,6 +32,8 @@
 #define GAME_AUTOSAVE_MS 30000
 #define GAME_MAXFRAME_MS 100      // Longer frames (HOME menu, sleep) only count this much play time
 #define GAME_OVERLAY_FADE_MS 200  // Info overlay (hold Y) fade in / out time
+#define GAME_SELECTKEYS (KEY_A | KEY_DLEFT)  // Held at touch-down: box-select / tap-toggle
+#define GAME_TAPDIST 6            // Stylus moving less than this (pixels) is a tap, not a box
 
 #define GAME_EV_MERGE    (1 << 0)
 #define GAME_EV_COMPLETE (1 << 1)
@@ -60,6 +62,13 @@ typedef struct {
   SaveWriter * writer;    // Where saves go (NULL = write immediately)
   int32_t held;           // Group being dragged, or -1
   u8 panning;             // Stylus is dragging the table
+  u8 boxing;              // Stylus is drawing a selection box (or tapping to toggle)
+  u8 movingsel;           // held is part of the selection: the whole selection follows
+  uint8_t * sel;          // Selected groups: one byte per group slot (board.count)
+  uint32_t nsel;          // Number of selected groups
+  float boxwx, boxwy;     // World point where the box started
+  float boxsx, boxsy;     // Screen point where the box started
+  float boxmove;          // Farthest the stylus got from the box start (pixels)
   float lastwx, lastwy;   // World point under the stylus last frame
   float lastsx, lastsy;   // Screen point of the stylus last frame
   u8 dirty;

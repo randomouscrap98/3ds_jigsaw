@@ -62,6 +62,13 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
     free(save);
     return 1;
   }
+  g->sel = calloc(g->board.count, 1);
+  if(!g->sel) {
+    GAME_ERR("Out of memory (selection)");
+    game_free(g);
+    free(save);
+    return 1;
+  }
   if(cont) {
     int r = savefile_readboard(save, savelen, &hdr, &g->board);
     free(save);
@@ -88,6 +95,9 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, SaveW
 void game_free(Game * g) {
   board_free(&g->board);
   puzzlegfx_free(&g->gfx);
+  free(g->sel);
+  g->sel = NULL;
+  g->nsel = 0;
   g->held = -1;
 }
 
@@ -123,10 +133,56 @@ int game_save(Game * g, int background) {
   return r;
 }
 
+static void game_clearsel(Game * g) {
+  if(g->nsel) memset(g->sel, 0, g->board.count);
+  g->nsel = 0;
+}
+
+// Move every selected group by (dx, dy), cut short so all their piece centers stay on the
+// table. (0, 0) just pushes them back on, e.g. after a rotation.
+static void game_movesel(Game * g, float dx, float dy) {
+  Board * b = &g->board;
+  float x0, y0, x1, y1;
+  if(!board_marked_bounds(b, g->sel, &x0, &y0, &x1, &y1)) return;
+  if(x1 - x0 <= b->width) {
+    if(x0 + dx < 0) dx = -x0;
+    if(x1 + dx > b->width) dx = b->width - x1;
+  }
+  if(y1 - y0 <= b->height) {
+    if(y0 + dy < 0) dy = -y0;
+    if(y1 + dy > b->height) dy = b->height - y1;
+  }
+  if(dx == 0 && dy == 0) return;
+  for(uint32_t i = 0; i < b->count; i++) {
+    if(g->sel[i]) board_move(b, i, dx, dy);
+  }
+}
+
+// Stylus lifted while boxing: a tap toggles the group under it, a drag adds the box
+static void game_endbox(Game * g) {
+  float wx, wy;
+  camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
+  if(g->boxmove < GAME_TAPDIST) {
+    int32_t gid = board_pick(&g->board, wx, wy);
+    if(gid >= 0) {
+      g->sel[gid] = !g->sel[gid];
+      if(g->sel[gid]) g->nsel++;
+      else g->nsel--;
+    }
+  } else {
+    g->nsel += board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->sel);
+  }
+  g->boxing = 0;
+}
+
 // Let go of whatever is held. Returns events.
 static int game_release(Game * g) {
   int ev = 0;
-  if(g->held >= 0) {
+  if(g->boxing) game_endbox(g);
+  if(g->movingsel) {
+    // Moving a selection never snaps: it only goes where it's put
+    g->dirty = 1;
+  } else if(g->held >= 0) {
     int merges = board_drop(&g->board, g->held, g->board.cell * GAME_SNAP);
     if(merges) ev |= GAME_EV_MERGE;
     if(merges && board_complete(&g->board)) ev |= GAME_EV_COMPLETE;
@@ -134,6 +190,7 @@ static int game_release(Game * g) {
   }
   g->held = -1;
   g->panning = 0;
+  g->movingsel = 0;
   return ev;
 }
 
@@ -176,11 +233,26 @@ int game_update(Game * g, const GameInput * in) {
     float wx, wy;
     camera_to_world(c, in->touch.px, in->touch.py, &wx, &wy);
     int32_t gid = board_pick(&g->board, wx, wy);
-    if(gid >= 0) {
+    if(in->held & GAME_SELECTKEYS) {
+      g->boxing = 1;
+      g->boxwx = wx;
+      g->boxwy = wy;
+      g->boxsx = in->touch.px;
+      g->boxsy = in->touch.py;
+      g->boxmove = 0;
+    } else if(gid >= 0 && g->sel[gid]) {
       g->held = gid;
-      board_raise(&g->board, gid);
+      g->movingsel = 1;
+      board_raise_marked(&g->board, g->sel);
     } else {
-      g->panning = 1;
+      // Touching anything outside the selection drops it, then acts as usual
+      game_clearsel(g);
+      if(gid >= 0) {
+        g->held = gid;
+        board_raise(&g->board, gid);
+      } else {
+        g->panning = 1;
+      }
     }
     g->lastwx = wx;
     g->lastwy = wy;
@@ -188,9 +260,13 @@ int game_update(Game * g, const GameInput * in) {
     g->lastsy = in->touch.py;
   } else if(in->held & KEY_TOUCH) {
     float sx = in->touch.px, sy = in->touch.py;
+    if(g->boxing) {
+      float d = hypotf(sx - g->boxsx, sy - g->boxsy);
+      if(d > g->boxmove) g->boxmove = d;
+    }
     if(g->panning) {
       camera_pan(c, g->lastsx - sx, g->lastsy - sy);
-    } else if(g->held >= 0) {
+    } else if(g->held >= 0 || (g->boxing && g->boxmove >= GAME_TAPDIST)) {
       // Dragging near the edge scrolls the table along
       float ex = 0, ey = 0;
       if(sx < GAME_EDGEPAN) ex = -GAME_EDGEPANSPEED;
@@ -213,11 +289,22 @@ int game_update(Game * g, const GameInput * in) {
     if(wy < 0) wy = 0;
     if(wx > g->board.width) wx = g->board.width;
     if(wy > g->board.height) wy = g->board.height;
-    board_move(&g->board, g->held, wx - g->lastwx, wy - g->lastwy);
+    if(g->movingsel) game_movesel(g, wx - g->lastwx, wy - g->lastwy);
+    else board_move(&g->board, g->held, wx - g->lastwx, wy - g->lastwy);
     g->lastwx = wx;
     g->lastwy = wy;
-    // Either shoulder turns clockwise, so both hands work the same
-    if(in->down & (KEY_L | KEY_R)) board_rotate(&g->board, g->held, 1, wx, wy);
+    // Either shoulder turns clockwise, so both hands work the same. A selection turns as
+    // one cluster around the stylus.
+    if(in->down & (KEY_L | KEY_R)) {
+      if(g->movingsel) {
+        for(uint32_t i = 0; i < g->board.count; i++) {
+          if(g->sel[i]) board_rotate(&g->board, i, 1, wx, wy);
+        }
+        game_movesel(g, 0, 0);
+      } else {
+        board_rotate(&g->board, g->held, 1, wx, wy);
+      }
+    }
   }
 
   if(g->dirty && osGetTime() - g->lastsave > GAME_AUTOSAVE_MS) game_save(g, 1);
@@ -225,7 +312,12 @@ int game_update(Game * g, const GameInput * in) {
 }
 
 void game_render_bottom(Game * g, Render * r) {
-  render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->table);
+  render_table(r, &g->board, &g->cam, &g->gfx, g->held, g->sel, g->table);
+  if(g->boxing && g->boxmove >= GAME_TAPDIST) {
+    float wx, wy;
+    camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
+    render_box(&g->cam, g->boxwx, g->boxwy, wx, wy);
+  }
 }
 
 void game_render_top(Game * g, TextDraw * td) {
@@ -242,8 +334,13 @@ void game_render_top(Game * g, TextDraw * td) {
   if(board_complete(&g->board)) {
     textdraw_center(td, 200, 208, 0.7f, C2D_Color32(255, 220, 90, 255), "Complete!  START: menu");
   } else {
-    textdraw_print(td, 6, 208, 0.5f, white, "%lu pieces, %lu groups left",
-        (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
+    if(g->nsel) {
+      textdraw_print(td, 6, 208, 0.5f, white, "%lu pieces, %lu groups left, %lu selected",
+          (unsigned long)g->board.count, (unsigned long)g->board.ngroups, (unsigned long)g->nsel);
+    } else {
+      textdraw_print(td, 6, 208, 0.5f, white, "%lu pieces, %lu groups left",
+          (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
+    }
     textdraw_print(td, 6, 224, 0.45f, dim, "L or R rotate held  Up/Down or X/B zoom  START save+menu");
   }
   if(g->overlay > 0) {
