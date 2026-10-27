@@ -3,6 +3,8 @@
 
 #include "edgegen.h"
 #include "randcut.h"
+#include "cutgraph.h"
+#include "whimsy.h"
 #include "piecegeo.h"
 
 #include <stdint.h>
@@ -15,19 +17,26 @@
 #define CUT_STYLE_RANDOM 3
 #define CUT_STYLES 4
 
+#define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
+
 // One puzzle's cut, whatever the style: piece outlines and geometry for a cols x rows
-// puzzle (in cells; the solved puzzle spans (0,0) to (cols,rows)).
+// puzzle (in cells; the solved puzzle spans (0,0) to (cols,rows)). Grid styles without
+// whimsies use edgegen directly (pieces exactly as in 1.0-1.1); everything else is a
+// CutGraph. Pieces 0 .. cols*rows-1 are the grid/random pieces, whimsies come after.
 typedef struct {
-  uint8_t style;
+  uint8_t style, whimsy, set;
   uint16_t cols, rows;
-  uint32_t count;       // Pieces
+  uint32_t count;       // Pieces (including whimsies)
+  uint32_t whimsies;    // Whimsies placed
   uint32_t maxpoints;   // Largest outline (points)
+  uint8_t usegraph;
   EdgeGen eg;           // Grid styles
-  RandCut rc;           // Random style
+  CutGraph g;           // Random style, or anything with whimsies
 } Cutter;
 
-// Same style + seed = same cut. Unknown styles cut classic. Returns 0 on success.
-int cutter_init(Cutter * c, uint8_t style, uint16_t cols, uint16_t rows, uint32_t seed);
+// Same style + whimsy level + set + seed = same cut. Unknown styles cut classic, unknown
+// whimsy levels/sets are none/cute. Returns 0 on success.
+int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed);
 void cutter_free(Cutter * c);
 // Closed outline of piece p (clockwise, y down) in the puzzle frame scaled by cell, then
 // offset by (ox, oy). xy must hold maxpoints pairs. Returns the number of points.

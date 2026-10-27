@@ -35,7 +35,7 @@ void test_layout(void) {
         Layout l;
         CHECK(layout_crop(&l, sizes[s][0], sizes[s][1], targets[t]) == 0);
         Cutter cut;
-        CHECK(cutter_init(&cut, st, l.cols, l.rows, 1000 + t) == 0);
+        CHECK(cutter_init(&cut, st, WHIMSY_NONE, 0, l.cols, l.rows, 1000 + t) == 0);
         float * boxes = malloc(sizeof(float) * 4 * cut.count);
         LayoutTile * tiles = malloc(sizeof(LayoutTile) * cut.count);
         LayoutTile * again = malloc(sizeof(LayoutTile) * cut.count);
@@ -84,7 +84,7 @@ void test_layout(void) {
 // changes; update them only together with a deliberate, versioned change.
 static uint32_t cut_hash(uint8_t style, uint16_t cols, uint16_t rows, uint32_t seed) {
   Cutter cut;
-  if(cutter_init(&cut, style, cols, rows, seed)) return 0;
+  if(cutter_init(&cut, style, WHIMSY_NONE, 0, cols, rows, seed)) return 0;
   float * xy = malloc(sizeof(float) * 2 * cut.maxpoints);
   uint32_t h = 2166136261u;
   for(uint32_t p = 0; p < cut.count; p++) {
@@ -323,7 +323,7 @@ void test_dump_cut(const char * path, uint8_t stylenum) {
   Layout l;
   layout_crop(&l, 600, 400, 24);
   Cutter cut;
-  cutter_init(&cut, stylenum, l.cols, l.rows, 7);
+  cutter_init(&cut, stylenum, WHIMSY_NONE, 0, l.cols, l.rows, 7);
   float * boxes = malloc(sizeof(float) * 4 * cut.count);
   LayoutTile * tiles = malloc(sizeof(LayoutTile) * cut.count);
   cutter_bounds(&cut, boxes);

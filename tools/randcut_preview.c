@@ -39,14 +39,14 @@ static float polyarea(const float * xy, uint32_t n) {
 }
 
 // Bake every piece from img (W x H) and draw it at its home spot scaled out by spread
-static void render(const RandCut * c, const PieceGeo * g, float cell, const uint8_t * img,
+static void render(const CutGraph * c, const PieceGeo * g, float cell, const uint8_t * img,
     uint32_t W, uint32_t H, float spread, const char * path) {
-  uint32_t maxp = randcut_maxpoints(c);
+  uint32_t maxp = cutgraph_maxpoints(c);
   float * xy = malloc(sizeof(float) * 2 * maxp);
   // Tile = biggest piece bounding box
   float side = 0;
   for(uint32_t p = 0; p < c->count; p++) {
-    uint32_t n = randcut_outline(c, p, cell, 0, 0, xy);
+    uint32_t n = cutgraph_outline(c, p, cell, 0, 0, xy);
     for(uint32_t i = 0; i < n; i++) {
       side = fmaxf(side, 2 * fabsf(xy[i * 2] - g->center[p * 2]));
       side = fmaxf(side, 2 * fabsf(xy[i * 2 + 1] - g->center[p * 2 + 1]));
@@ -62,7 +62,7 @@ static void render(const RandCut * c, const PieceGeo * g, float cell, const uint
   for(uint32_t p = 0; p < c->count; p++) {
     float cx = g->center[p * 2], cy = g->center[p * 2 + 1];
     int32_t ox = (int32_t)floorf(cx - tile / 2.0f), oy = (int32_t)floorf(cy - tile / 2.0f);
-    uint32_t n = randcut_outline(c, p, cell, -ox, -oy, xy);
+    uint32_t n = cutgraph_outline(c, p, cell, -ox, -oy, xy);
     piecebake_tile(&pb, xy, n, img, W, H, ox, oy, tile, tile, out);
     int32_t dx = (int32_t)(cx * (1 + spread)) - (cx - ox) + tile / 2, dy = (int32_t)(cy * (1 + spread)) - (cy - oy) + tile / 2;
     for(int y = 0; y < tile; y++) for(int x = 0; x < tile; x++) {
@@ -103,7 +103,7 @@ int main(int argc, char ** argv) {
       uint16_t cols, rows;
       layout_grid(sw, sh, targets[t], &cols, &rows);
       uint32_t count = cols * rows;
-      RandCut c;
+      CutGraph c;
       double t0 = now_ms();
       if(randcut_init(&c, cols, rows, count, seed, randcut_style(st))) {
         printf("%s %u: FAILED after %u tries\n", names[st], count, c.tries);
@@ -113,7 +113,7 @@ int main(int argc, char ** argv) {
       float cell = (float)OUTW / cols;
       uint32_t W = (uint32_t)(cols * cell), H = (uint32_t)(rows * cell);
       PieceGeo g;
-      randcut_geo(&c, cell, &g);
+      cutgraph_geo(&c, cell, &g);
       // Stats: areas (cells^2), sides, tabs per piece, tabs per edge
       float amin = 1e9f, amax = 0;
       double asum = 0, asq = 0;
@@ -150,7 +150,7 @@ int main(int argc, char ** argv) {
       free(img);
       free(grey);
       piecegeo_free(&g);
-      randcut_free(&c);
+      cutgraph_free(&c);
     }
   }
   stbi_image_free(src);

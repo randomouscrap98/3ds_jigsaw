@@ -173,7 +173,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   // Cut first (in cells), then pick the piece size whose tiles fit the pages
   if(cb) cb(udata, "Cutting pieces", 0, 1);
-  if(cutter_init(&cut, h->style, l->cols, l->rows, h->seed)) {
+  if(cutter_init(&cut, h->style, WHIMSY_NONE, WHIMSY_SET_CUTE, l->cols, l->rows, h->seed)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }

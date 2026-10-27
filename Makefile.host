@@ -28,6 +28,12 @@ build_host/makeart: tools/makeart.c source/edgegen.c source/imgscale.c source/rn
 	$(CC) -O2 -Wall -Isource -Itools tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c -lm -o $@
 
 # Random cut preview (tools/randcut_preview.c): renders every random style at 100/250/500
-build_host/randcut_preview: tools/randcut_preview.c source/randcut.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c $(wildcard source/*.h)
+build_host/randcut_preview: tools/randcut_preview.c source/randcut.c source/cutgraph.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c $(wildcard source/*.h)
 	@mkdir -p build_host
-	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/randcut_preview.c source/randcut.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c -lm -o $@
+	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/randcut_preview.c source/randcut.c source/cutgraph.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c -lm -o $@
+
+# Cut preview (tools/cut_preview.c): whimsy shapes + cuts with whimsies, for tuning
+CUTSRCS := source/cutter.c source/randcut.c source/cutgraph.c source/whimsy.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c
+build_host/cut_preview: tools/cut_preview.c $(CUTSRCS) $(wildcard source/*.h)
+	@mkdir -p build_host
+	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/cut_preview.c $(CUTSRCS) -lm -o $@
