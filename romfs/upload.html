@@ -19,19 +19,63 @@
   #log { list-style: none; margin: 0; padding: 0; font-size: 0.9em; }
   #log li { padding: 0.3em 0.5em; border-radius: 0.3em; margin-top: 0.3em; background: #1e2026; overflow-wrap: anywhere; }
   .ok { color: #8fd88f; } .bad { color: #ff8c78; }
+  #warn { display: flex; flex-direction: column; gap: 0.5em; padding: 0.8em; border-radius: 0.5em;
+    background: #4a2a26; color: #ffd2c8; font-size: 0.9em; }
+  #warn[hidden] { display: none; }
+  #warn button { background: #e6e6e6; }
 </style>
 </head>
 <body>
 <div id="main">
   <h2>Add pictures to 3DS Jigsaw</h2>
   <p>Pictures are shrunk to 1024 pixels on the long side before they're sent.</p>
+  <div id="warn" hidden>
+    <div>Your browser is blocking the picture shrinker (canvas access), so pictures would arrive
+      ruined. Allow canvas access for this page (look for an icon in the address bar), then
+      press Check again.</div>
+    <button onclick="checkCanvas()">Check again</button>
+    <div>Or send the files as they are. That only works for pictures that are already small
+      (about 1024 pixels on the long side); bigger ones are refused by the 3DS.</div>
+    <button id="originals" onclick="sendAll(true)">Send originals instead</button>
+  </div>
   <input type="file" id="files" multiple accept="image/*" onchange="showNames()">
   <div id="names"></div>
-  <button id="send" onclick="sendAll()">Send to 3DS</button>
+  <button id="send" onclick="sendAll(false)">Send to 3DS</button>
   <ul id="log"></ul>
 </div>
 <script>
 const MAXSIDE = 1024, QUALITY = 0.92;
+
+// Browsers that block reading canvases (fingerprinting protection) hand back blank or made-up
+// pixels, which would upload as ruined pictures. Reading a small test canvas tells; doing it
+// when the page opens also brings up their "allow" prompt before anything is picked. A little
+// tolerance: some browsers only add faint noise, which is harmless.
+function canvasWorks() {
+  try {
+    const colors = [[200, 30, 40], [20, 180, 60], [30, 60, 220], [250, 240, 10]];
+    const canvas = document.createElement('canvas');
+    canvas.width = colors.length;
+    canvas.height = 1;
+    const ctx = canvas.getContext('2d');
+    colors.forEach((c, i) => { ctx.fillStyle = 'rgb(' + c.join(',') + ')'; ctx.fillRect(i, 0, 1, 1); });
+    const d = ctx.getImageData(0, 0, colors.length, 1).data;
+    return colors.every((c, i) => c.every((v, k) => Math.abs(d[i * 4 + k] - v) <= 8));
+  } catch(e) {
+    return false;
+  }
+}
+
+let busy = false;
+function setButtons() {
+  document.getElementById('send').disabled = busy || !document.getElementById('warn').hidden;
+  document.getElementById('originals').disabled = busy;
+}
+
+function checkCanvas() {
+  document.getElementById('warn').hidden = canvasWorks();
+  setButtons();
+  return document.getElementById('warn').hidden;
+}
 
 function line(text, cls) {
   const li = document.createElement('li');
@@ -89,11 +133,13 @@ function showNames() {
   }
 }
 
-async function sendAll() {
+// originals: send the files untouched (when the canvas is blocked)
+async function sendAll(originals) {
   const files = document.getElementById('files').files;
-  const button = document.getElementById('send');
   if(!files.length) { line('Pick some pictures first', 'bad'); return; }
-  button.disabled = true;
+  if(!originals && !checkCanvas()) { line('Allow canvas access first (see above)', 'bad'); return; }
+  busy = true;
+  setButtons();
   let saved = 0;
   const names = document.querySelectorAll('#names input');
   // One at a time: the 3DS takes one upload at a time
@@ -101,12 +147,13 @@ async function sendAll() {
     const file = files[i];
     // Sent with .jpg so the 3DS's "drop the extension" step doesn't eat part of a typed name
     const name = ((names[i] && names[i].value.trim()) || baseName(file.name)) + '.jpg';
-    const li = line(file.name + ': shrinking...');
+    const li = line(file.name + (originals ? ': sending as is...' : ': shrinking...'));
     try {
-      const jpeg = await shrink(file);
-      li.textContent = file.name + ': sending ' + Math.round(jpeg.size / 1024) + ' KB...';
+      // The 3DS names it .jpg either way; it reads the picture by its contents
+      const body = originals ? file : await shrink(file);
+      li.textContent = file.name + ': sending ' + Math.round(body.size / 1024) + ' KB...';
       const r = await fetch('/upload?name=' + encodeURIComponent(name),
-        { method: 'POST', headers: { 'Content-Type': 'image/jpeg' }, body: jpeg });
+        { method: 'POST', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body: body });
       const text = await r.text();
       if(!r.ok) throw new Error(text || ('error ' + r.status));
       li.textContent = file.name + ': ' + text;
@@ -118,8 +165,11 @@ async function sendAll() {
     }
   }
   line(saved + ' of ' + files.length + ' sent. They are in the puzzle list on the 3DS.');
-  button.disabled = false;
+  busy = false;
+  setButtons();
 }
+
+checkCanvas();
 </script>
 </body>
 </html>

@@ -138,6 +138,7 @@ static void app_rename(App * app, const char * name) {
 static void app_delete(App * app, const char * name) {
   char old[PMENU_MAXNAME];
   snprintf(old, sizeof(old), "%s", name);   // name is in the menu's list, which refresh frees
+  app_progress(app, "Deleting...", 0, 1);   // Waiting for the thumbnail + SD work: a few seconds
   puzzlemenu_waitidle(&app->menu);          // The thumbnail thread may be reading the picture
   savewriter_flush(&app->writer);
   PicDirs dirs = { STORAGE_PUZZLES, STORAGE_SAVES, STORAGE_CACHE };

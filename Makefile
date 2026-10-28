@@ -217,7 +217,11 @@ else
 #---------------------------------------------------------------------------------
 # main targets
 #---------------------------------------------------------------------------------
-$(OUTPUT).3dsx	:	$(OUTPUT).elf $(_3DSXDEPS)
+# Always rebuilt: it embeds romfs/, which nothing else depends on (an edit to only
+# romfs/upload.html used to leave the old page in). 3dsxtool only takes a moment.
+$(OUTPUT).3dsx	:	$(OUTPUT).elf $(_3DSXDEPS) FORCE
+
+FORCE:
 
 $(OFILES_SOURCES) : $(HFILES) $(TOPDIR)/Makefile
 
