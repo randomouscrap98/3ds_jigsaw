@@ -51,6 +51,15 @@ void test_overlay(void) {
   CHECK(overlay_luma(img) < 0.12f && img[2] > 10);
   free(img);
 
+  // Even: light grey gets about as much color in the yellow corner as in the blue one (it
+  // used to turn vivid yellow: "less blue" has lots of room on light pixels)
+  img = overlay_flat(w, h, 220, OVERLAY_HOLOGRAM);
+  const uint8_t * lb = img, * ly = img + ((size_t)(h - 1) * w + w - 1) * 3;
+  int spreadb = lb[2] - (lb[0] < lb[1] ? lb[0] : lb[1]);
+  int spready = (ly[0] > ly[1] ? ly[0] : ly[1]) - ly[2];
+  CHECK(spready < spreadb * 3 / 2);
+  free(img);
+
   // Rainbow: gentle, brightness kept on grey; red at the top left, purple at the bottom right
   img = overlay_flat(w, h, 128, OVERLAY_RAINBOW);
   kept = 1;

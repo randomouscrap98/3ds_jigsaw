@@ -19,7 +19,8 @@ typedef struct {
   char magic[4];
   u32 version;
   u16 headsize, layoutsize, tilesize;
-  u16 overlay;            // OVERLAY_* (was padding, zero: caches from before overlays are "none")
+  u16 overlay;            // OVERLAY_* | OVERLAY_LOOK << 8 (0 = none; was padding, zero: caches
+                          // from before overlays are "none")
   u64 srcsize;
   u64 srcmtime;
   u32 target;
@@ -223,7 +224,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   src = NULL;
   if(h->overlay) {
     if(cb) cb(udata, "Coloring image", 0, 1);
-    overlay_apply(h->overlay, img, l->width, l->height);
+    overlay_apply(h->overlay & 0xFF, img, l->width, l->height);
   }
 
   if(puzzlegfx_alloc(pg, err, errlen)) goto done;
@@ -300,7 +301,7 @@ int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const
   h.style = style;
   h.whimsy = whimsy;
   h.whimsyset = whimsyset;
-  h.overlay = overlay;
+  h.overlay = overlay ? overlay | OVERLAY_LOOK << 8 : 0;
   puzzlegfx_srcinfo(imagepath, &h.srcsize, &h.srcmtime);
   if(h.srcsize == 0) {
     PGFX_ERR("Can't find image %s", imagepath);

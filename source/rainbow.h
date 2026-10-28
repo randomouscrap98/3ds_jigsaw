@@ -17,6 +17,7 @@
 #define RAINBOW_DIAGONAL 0
 #define RAINBOW_CORNERS 1
 #define RAINBOW_CORNERS_FULL 2
+#define RAINBOW_EVEN 0x10         // Flag on a mode: color amount by brightness only (rainbow.c)
 #define RAINBOW_PALETTES 6        // Corner color sets (rainbow.c); 0 = blue pink green yellow
 
 #define RAINBOW_HUESPAN 300.0f   // Degrees of hue across the picture (not 360: the corners differ)

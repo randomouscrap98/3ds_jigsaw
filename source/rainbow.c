@@ -73,6 +73,8 @@ static void rainbow_cornerdir(const float cdirs[4][3], float u, float v, int ren
 
 void rainbow_apply(uint8_t * rgb, uint32_t w, uint32_t h, int mode, int palette, float strength, float minlight, float mindark) {
   if(!w || !h) return;
+  int even = mode & RAINBOW_EVEN;
+  mode &= ~RAINBOW_EVEN;
   float cdirs[4][3];
   rainbow_cornerdirs(rainbow_palettes[(unsigned)palette % RAINBOW_PALETTES], cdirs);
   // One direction per diagonal (x + y)
@@ -99,9 +101,16 @@ void rainbow_apply(uint8_t * rgb, uint32_t w, uint32_t h, int mode, int palette,
       }
       float v[3] = { p[0] / 255.0f, p[1] / 255.0f, p[2] / 255.0f };
       // Biggest shift that fits without leaving 0..1
+      // RAINBOW_EVEN: room in both directions, as if the opposite hue had to fit too, so
+      // how much color a pixel gets depends on its brightness, not on the hue (yellow is
+      // mostly "less blue", which light pixels have plenty of room for)
       float fit = strength;
       for(int i = 0; i < 3; i++) {
         float room = d[i] > 0 ? (1 - v[i]) / d[i] : d[i] < 0 ? v[i] / -d[i] : strength;
+        if(even && d[i] != 0) {
+          float back = d[i] > 0 ? v[i] / d[i] : (1 - v[i]) / -d[i];
+          if(back < room) room = back;
+        }
         if(room < fit) fit = room;
       }
       // Floor by which end the pixel is near (only matters near the ends: in the middle
