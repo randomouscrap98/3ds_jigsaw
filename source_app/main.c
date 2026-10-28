@@ -12,6 +12,7 @@
 #include "picfiles.h"
 #include "puzzlemenu.h"
 #include "savewriter.h"
+#include "speedup.h"
 #include "render.h"
 #include "sfx.h"
 #include "storage.h"
@@ -100,8 +101,11 @@ static void app_start_game(App * app, PuzzleChoice choice) {
   char err[256] = "";
   app_progress(app, "Loading", 0, 1);
   puzzlemenu_waitidle(&app->menu);
-  if(game_init(&app->game, choice.name, choice.target, choice.style, choice.whimsy, choice.whimsyset, choice.overlay,
-      choice.music, &app->writer, app_progress, app, err, sizeof(err))) {
+  speedup_begin();   // Decode, cut, draw pieces, overlay (or read the cache)
+  int r = game_init(&app->game, choice.name, choice.target, choice.style, choice.whimsy, choice.whimsyset, choice.overlay,
+      choice.music, &app->writer, app_progress, app, err, sizeof(err));
+  speedup_end();
+  if(r) {
     puzzlemenu_setstatus(&app->menu, err[0] ? err : "Couldn't start the puzzle");
     return;
   }
@@ -169,6 +173,7 @@ int main(int argc, char ** argv) {
   render_init(&app.render);  // Without it there's just no shadow
   sfx_init(&app.sfx);
   storage_init();
+  speedup_init();
   savewriter_init(&app.writer);  // On failure, saves are just written inline
   if(R_SUCCEEDED(romfsInit())) {
     // Failure isn't fatal: the menu just shows whatever made it
@@ -258,7 +263,8 @@ int main(int argc, char ** argv) {
   if(app.mode == MODE_UPLOAD) upload_close(&app.upload);
   aptUnhook(&app.hook);
   savewriter_free(&app.writer);
-  puzzlemenu_free(&app.menu);
+  puzzlemenu_free(&app.menu);  // Joins the thumbnail thread
+  speedup_exit();
   music_free(&app.music);  // Before sfx_free shuts ndsp down
   sfx_free(&app.sfx);
   render_free(&app.render);

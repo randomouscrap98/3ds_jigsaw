@@ -3,6 +3,7 @@
 #include "imgscale.h"
 #include "overlay.h"
 #include "picfiles.h"
+#include "speedup.h"
 #include "swizzle.h"
 #include "texutil.h"
 
@@ -72,6 +73,7 @@ static void thumb_thread(void * arg) {
       LightLock_Unlock(&t->lock);
       if(!work) break;
       u16 w = 0, h = 0;
+      speedup_begin();
       uint32_t * buf = thumb_make(t, path, overlay, &w, &h);
       LightLock_Lock(&t->lock);
       if(t->want == gen) {
@@ -88,6 +90,7 @@ static void thumb_thread(void * arg) {
       const char * name = strrchr(path, '/');
       PicDirs dirs = { STORAGE_PUZZLES, STORAGE_SAVES, STORAGE_CACHE };
       uint64_t bytes = name ? picfiles_size(&dirs, name + 1) : 0;
+      speedup_end();
       LightLock_Lock(&t->lock);
       if(t->want == gen) {
         t->resultbytes = bytes;
