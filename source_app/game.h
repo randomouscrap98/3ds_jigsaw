@@ -18,6 +18,7 @@
 #define GAME_TABLESCALE 3.0f      // Table is this many times the puzzle size each way
 #define GAME_SCATTER 0.67f        // Pieces start spread over this fraction of the table (centered)
 #define GAME_SNAP 0.3f            // Snap distance, in cells
+#define GAME_CONDENSE 1.7f        // Condensed pieces sit this many cells apart (tabs make a piece ~1.7)
 #define GAME_MAXZOOM 2.0f
 #define GAME_STARTCELL 28.0f      // Starting zoom shows a cell this many pixels wide
 #define GAME_ZOOMSTEP 1.15f       // Per D-pad / X / B press or repeat

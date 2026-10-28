@@ -233,12 +233,11 @@ static int game_release(Game * g) {
   return ev;
 }
 
-// Squish the selected groups into a tidy block, spaced like the starting scatter, and keep
-// them selected (on top) so the block can be dragged away
+// Squish the selected groups into a tidy block, pieces a little more than a piece apart, and
+// keep them selected (on top) so the block can be dragged away
 static void game_condense(Game * g) {
   Board * b = &g->board;
-  float sw = b->width * GAME_SCATTER, sh = b->height * GAME_SCATTER;
-  if(board_condense_marked(b, g->sel, sqrtf(sw * sh / b->count))) return;
+  if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE)) return;
   board_raise_marked(b, g->sel);
   g->dldirty = 1;
   g->dirty = 1;
