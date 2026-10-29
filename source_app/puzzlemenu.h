@@ -62,6 +62,8 @@ typedef struct {
   PuzzleEntry * entries;
   int nentries;
   uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
+  u8 optcut[PMENU_MAXOPTS];              // Options item shows the cut sample over the picture
+  u8 showcut;                            // Cursor is on such an item (or on Continue)
   tui_menu_number_t pieces;              // Piece count picked in options: index into the counts
   tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
   tui_menu_number_t whimsy;              // Whimsies picked in options (kept between puzzles)

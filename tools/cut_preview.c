@@ -4,11 +4,14 @@
 //   ./build_host/cut_preview OUTDIR [image.jpg] [seed]
 // Writes OUTDIR/shapes.png (the whimsy shapes), OUTDIR/<style>_<whimsy>_<count>_cut.png
 // (solved, whimsies tinted) and OUTDIR/<style>_<whimsy>_<count>_pieces.png (the image on
-// the pieces, pulled apart), plus stats on stdout.
+// the pieces, pulled apart), OUTDIR/sample_<style>_<whimsy>.png (the menu's cut sample over
+// the picture at thumbnail size), plus stats on stdout.
 #include "cutter.h"
 #include "piecebake.h"
 #include "imgscale.h"
 #include "layout.h"
+#include "cutsample.h"
+#include "swizzle.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -201,11 +204,11 @@ int main(int argc, char ** argv) {
     return 1;
   }
   shapes(argv[1]);
-  const char * stylenames[CUT_STYLES] = { "classic", "irregular", "wild", "random" };
+  const char * stylenames[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect" };
   const char * whimnames[WHIMSY_LEVELS] = { "none", "few", "many" };
-  const uint8_t styles[] = { CUT_STYLE_CLASSIC, CUT_STYLE_WILD, CUT_STYLE_RANDOM };
+  const uint8_t styles[] = { CUT_STYLE_CLASSIC, CUT_STYLE_WILD, CUT_STYLE_RANDOM, CUT_STYLE_RANDRECT };
   const uint32_t targets[] = { 100, 500 };
-  for(int si = 0; si < 3; si++) {
+  for(int si = 0; si < (int)sizeof styles; si++) {
     for(uint8_t wh = WHIMSY_FEW; wh <= WHIMSY_MANY; wh++) {
       for(int t = 0; t < 2; t++) {
         uint16_t cols, rows;
@@ -243,6 +246,37 @@ int main(int argc, char ** argv) {
       }
     }
   }
+  // The menu's cut sample over the picture, at thumbnail size (thumb.h: fit 320 x 200)
+  uint16_t tw, th;
+  imgscale_fit(sw, sh, 320, 200, &tw, &th);
+  uint8_t * thumb = malloc((size_t)tw * th * 3);
+  uint32_t * cut = malloc(sizeof(uint32_t) * tw * th);
+  uint8_t * out = malloc((size_t)tw * th * 3);
+  imgscale_area(src, sw, sh, 3, 0, 0, sw, sh, thumb, tw, th);
+  for(uint8_t st = 0; st < CUT_STYLES; st++) {
+    for(uint8_t wh = 0; wh < WHIMSY_LEVELS; wh++) {
+      double t0 = now_ms();
+      if(cutsample_draw(st, wh, WHIMSY_SET_CUTE, tw, th, cut)) {
+        printf("sample %s %s: FAILED\n", stylenames[st], whimnames[wh]);
+        continue;
+      }
+      printf("sample %s %s (%ux%u): %.1f ms\n", stylenames[st], whimnames[wh], tw, th, now_ms() - t0);
+      for(size_t i = 0; i < (size_t)tw * th; i++) {
+        uint32_t p = cut[i];
+        float a = (p & 0xFF) / 255.0f;
+        for(int k = 0; k < 3; k++) {
+          float c = (p >> (24 - 8 * k)) & 0xFF;
+          out[3 * i + k] = (uint8_t)(thumb[3 * i + k] * (1 - a) + c * a + 0.5f);
+        }
+      }
+      char path[1024];
+      snprintf(path, sizeof path, "%s/sample_%s_%s.png", argv[1], stylenames[st], whimnames[wh]);
+      stbi_write_png(path, tw, th, 3, out, tw * 3);
+    }
+  }
+  free(thumb);
+  free(cut);
+  free(out);
   stbi_image_free(src);
   return 0;
 }

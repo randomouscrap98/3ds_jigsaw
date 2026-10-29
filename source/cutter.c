@@ -12,28 +12,30 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
   c->cols = cols;
   c->rows = rows;
   c->count = (uint32_t)cols * rows;
-  if(c->style != CUT_STYLE_RANDOM && c->whimsy == WHIMSY_NONE) {
+  int rnd = c->style == CUT_STYLE_RANDOM || c->style == CUT_STYLE_RANDRECT;
+  const RandCutStyle * rst = randcut_style(c->style == CUT_STYLE_RANDRECT ? RANDCUT_STYLE_RECT : RANDCUT_STYLE_EVEN);
+  if(!rnd && c->whimsy == WHIMSY_NONE) {
     if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;
     return 0;
   }
   c->usegraph = 1;
-  if(c->style == CUT_STYLE_RANDOM && c->whimsy == WHIMSY_NONE) {
-    if(randcut_init(&c->g, cols, rows, c->count, seed, randcut_style(RANDCUT_STYLE_EVEN))) return 1;
+  if(rnd && c->whimsy == WHIMSY_NONE) {
+    if(randcut_init(&c->g, cols, rows, c->count, seed, rst)) return 1;
   } else {
     // Whimsies go in before tabs; a cut that can't be tabbed cleanly is retried with new
     // whimsy spots (and for random, new points)
     CutTabStyle ts;
-    randcut_tabstyle(randcut_style(RANDCUT_STYLE_EVEN), &ts);
+    randcut_tabstyle(rst, &ts);
     ts.whimsytab = WHIMSY_TABEDGE;
-    if(c->style != CUT_STYLE_RANDOM) {
+    if(!rnd) {
       ts.jitter = edgegen_style(c->style);
       if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
     }
     int ok = 0;
     for(uint32_t t = 0; t < CUTTER_MAXTRIES && !ok; t++) {
       uint32_t s = randcut_tryseed(seed, t);
-      int err = c->style == CUT_STYLE_RANDOM ? randcut_graph(&c->g, cols, rows, c->count, s, randcut_style(RANDCUT_STYLE_EVEN))
+      int err = rnd ? randcut_graph(&c->g, cols, rows, c->count, s, rst)
           : cutgraph_grid(&c->g, &c->eg);
       if(err) continue;
       c->g.tries = t + 1;
@@ -50,11 +52,11 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
     // same every time for this seed)
     if(!ok) {
       c->whimsies = 0;
-      if(c->style == CUT_STYLE_RANDOM) ok = !randcut_init(&c->g, cols, rows, c->count, seed, randcut_style(RANDCUT_STYLE_EVEN));
+      if(rnd) ok = !randcut_init(&c->g, cols, rows, c->count, seed, rst);
       else ok = !cutgraph_grid(&c->g, &c->eg) && !cutgraph_tabs(&c->g, &ts, seed);
       c->g.tries = CUTTER_MAXTRIES + 1;
     }
-    if(c->style != CUT_STYLE_RANDOM) edgegen_free(&c->eg);
+    if(!rnd) edgegen_free(&c->eg);
     if(!ok) {
       cutgraph_free(&c->g);
       return 1;

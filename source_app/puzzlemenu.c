@@ -13,7 +13,7 @@
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
 
 static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
-static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random" };  // CUT_STYLE_*
+static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random", "Random Rect" };  // CUT_STYLE_*
 static const char * const pmenu_whimsies[WHIMSY_LEVELS] = { "", ", few whimsies", ", many whimsies" };  // WHIMSY_*
 static const char * const pmenu_overlays[OVERLAYS] = { "", ", hologram", ", rainbow" };  // OVERLAY_*
 
@@ -83,6 +83,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   if(pos < 0 || pos >= pm->nentries) return NULL;
   PuzzleEntry * e = pm->entries + pos;
   tui_menu_clear(&pm->options);
+  memset(pm->optcut, 0, sizeof(pm->optcut));
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
   char path[STORAGE_MAXPATH];
@@ -102,14 +103,17 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   // Settings for a new puzzle (Continue uses the save's), then the button that starts it
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Pieces", &pm->pieces, PMENU_PIECES_NAMES);
+    pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild\nRandom");
+    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild\nRandom\nRandom Rect");
+    pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Whimsies", &pm->whimsy, "None\nFew\nMany");
+    pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
@@ -269,6 +273,20 @@ static tui_menu * puzzlemenu_active(PuzzleMenu * pm) {
   }
 }
 
+// Cut sample over the picture: on the cut settings (with them) or on Continue (with the
+// save's). Returns whether it shows; asks thumb for it if so.
+static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
+  int opt = pm->options.current;
+  if(puzzlemenu_active(pm) != &pm->options || opt < 0 || opt >= pm->options.numitems) return 0;
+  if(e->hassave && pm->optact[opt] == PMENU_ACT_CONTINUE) {
+    thumb_cut(&pm->thumb, e->save.header.style, e->save.header.whimsy, e->save.header.whimsyset);
+    return 1;
+  }
+  if(!pm->optcut[opt]) return 0;
+  thumb_cut(&pm->thumb, (unsigned)pm->style % CUT_STYLES, (unsigned)pm->whimsy % WHIMSY_LEVELS, WHIMSY_SET_CUTE);
+  return 1;
+}
+
 PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   PuzzleChoice choice = { .name = NULL, .target = 0, .quit = 0 };
   tui_menu_action act = { .action = TUIMENU_ACTION_NONE, .offset = 0 };
@@ -308,6 +326,8 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
       thumb_request(&pm->thumb, path, want);
     }
   }
+  pm->showcut = pm->thumb.state != THUMB_NONE && ent0 >= 0 && ent0 < pm->nentries &&
+      puzzlemenu_thumbcut(pm, pm->entries + ent0);
   if(!(act.action & TUIMENU_ACTION_ACCEPT) || r.cancelled || r.result < 0) return choice;
   tui_menu * active = puzzlemenu_active(pm);
   int sel = pm->root.current, ent = sel - PMENU_FIRST;
@@ -390,6 +410,10 @@ void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td) {
       Tex3DS_SubTexture * sub = &pm->thumb.sub;
       C2D_DrawImageAt(thumb_image(&pm->thumb), (320 - sub->width) / 2,
           (PMENU_THUMBH - sub->height) / 2, 0.5f, NULL, 1, 1);
+      if(pm->showcut && thumb_cutready(&pm->thumb)) {
+        C2D_DrawImageAt(thumb_cutimage(&pm->thumb), (320 - sub->width) / 2,
+            (PMENU_THUMBH - sub->height) / 2, 0.5f, NULL, 1, 1);
+      }
     } else if(ts == THUMB_FAILED) {
       textdraw_center(td, 160, PMENU_THUMBH / 2 - 8, 0.6f, dim, "Can't preview");
     }

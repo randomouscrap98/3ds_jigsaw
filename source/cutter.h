@@ -10,12 +10,13 @@
 #include <stdint.h>
 
 // Cut styles as stored in saves, cache names and the menu. 0-2 are grid cuts (edgegen
-// styles), 3 is the random (Voronoi) cut.
+// styles), 3-4 are random (Voronoi) cuts: scattered points, or points on a jittered grid.
 #define CUT_STYLE_CLASSIC 0
 #define CUT_STYLE_IRREGULAR 1
 #define CUT_STYLE_WILD 2
 #define CUT_STYLE_RANDOM 3
-#define CUT_STYLES 4
+#define CUT_STYLE_RANDRECT 4
+#define CUT_STYLES 5
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
 

@@ -8,6 +8,7 @@
 
 static const RandCutStyle randcut_styles[RANDCUT_STYLES] = {
   { .relax = 4, .collapse = 0.12f, .mintab = 0.45f, .twotab = 1.5f, .maxtab = 1.0f },  // Random
+  { .relax = 0, .grid = 0.3f, .collapse = 0.33f, .mintab = 0.45f, .twotab = 1.5f, .maxtab = 1.0f },  // Random Rect
 };
 
 const RandCutStyle * randcut_style(uint8_t style) {
@@ -319,7 +320,17 @@ int randcut_graph(CutGraph * c, float w, float h, uint32_t count, uint32_t seed,
   if(!err) {
     Rng r;
     rng_init(&r, seed);
-    for(uint32_t i = 0; i < count; i++) sites[i] = (RcPt) { rng_range(&r, 0, w), rng_range(&r, 0, h) };
+    if(st->grid > 0) {
+      uint32_t cols = (uint32_t)lroundf(w);
+      if(cols == 0 || count % cols) err = 1;
+      for(uint32_t i = 0; i < count && !err; i++) {
+        float x = i % cols + 0.5f, y = i / cols + 0.5f;
+        sites[i].x = x + rng_range(&r, -st->grid, st->grid);
+        sites[i].y = y + rng_range(&r, -st->grid, st->grid);
+      }
+    } else {
+      for(uint32_t i = 0; i < count; i++) sites[i] = (RcPt) { rng_range(&r, 0, w), rng_range(&r, 0, h) };
+    }
     // Voronoi, moving each site to its cell's centroid relax times, then the final cells
     for(int pass = 0; pass <= st->relax && !err; pass++) {
       uint32_t n = 0;

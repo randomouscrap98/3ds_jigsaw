@@ -22,6 +22,8 @@
 // away when they finish. The worker keeps the last picture it decoded (plain), so asking
 // for the same picture with another overlay doesn't decode it again. After the picture, the
 // worker adds up the puzzle's disk use (picture + save + caches, picfiles_size).
+// Separately, a cut sample (cutsample) the size of the picture can be asked for: its own
+// texture, drawn over the picture, so changing the cut settings never redoes the picture.
 typedef struct {
   Thread thread;
   LightLock lock;
@@ -45,6 +47,16 @@ typedef struct {
   u8 refresh;                   // Main thread: READY, but a new overlay of it is on the way
   uint64_t bytes;               // Main thread: the puzzle's disk use (valid when hasbytes)
   u8 hasbytes;
+  // Cut sample: wanted settings (main thread, under lock), worker generations, result
+  C3D_Tex cuttex;
+  Tex3DS_SubTexture cutsub;
+  u8 cutstyle, cutwhimsy, cutset;
+  u8 cuton;                     // A cut sample has been asked for
+  u32 cutwant, cuttaken, cutdonegen;
+  uint32_t * cutresult;         // Owned; swizzled THUMB_TEXW x THUMB_TEXH, NULL = failed
+  u16 cutresultw, cutresulth;
+  u8 cutstate;                  // THUMB_*, main thread only
+  u8 hascuttex;
   volatile u8 busy;
   volatile u8 quit;
   u8 running;
@@ -61,5 +73,11 @@ void thumb_clear(Thumb * t, int wait);
 // Call each frame on the main thread; uploads a finished thumbnail. Returns THUMB_*.
 int thumb_poll(Thumb * t);
 C2D_Image thumb_image(Thumb * t);
+// Ask for the cut sample with these settings over the current (and any later) picture;
+// asking for the settings already wanted does nothing
+void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set);
+// The cut sample, if one matching the picture is ready (thumb_poll uploads it)
+int thumb_cutready(Thumb * t);
+C2D_Image thumb_cutimage(Thumb * t);
 
 #endif
