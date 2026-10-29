@@ -25,6 +25,7 @@ int main(int argc, char ** argv) {
     if(argc > 3 && !strcmp(argv[3], "wild")) style = EDGEGEN_STYLE_WILD;
     if(argc > 3 && !strcmp(argv[3], "random")) style = CUT_STYLE_RANDOM;
     if(argc > 3 && !strcmp(argv[3], "randrect")) style = CUT_STYLE_RANDRECT;
+    if(argc > 3 && !strcmp(argv[3], "wooden")) style = CUT_STYLE_WOODEN;
     test_dump_cut(argv[2], style);
     return 0;
   }

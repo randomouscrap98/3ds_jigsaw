@@ -67,6 +67,9 @@ void edgegen_randomtab(Rng * r, const EdgeStyle * st, EdgeTab * t);
 // Sample a tab (NULL = straight) in edge space: out gets 3 * EDGEGEN_SEGMENTS + 1 (t, n)
 // pairs from t = 0 to t = 1 (n in edge-length units, flip applied). Returns the count.
 int edgegen_tabcurve(const EdgeTab * tab, float * out);
+// Sample 3 cubic beziers through control points p[0..9] (curves p0-p3, p3-p6, p6-p9), n
+// times flip, into 3 * EDGEGEN_SEGMENTS + 1 (t, n) pairs. Returns the count.
+int edgegen_curve(const float p[10][2], int8_t flip, float * out);
 // Closed outline of piece (col, row), clockwise (y down), in coordinates where the
 // piece's cell spans (ox, oy) to (ox + cell, oy + cell). xy must hold EDGEGEN_MAXPOINTS
 // pairs. Returns number of points. Neighbouring pieces' outlines share edges exactly.

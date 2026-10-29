@@ -38,14 +38,19 @@ static void test_randcut_one(uint8_t style, float w, float h, uint32_t count, ui
       tabs[e->right] += e->ntabs;
     }
   }
+  double area = 0;
   float * xy = malloc(sizeof(float) * 2 * cutgraph_maxpoints(&c));
   for(uint32_t p = 0; p < c.count; p++) {
     tabless += tabs[p] == 0;
     uint32_t n = cutgraph_outline(&c, p, 1, 0, 0, xy);
     shapes &= edgegen_shape_ok(xy, n, CUTGRAPH_CLEARANCE);
+    area += geom_area(xy, n, NULL, NULL);
   }
   free(xy);
   CHECK(sides && border && tabless == 0 && shapes);
+  // Outlines with tabs (and waves) tile the puzzle too: anything poking into a neighbour
+  // it doesn't share an edge with would add area
+  CHECK(fabs(area - w * h) < 1e-3 * w * h);
   // Geometry: hitboxes tile the puzzle (no gaps or overlaps), lookup agrees, neighbours symmetric
   PieceGeo g;
   CHECK(cutgraph_geo(&c, 10, &g) == 0);

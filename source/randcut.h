@@ -20,11 +20,15 @@ typedef struct {
   float mintab;       // Edges shorter than this get no tab
   float twotab;       // Edges at least this long get two tabs
   float maxtab;       // Longest stretch of edge one tab is drawn over (cells)
+  float wave;         // Edge waves (CutTabStyle wave; 0 = straight)
+  uint8_t knobs;      // Knob kinds (CutTabStyle knobs; 0 = classic only)
+  float clearance;    // Thinnest part of a piece (CutTabStyle clearance; 0 = default)
 } RandCutStyle;
 
 #define RANDCUT_STYLE_EVEN 0
 #define RANDCUT_STYLE_RECT 1
-#define RANDCUT_STYLES 2
+#define RANDCUT_STYLE_WOOD 2
+#define RANDCUT_STYLES 3
 const RandCutStyle * randcut_style(uint8_t style);
 
 #define RANDCUT_MAXTRIES 8        // Whole-cut retries (new points) before failing

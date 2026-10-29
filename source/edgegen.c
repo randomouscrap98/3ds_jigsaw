@@ -149,15 +149,19 @@ int edgegen_tabcurve(const EdgeTab * tab, float * out) {
     { 0.8f, tab->e },
     { 1.0f, 0.0f },
   };
+  return edgegen_curve((const float (*)[2])p, tab->flip, out);
+}
+
+int edgegen_curve(const float p[10][2], int8_t flip, float * out) {
   int n = 0;
-  out[n * 2] = 0; out[n * 2 + 1] = 0; n++;
+  out[n * 2] = p[0][0]; out[n * 2 + 1] = p[0][1] * flip; n++;
   for(int curve = 0; curve < 3; curve++) {
-    float (*q)[2] = p + curve * 3;
+    const float (*q)[2] = p + curve * 3;
     for(int s = 1; s <= EDGEGEN_SEGMENTS; s++) {
       float u = (float)s / EDGEGEN_SEGMENTS, iu = 1 - u;
       float w0 = iu * iu * iu, w1 = 3 * iu * iu * u, w2 = 3 * iu * u * u, w3 = u * u * u;
       out[n * 2] = w0 * q[0][0] + w1 * q[1][0] + w2 * q[2][0] + w3 * q[3][0];
-      out[n * 2 + 1] = (w0 * q[0][1] + w1 * q[1][1] + w2 * q[2][1] + w3 * q[3][1]) * tab->flip;
+      out[n * 2 + 1] = (w0 * q[0][1] + w1 * q[1][1] + w2 * q[2][1] + w3 * q[3][1]) * flip;
       n++;
     }
   }

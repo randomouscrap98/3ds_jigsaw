@@ -58,7 +58,7 @@ int cutgraph_grid(CutGraph * g, const EdgeGen * eg) {
         // edgegen's normal for horizontal edges points down (+y), as ours does for a -> b
         e->flags = CUTEDGE_GRID;
         e->ntabs = 1;
-        e->tab[0] = (CutTab) { eg->h[(y - 1) * cols + x], cutgraph_edgelen(g, e) / 2, cutgraph_edgelen(g, e), 1 };
+        e->tab[0] = (CutTab) { eg->h[(y - 1) * cols + x], cutgraph_edgelen(g, e) / 2, cutgraph_edgelen(g, e), 1, CUTKNOB_CLASSIC };
       }
       hid[y * cols + x] = g->ne++;
     }
@@ -79,7 +79,7 @@ int cutgraph_grid(CutGraph * g, const EdgeGen * eg) {
         e->ntabs = 1;
         EdgeTab t = eg->v[y * (cols - 1) + x - 1];
         t.flip = -t.flip;
-        e->tab[0] = (CutTab) { t, cutgraph_edgelen(g, e) / 2, cutgraph_edgelen(g, e), 1 };
+        e->tab[0] = (CutTab) { t, cutgraph_edgelen(g, e) / 2, cutgraph_edgelen(g, e), 1, CUTKNOB_CLASSIC };
       }
       vid[y * vw + x] = g->ne++;
     }
@@ -134,6 +134,8 @@ int cutgraph_iswhimsy(const CutGraph * g, uint32_t p) {
 
 // ---- Tabs ----
 
+static int cutgraph_inner(const CutEdge * e);
+
 // Shapes and positions for an edge's tabs (count already set). Grid edges keep their
 // place and size; only the shape changes.
 static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdge * e, Rng * r) {
@@ -157,6 +159,28 @@ static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdg
     t->pos = pos;
     edgegen_randomtab(r, st->jitter, &t->tab);
   }
+  // Drawn last, and only when used, so cuts without them stay as they were
+  if(st->knobs > 1) {
+    for(int k = 0; k < e->ntabs; k++) e->tab[k].kind = 1 + rng_below(r, st->knobs - 1);
+  }
+  if(st->wave > 0 && cutgraph_inner(e) && cutgraph_edgelen(g, e) >= CUTGRAPH_WAVEMIN) {
+    float w = st->wave;
+    for(int i = 0; i < e->shrink; i++) w *= CUTGRAPH_SHRINK;
+    // A bump bends a knob on top of it (its sides fan and the neck pinches), while an S is
+    // straight in the middle and only tilts it: edges with a knob get mostly S, with two
+    // knobs gentle waves only
+    static const float bump[3] = { 1.0f, CUTGRAPH_WAVEKNOB, CUTGRAPH_WAVETWO }, ess[3] = { 1.0f, 1.0f, CUTGRAPH_WAVETWO };
+    int nt = e->ntabs < 2 ? e->ntabs : 2;
+    e->wave[0] = rng_range(r, -w * bump[nt], w * bump[nt]);
+    e->wave[1] = rng_range(r, -w * ess[nt], w * ess[nt]);
+  }
+}
+
+static int cutgraph_touchwhimsy(const CutGraph * g, uint32_t p) {
+  for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
+    if(g->e[g->pedge[k] >> 1].flags & CUTEDGE_WHIMSY) return 1;
+  }
+  return 0;
 }
 
 static int cutgraph_piecetabs(const CutGraph * g, uint32_t p) {
@@ -253,6 +277,121 @@ int cutgraph_rewalk(CutGraph * g) {
   return err;
 }
 
+int cutgraph_thick_ok(const float * xy, uint32_t n, float cl) {
+  if(n < 3) return 0;
+  float stackarc[512];
+  float * arc = n <= 512 ? stackarc : malloc(sizeof(float) * n);
+  if(!arc) return 0;
+  // arc[i] = distance along the outline from point 0 to point i
+  arc[0] = 0;
+  for(uint32_t i = 1; i < n; i++) {
+    arc[i] = arc[i - 1] + hypotf(xy[2 * i] - xy[2 * i - 2], xy[2 * i + 1] - xy[2 * i - 1]);
+  }
+  float total = arc[n - 1] + hypotf(xy[0] - xy[2 * n - 2], xy[1] - xy[2 * n - 1]);
+  float cl2 = cl * cl, far = CUTGRAPH_PINCH * cl;
+  int ok = 1;
+  for(uint32_t i = 0; i < n && ok; i++) {
+    for(uint32_t j = i + 1; j < n; j++) {
+      float along = arc[j] - arc[i];
+      if(along > total - along) along = total - along;
+      if(along <= far) continue;
+      float dx = xy[2 * j] - xy[2 * i], dy = xy[2 * j + 1] - xy[2 * i + 1];
+      if(dx * dx + dy * dy < cl2) {
+        ok = 0;
+        break;
+      }
+    }
+  }
+  if(arc != stackarc) free(arc);
+  return ok;
+}
+
+int cutgraph_knobcurve(uint8_t kind, const EdgeTab * tab, float * out) {
+  if(kind == CUTKNOB_CLASSIC || kind >= CUTKNOBS) return edgegen_tabcurve(tab, out);
+  // Same frame as edgegen's tab: neck at p3 / p6, head between them through p4, p5. t is
+  // the tab size (~0.1), the rest small jitters.
+  float t = tab->size, b = tab->b, c = tab->c, d = tab->d;
+  // Smooth shoulders: no dip below the line and no wobble where the knob leaves it
+  float p[10][2] = {
+    { 0.0f, 0.0f },
+    { 0.25f, 0.0f },
+    { 0.5f + b + d, 0.0f },
+    { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },
+    { 0.5f + b + d, 0.0f },
+    { 0.75f, 0.0f },
+    { 1.0f, 0.0f },
+  };
+  // Neck half width, neck height, head half width, head height (in t)
+  // These are for wood-like cuts: necks stand high enough that the neighbour's material under
+  // the head isn't a sliver
+  float nw = 1, nh = 1.7f, hw = 2.1f, hh = 3.9f, lean = 0;
+  switch(kind) {
+    case CUTKNOB_BALL: nw = 0.9f; nh = 1.8f; hw = 2.7f; hh = 4.8f; break;
+    case CUTKNOB_HOOK: nw = 1.0f; nh = 1.7f; hw = 2.0f; hh = 4.4f; lean = tab->a < 0 ? -1.0f : 1.0f; break;
+    case CUTKNOB_BLOCK: nw = 1.5f; nh = 1.5f; hw = 2.5f; hh = 3.8f; break;
+    case CUTKNOB_FINGER: nw = 0.9f; nh = 2.2f; hw = 1.6f; hh = 5.8f; break;
+  }
+  p[3][0] = 0.5f - nw * t + b;            p[3][1] = nh * t + c;
+  p[4][0] = 0.5f + (lean - hw) * t + b - d; p[4][1] = hh * t + c;
+  p[5][0] = 0.5f + (lean + hw) * t + b - d; p[5][1] = hh * t + c;
+  p[6][0] = 0.5f + nw * t + b;            p[6][1] = nh * t + c;
+  return edgegen_curve((const float (*)[2])p, tab->flip, out);
+}
+
+static int cutgraph_waved(const CutEdge * e) {
+  return e->wave[0] != 0 || e->wave[1] != 0;
+}
+
+// Point and unit normal of a waved edge's line at s cells from a (a, unit direction u, normal
+// (-uy, ux), chord length L)
+static void cutgraph_waveat(const CutEdge * e, float ax, float ay, float ux, float uy, float L, float s,
+    float * px, float * py, float * qx, float * qy) {
+  float u = (float)M_PI * s / L, w0 = e->wave[0], w1 = e->wave[1];
+  float sn = sinf(u), cs = cosf(u);
+  float off = L * sn * sn * (w0 + w1 * cs);
+  float slope = (float)M_PI * (2 * sn * cs * (w0 + w1 * cs) - w1 * sn * sn * sn);   // d off / d s
+  float nx = -uy, ny = ux;
+  *px = ax + s * ux + off * nx;
+  *py = ay + s * uy + off * ny;
+  float tx = ux + slope * nx, ty = uy + slope * ny, tl = sqrtf(tx * tx + ty * ty);
+  *qx = -ty / tl;
+  *qy = tx / tl;
+}
+
+// Waved edge points (a included, b excluded): the line sampled CUTGRAPH_WAVESEG times (with
+// tabs replacing the samples they cover), or without tabs CUTGRAPH_WAVEBODY times
+static uint32_t cutgraph_wavepoints(const CutGraph * g, const CutEdge * e, int tabs, float * xy) {
+  float ax = g->v[e->a].x, ay = g->v[e->a].y;
+  float dx = g->v[e->b].x - ax, dy = g->v[e->b].y - ay;
+  float L = sqrtf(dx * dx + dy * dy);
+  float ux = dx / L, uy = dy / L, px, py, qx, qy;
+  uint32_t n = 0;
+  xy[n * 2] = ax; xy[n * 2 + 1] = ay; n++;
+  int i = 1, ntabs = tabs ? e->ntabs : 0, seg = tabs ? CUTGRAPH_WAVESEG : CUTGRAPH_WAVEBODY;
+  float step = L / seg;
+  float pts[(3 * EDGEGEN_SEGMENTS + 1) * 2];
+  for(int k = 0; k < ntabs; k++) {
+    const CutTab * t = e->tab + k;
+    float s0 = t->pos - t->len / 2, s1 = t->pos + t->len / 2;
+    for(; i < seg && i * step < s0; i++) {
+      cutgraph_waveat(e, ax, ay, ux, uy, L, i * step, &px, &py, &qx, &qy);
+      xy[n * 2] = px; xy[n * 2 + 1] = py; n++;
+    }
+    int m = cutgraph_knobcurve(t->kind, &t->tab, pts);
+    for(int j = 0; j < m; j++) {
+      float o = pts[j * 2 + 1] * t->depth;
+      cutgraph_waveat(e, ax, ay, ux, uy, L, s0 + pts[j * 2] * t->len, &px, &py, &qx, &qy);
+      xy[n * 2] = px + o * qx; xy[n * 2 + 1] = py + o * qy; n++;
+    }
+    while(i < seg && i * step <= s1) i++;
+  }
+  for(; i < seg; i++) {
+    cutgraph_waveat(e, ax, ay, ux, uy, L, i * step, &px, &py, &qx, &qy);
+    xy[n * 2] = px; xy[n * 2 + 1] = py; n++;
+  }
+  return n;
+}
+
 // Canonical (a -> b) points of an edge in cell units, a included, b excluded
 static uint32_t cutgraph_edgepoints(const CutGraph * g, const CutEdge * e, int tabs, float * xy) {
   float ax = g->v[e->a].x, ay = g->v[e->a].y;
@@ -262,6 +401,7 @@ static uint32_t cutgraph_edgepoints(const CutGraph * g, const CutEdge * e, int t
     memcpy(xy + 2, g->pts + 2 * e->p0, sizeof(float) * 2 * e->npts);
     return 1 + e->npts;
   }
+  if(cutgraph_waved(e)) return cutgraph_wavepoints(g, e, tabs, xy);
   if(!tabs || !e->ntabs) return n;
   float dx = g->v[e->b].x - ax, dy = g->v[e->b].y - ay;
   float L = sqrtf(dx * dx + dy * dy);
@@ -269,7 +409,7 @@ static uint32_t cutgraph_edgepoints(const CutGraph * g, const CutEdge * e, int t
   float pts[(3 * EDGEGEN_SEGMENTS + 1) * 2];
   for(int k = 0; k < e->ntabs; k++) {
     const CutTab * t = e->tab + k;
-    int m = edgegen_tabcurve(&t->tab, pts);
+    int m = cutgraph_knobcurve(t->kind, &t->tab, pts);
     float s0 = t->pos - t->len / 2;
     for(int i = 0; i < m; i++) {
       float s = s0 + pts[i * 2] * t->len, o = pts[i * 2 + 1] * t->depth;
@@ -282,7 +422,7 @@ static uint32_t cutgraph_edgepoints(const CutGraph * g, const CutEdge * e, int t
 }
 
 static uint32_t cutgraph_edgemax(const CutEdge * e) {
-  return 1 + e->npts + e->ntabs * (3 * EDGEGEN_SEGMENTS + 1);
+  return 1 + e->npts + e->ntabs * (3 * EDGEGEN_SEGMENTS + 1) + (cutgraph_waved(e) ? CUTGRAPH_WAVESEG : 0);
 }
 
 uint32_t cutgraph_maxpoints(const CutGraph * g) {
@@ -398,7 +538,12 @@ static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed
       if(!(check[p] & 1)) continue;
       check[p] &= ~1;
       uint32_t n = cutgraph_outline(g, p, 1, 0, 0, xy);
-      if(edgegen_shape_ok(xy, n, CUTGRAPH_CLEARANCE)) continue;
+      // Whimsies and the pieces around them have their own checks (a star's tips are meant
+      // to be sharp, and so are the corners where a whimsy meets a cut). The thickness check
+      // goes first: it's cheaper and catches most bad pieces.
+      int good = (st->clearance <= 0 || cutgraph_touchwhimsy(g, p) || cutgraph_thick_ok(xy, n, st->clearance)) &&
+          edgegen_shape_ok(xy, n, CUTGRAPH_CLEARANCE);
+      if(good) continue;
       any = 1;
       // Rerolling isn't working: give up a tab on the shortest tabbed edge, as long as
       // both pieces keep one (pieces next to whimsies can be too cramped for all of them)
@@ -451,6 +596,11 @@ int cutgraph_geo(const CutGraph * g, float cell, PieceGeo * pg) {
   memset(pg, 0, sizeof(PieceGeo));
   uint32_t count = g->count, walk = g->pstart[count];
   uint32_t nhb = walk + g->npts * 2;   // Body points: corners + polyline points (each used twice)
+  for(uint32_t i = 0; i < g->ne; i++) {
+    // + the line samples of waved edges, on each side
+    const CutEdge * e = g->e + i;
+    if(cutgraph_waved(e)) nhb += (CUTGRAPH_WAVEBODY - 1) * ((e->left >= 0) + (e->right >= 0));
+  }
   pg->count = count;
   pg->cell = cell;
   pg->width = g->width * cell;
