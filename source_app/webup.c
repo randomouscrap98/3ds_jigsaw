@@ -258,6 +258,7 @@ static int webup_route(WebUp * w, size_t hlen, const char * method, size_t mlen,
     return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (or out of memory)");
   }
   w->writing = 1;
+  w->sdwait = 0;
   w->expect = length;
   w->received = 0;
   w->state = WEBUP_BODY;
@@ -299,6 +300,7 @@ static int webup_step(WebUp * w, uint64_t now, size_t * moved) {
     if(chunkwriter_failed(&w->cw)) return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (full?)");
     size_t room;
     char * dst = chunkwriter_space(&w->cw, &room);
+    w->sdwait = !dst;
     if(!dst) return 0;  // Both buffers still being written: let TCP hold the rest
     size_t want = w->expect - w->received;
     if(want > room) want = room;

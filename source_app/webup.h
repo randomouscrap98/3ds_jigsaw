@@ -51,6 +51,7 @@ typedef struct {
   // Upload being received
   ChunkWriter cw;           // Body -> <name>.tmp (open while writing is set)
   int writing;
+  int sdwait;               // Receiving is held up: both buffers still being written
   char name[128];           // Final file name
   const WebUpRoute * route; // Route of the upload being received / last saved
   size_t expect, received;

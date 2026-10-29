@@ -1,6 +1,7 @@
 #include "upload.h"
 #include "imageload.h"
 #include "musicdec.h"
+#include "speedup.h"
 #include "storage.h"
 
 #include <citro2d.h>
@@ -66,25 +67,31 @@ static void upload_loadpage(Upload * u) {
   romfsExit();
 }
 
-// One server step plus its events. Caller holds the lock.
+// One server step, then (under the lock) its events and a copy of the progress for the
+// screen. webup itself is only touched by the polling thread.
 static int upload_poll(Upload * u) {
   int ev = webup_poll(&u->web, osGetTime());
+  LightLock_Lock(&u->lock);
   u->busy = (ev & WEBUP_EV_BUSY) != 0;
+  snprintf(u->rxname, sizeof(u->rxname), "%s", u->web.name);
+  u->rxgot = u->web.received;
+  u->rxtotal = u->web.expect;
+  u->rxsdwait = u->web.sdwait;
   if(ev & WEBUP_EV_SAVED) {
     if(u->web.route == upload_routes) u->added++;
     upload_line(u, 1, "Added %s", u->web.message);
   }
   if(ev & WEBUP_EV_ERROR) upload_line(u, 0, "%s", u->web.message);
+  LightLock_Unlock(&u->lock);
   return u->web.csock >= 0;
 }
 
 static void upload_thread(void * arg) {
   Upload * u = arg;
+  // Not sleeping with a client (netloader style, same priority as main) was tried: no
+  // faster (2026-10-29)
   while(!u->quit) {
-    LightLock_Lock(&u->lock);
-    int client = upload_poll(u);
-    LightLock_Unlock(&u->lock);
-    svcSleepThread(client ? UPLOAD_CLIENT_NS : UPLOAD_IDLE_NS);
+    svcSleepThread(upload_poll(u) ? UPLOAD_CLIENT_NS : UPLOAD_IDLE_NS);
   }
 }
 
@@ -148,6 +155,9 @@ static void upload_startnet(Upload * u) {
 
 void upload_open(Upload * u) {
   memset(u, 0, sizeof(Upload));
+#ifndef UPLOAD_NOSPEEDUP
+  speedup_begin();  // Whole visit (1.3 test: does it help the upload rate?)
+#endif
   LightLock_Init(&u->lock);
   upload_loadpage(u);
   upload_startnet(u);
@@ -159,6 +169,9 @@ void upload_close(Upload * u) {
   free(u->page);
   u->socbuf = NULL;
   u->page = NULL;
+#ifndef UPLOAD_NOSPEEDUP
+  speedup_end();
+#endif
 }
 
 void upload_pause(Upload * u) {
@@ -192,9 +205,9 @@ void upload_render_top(Upload * u, TextDraw * td) {
   }
   LightLock_Lock(&u->lock);
   float y = 108;
-  if(u->busy && u->web.expect) {
-    textdraw_print(td, 10, y, 0.5f, UPLOAD_WHITE, "Receiving %s... %d%%", u->web.name,
-        (int)(100.0 * u->web.received / u->web.expect));
+  if(u->busy && u->rxtotal) {
+    textdraw_print(td, 10, y, 0.5f, UPLOAD_WHITE, "Receiving %s... %d%%%s", u->rxname,
+        (int)(100.0 * u->rxgot / u->rxtotal), u->rxsdwait ? " (waiting for SD)" : "");
   }
   y += 18;
   for(int i = 0; i < u->nlines; i++, y += 15) {

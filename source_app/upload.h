@@ -30,8 +30,8 @@ typedef struct {
   size_t pagelen;
   WebUp web;
   // The server runs on its own thread so the socket is drained as soon as data comes (once
-  // a frame was too slow: the 3DS dropped packets and uploads stalled). lock covers web,
-  // lines, added and busy.
+  // a frame was too slow: the 3DS dropped packets and uploads stalled). Only that thread
+  // touches web; lock covers lines, added, busy and the rx* progress copy.
   Thread thread;
   LightLock lock;
   volatile int quit;
@@ -44,6 +44,9 @@ typedef struct {
   int nlines;
   uint32_t added;         // Pictures saved this visit
   int busy;               // Receiving right now
+  char rxname[128];       // Copy of the upload in progress, for the screen
+  size_t rxgot, rxtotal;
+  int rxsdwait;
 } Upload;
 
 // Open the screen (it always opens; problem says what's missing)
