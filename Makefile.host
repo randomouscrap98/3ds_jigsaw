@@ -28,7 +28,7 @@ build_host/makeart: tools/makeart.c source/edgegen.c source/imgscale.c source/rn
 	$(CC) -O2 -Wall -Isource -Itools tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c -lm -o $@
 
 # Cut preview (tools/cut_preview.c): whimsy shapes + cuts with whimsies, for tuning
-CUTSRCS := source/knobs.c source/cornerbend.c source/strokecut.c source/cutsample.c source/swizzle.c source/geom.c source/cutter.c source/randcut.c source/cutgraph.c source/whimsy.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c
+CUTSRCS := source/pottscut.c source/knobs.c source/cornerbend.c source/strokecut.c source/cutsample.c source/swizzle.c source/geom.c source/cutter.c source/randcut.c source/cutgraph.c source/whimsy.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c
 build_host/cut_preview: tools/cut_preview.c $(CUTSRCS) $(wildcard source/*.h)
 	@mkdir -p build_host
 	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/cut_preview.c $(CUTSRCS) -lm -o $@

@@ -8,7 +8,10 @@
 #include <math.h>
 
 static const PottsStyle pottscut_styles[POTTSCUT_STYLES] = {
-  { .res = 10, .sweeps = 40, .temp = 6, .adhesion = 1, .larea = 0.1f, .lperim = 0.05f, .perim = 1.4f, .smooth = 6 },
+  // Picked by the user from sweeps (ignore/potts/noise_t8/e_cool_smooth12.png): very snaky,
+  // annealed and smoothed so the lines aren't fuzzy
+  { .res = 10, .sweeps = 100, .temp = 8, .adhesion = 1, .larea = 0.1f, .lperim = 0.05f, .perim = 2.6f, .smooth = 12,
+    .cool = 0.3f },
 };
 
 const PottsStyle * pottscut_style(uint8_t style) {

@@ -57,7 +57,7 @@ void test_whimsy(void) {
         whim += isw;
         // Whimsies come after the grid/random pieces
         sides &= isw == (p >= 16 * 11);
-        tabless += !isw && !tabs;
+        tabless += !isw && !tabs && st != CUT_STYLE_WOODEN3;   // Wooden3 pieces hold by shape
       }
       float * xy = malloc(sizeof(float) * 2 * c.maxpoints);
       for(uint32_t p = 0; p < g->count; p++) {

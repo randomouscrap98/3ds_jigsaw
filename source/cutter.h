@@ -18,8 +18,9 @@
 #define CUT_STYLE_RANDOM 3
 #define CUT_STYLE_RANDRECT 4
 #define CUT_STYLE_WOODEN 5      // Not in the menu yet (previews)
-#define CUT_STYLE_WOODEN2 6     // Not in the menu yet (previews): stroke cut (strokecut) + curls
-#define CUT_STYLES 7
+#define CUT_STYLE_WOODEN2 6     // Not in the menu yet (previews): stroke cut (strokecut) + snakes
+#define CUT_STYLE_WOODEN3 7     // Not in the menu yet (previews): cellular Potts cut (pottscut)
+#define CUT_STYLES 8
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
 
