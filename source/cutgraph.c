@@ -163,6 +163,19 @@ static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdg
   if(st->knobs > 1) {
     for(int k = 0; k < e->ntabs; k++) e->tab[k].kind = 1 + rng_below(r, st->knobs - 1);
   }
+  if(st->curls > 0) {
+    // Curls scale with their tab: on short edges, or shrunk to fit, they get too thin
+    int fits = e->shrink == 0 && e->ntabs == 1 && !(e->flags & CUTEDGE_NOCURL) &&
+        cutgraph_edgelen(g, e) >= CUTGRAPH_CURL_MINEDGE;
+    for(int k = 0; k < e->ntabs; k++) {
+      if(rng_range(r, 0, 1) < st->curls && fits) e->tab[k].kind = CUTKNOB_CURL;
+    }
+  }
+  if(st->bend > 0 && (e->dir[0] != 0 || e->dir[1] != 0)) {
+    float b = st->bend;
+    for(int i = 0; i < e->shrink; i++) b *= CUTGRAPH_SHRINK;
+    e->bend = rng_range(r, b * CUTGRAPH_BENDMIN, b);
+  }
   if(st->wave > 0 && cutgraph_inner(e) && cutgraph_edgelen(g, e) >= CUTGRAPH_WAVEMIN) {
     float w = st->wave;
     for(int i = 0; i < e->shrink; i++) w *= CUTGRAPH_SHRINK;
@@ -210,6 +223,98 @@ int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge 
   if(L < min) return 0;
   if(wv && L < st->whimsytab && (wv[e->a] || wv[e->b])) return 0;
   return 1;
+}
+
+int cutgraph_strokes(CutGraph * g) {
+  // Edge ends by vertex: vstart[v]..vstart[v+1] in ends[] (edge * 2 + (1 if the end is b))
+  uint32_t * vstart = calloc(g->nv + 1, sizeof(uint32_t));
+  uint32_t * ends = malloc(sizeof(uint32_t) * 2 * (g->ne ? g->ne : 1));
+  uint32_t * fill = malloc(sizeof(uint32_t) * (g->nv ? g->nv : 1));
+  if(!vstart || !ends || !fill) {
+    free(vstart); free(ends); free(fill);
+    return 1;
+  }
+  for(uint32_t i = 0; i < g->ne; i++) {
+    vstart[g->e[i].a + 1]++;
+    vstart[g->e[i].b + 1]++;
+  }
+  for(uint32_t v = 0; v < g->nv; v++) vstart[v + 1] += vstart[v];
+  memcpy(fill, vstart, sizeof(uint32_t) * g->nv);
+  for(uint32_t i = 0; i < g->ne; i++) {
+    ends[fill[g->e[i].a]++] = i * 2;
+    ends[fill[g->e[i].b]++] = i * 2 + 1;
+  }
+  for(uint32_t v = 0; v < g->nv; v++) {
+    const CutVert * p = g->v + v;
+    uint32_t s = vstart[v], n = vstart[v + 1] - s;
+    // Chord directions away from v
+    float d[8][2];
+    int curve[8];
+    int any = 0, border = 0;
+    if(n > 8) continue;
+    for(uint32_t k = 0; k < n; k++) {
+      const CutEdge * e = g->e + (ends[s + k] >> 1);
+      const CutVert * q = g->v + ((ends[s + k] & 1) ? e->a : e->b);
+      float dx = q->x - p->x, dy = q->y - p->y, l = sqrtf(dx * dx + dy * dy);
+      d[k][0] = l > 0 ? dx / l : 0;
+      d[k][1] = l > 0 ? dy / l : 0;
+      curve[k] = cutgraph_inner(e);
+      any |= curve[k];
+      border |= e->left < 0 || e->right < 0;
+    }
+    if(!any) continue;
+    float t[8][2];
+    if(border) {
+      // On the border: inner edges leave square on (normal to the side, pointing inward)
+      float nx = p->x <= 1e-4f ? 1 : p->x >= g->width - 1e-4f ? -1 : 0;
+      float ny = p->y <= 1e-4f ? 1 : p->y >= g->height - 1e-4f ? -1 : 0;
+      for(uint32_t k = 0; k < n; k++) {
+        t[k][0] = nx || ny ? nx : d[k][0];
+        t[k][1] = nx || ny ? ny : d[k][1];
+      }
+    } else {
+      // The straightest pair carries on through; everything else meets it square on
+      int bi = 0, bj = 1;
+      float best = 2;
+      for(uint32_t i = 0; i < n; i++) {
+        for(uint32_t j = i + 1; j < n; j++) {
+          float dot = d[i][0] * d[j][0] + d[i][1] * d[j][1];   // -1 = straight through
+          if(dot < best) { best = dot; bi = i; bj = j; }
+        }
+      }
+      float lx = d[bj][0] - d[bi][0], ly = d[bj][1] - d[bi][1], ll = sqrtf(lx * lx + ly * ly);
+      if(ll < 1e-6f) { lx = -d[bi][1]; ly = d[bi][0]; ll = 1; }
+      lx /= ll; ly /= ll;
+      for(uint32_t k = 0; k < n; k++) {
+        if((int)k == bj) { t[k][0] = lx; t[k][1] = ly; }
+        else if((int)k == bi) { t[k][0] = -lx; t[k][1] = -ly; }
+        else {
+          // Square on, toward its own side of the line
+          float px = -ly, py = lx;
+          if(px * d[k][0] + py * d[k][1] < 0) { px = -px; py = -py; }
+          t[k][0] = px; t[k][1] = py;
+        }
+      }
+    }
+    for(uint32_t k = 0; k < n; k++) {
+      if(!curve[k]) continue;
+      CutEdge * e = g->e + (ends[s + k] >> 1);
+      int atb = ends[s + k] & 1;
+      e->dir[atb * 2] = t[k][0];
+      e->dir[atb * 2 + 1] = t[k][1];
+    }
+  }
+  // An edge needs both ends set (a corner with too many edges is skipped)
+  for(uint32_t i = 0; i < g->ne; i++) {
+    CutEdge * e = g->e + i;
+    if((e->dir[0] == 0 && e->dir[1] == 0) || (e->dir[2] == 0 && e->dir[3] == 0)) {
+      e->dir[0] = e->dir[1] = e->dir[2] = e->dir[3] = 0;
+    }
+  }
+  free(vstart);
+  free(ends);
+  free(fill);
+  return 0;
 }
 
 int cutgraph_rewalk(CutGraph * g) {
@@ -306,7 +411,54 @@ int cutgraph_thick_ok(const float * xy, uint32_t n, float cl) {
   return ok;
 }
 
+// Thick spiral finger standing on (0.5 + shift, 0), curling one way or the other
+static int cutgraph_curl(const EdgeTab * tab, float * out) {
+  float sc = tab->size / 0.1f, shift = tab->b;
+  float stem = CUTGRAPH_CURL_STEM * sc, len = stem + CUTGRAPH_CURL_LEN * sc, hw = CUTGRAPH_CURL_WIDTH * sc / 2;
+  float dir = tab->a < 0 ? -1.0f : 1.0f;   // Curl left or right
+  // Centerline (x, y, heading)
+  float cx[CUTGRAPH_CURL_SEG + 1], cy[CUTGRAPH_CURL_SEG + 1], ch[CUTGRAPH_CURL_SEG + 1];
+  float x = 0.5f + shift, y = 0, h = (float)M_PI / 2, ds = len / CUTGRAPH_CURL_SEG;
+  for(int i = 0; i <= CUTGRAPH_CURL_SEG; i++) {
+    cx[i] = x; cy[i] = y; ch[i] = h;
+    float along = (i + 0.5f) * ds - stem, f = along / (len - stem);
+    float k = along < 0 ? 0 : (CUTGRAPH_CURL_K0 + (CUTGRAPH_CURL_K1 - CUTGRAPH_CURL_K0) * f) / sc;
+    // Midpoint step
+    float hm = h + dir * k * ds / 2;
+    x += cosf(hm) * ds;
+    y += sinf(hm) * ds;
+    h += dir * k * ds;
+  }
+  int n = 0;
+#define CURL_PT(px, py) do { out[n * 2] = (px); out[n * 2 + 1] = (py) * tab->flip; n++; } while(0)
+  CURL_PT(0, 0);
+  // Side walked first: the outside of the curl when curling right (dir > 0 turns left in
+  // y-up space, so the right side is outside), so the outline goes left to right along t
+  for(int pass = 0; pass < 2; pass++) {
+    // pass 0: up the left side (+90° from heading), pass 1: down the right side
+    for(int j = 0; j <= CUTGRAPH_CURL_SEG; j++) {
+      int i = pass == 0 ? j : CUTGRAPH_CURL_SEG - j;
+      float f = (float)i / CUTGRAPH_CURL_SEG;
+      float w = hw * (1 + CUTGRAPH_CURL_FLARE * expf(-f * 14));
+      float side = pass == 0 ? 1.0f : -1.0f;
+      float nx = -sinf(ch[i]) * side, ny = cosf(ch[i]) * side;
+      CURL_PT(cx[i] + nx * w, i == 0 ? 0 : cy[i] + ny * w);
+      if(pass == 0 && i == CUTGRAPH_CURL_SEG) {
+        // Round tip: half circle from the left side to the right side, ahead of the end
+        for(int a = 1; a < 6; a++) {
+          float ang = ch[i] + (float)M_PI / 2 - (float)M_PI * a / 6;
+          CURL_PT(cx[i] + cosf(ang) * hw, cy[i] + sinf(ang) * hw);
+        }
+      }
+    }
+  }
+  CURL_PT(1, 0);
+#undef CURL_PT
+  return n;
+}
+
 int cutgraph_knobcurve(uint8_t kind, const EdgeTab * tab, float * out) {
+  if(kind == CUTKNOB_CURL) return cutgraph_curl(tab, out);
   if(kind == CUTKNOB_CLASSIC || kind >= CUTKNOBS) return edgegen_tabcurve(tab, out);
   // Same frame as edgegen's tab: neck at p3 / p6, head between them through p4, p5. t is
   // the tab size (~0.1), the rest small jitters.
@@ -338,14 +490,31 @@ int cutgraph_knobcurve(uint8_t kind, const EdgeTab * tab, float * out) {
   return edgegen_curve((const float (*)[2])p, tab->flip, out);
 }
 
+// Waved or stroke-curved: drawn by sampling cutgraph_waveat
 static int cutgraph_waved(const CutEdge * e) {
-  return e->wave[0] != 0 || e->wave[1] != 0;
+  return e->wave[0] != 0 || e->wave[1] != 0 || e->bend > 0;
 }
 
-// Point and unit normal of a waved edge's line at s cells from a (a, unit direction u, normal
-// (-uy, ux), chord length L)
+// Point and unit normal of a waved (or stroke-curved) edge's line at s cells from a (a, unit
+// direction u, normal (-uy, ux), chord length L)
 static void cutgraph_waveat(const CutEdge * e, float ax, float ay, float ux, float uy, float L, float s,
     float * px, float * py, float * qx, float * qy) {
+  if(e->bend > 0) {
+    // Cubic Hermite from a (tangent bend L dir_a) to b (arriving along -dir_b)
+    float t = s / L, t2 = t * t, t3 = t2 * t, m = e->bend * L;
+    float bx = ax + L * ux, by = ay + L * uy;
+    float m0x = m * e->dir[0], m0y = m * e->dir[1], m1x = -m * e->dir[2], m1y = -m * e->dir[3];
+    float h00 = 2 * t3 - 3 * t2 + 1, h10 = t3 - 2 * t2 + t, h01 = -2 * t3 + 3 * t2, h11 = t3 - t2;
+    *px = h00 * ax + h10 * m0x + h01 * bx + h11 * m1x;
+    *py = h00 * ay + h10 * m0y + h01 * by + h11 * m1y;
+    float d00 = 6 * t2 - 6 * t, d10 = 3 * t2 - 4 * t + 1, d01 = -6 * t2 + 6 * t, d11 = 3 * t2 - 2 * t;
+    float tx = d00 * ax + d10 * m0x + d01 * bx + d11 * m1x, ty = d00 * ay + d10 * m0y + d01 * by + d11 * m1y;
+    float tl = sqrtf(tx * tx + ty * ty);
+    if(tl < 1e-9f) { tx = ux; ty = uy; tl = 1; }
+    *qx = -ty / tl;
+    *qy = tx / tl;
+    return;
+  }
   float u = (float)M_PI * s / L, w0 = e->wave[0], w1 = e->wave[1];
   float sn = sinf(u), cs = cosf(u);
   float off = L * sn * sn * (w0 + w1 * cs);
@@ -369,7 +538,7 @@ static uint32_t cutgraph_wavepoints(const CutGraph * g, const CutEdge * e, int t
   xy[n * 2] = ax; xy[n * 2 + 1] = ay; n++;
   int i = 1, ntabs = tabs ? e->ntabs : 0, seg = tabs ? CUTGRAPH_WAVESEG : CUTGRAPH_WAVEBODY;
   float step = L / seg;
-  float pts[(3 * EDGEGEN_SEGMENTS + 1) * 2];
+  float pts[CUTGRAPH_TABPOINTS * 2];
   for(int k = 0; k < ntabs; k++) {
     const CutTab * t = e->tab + k;
     float s0 = t->pos - t->len / 2, s1 = t->pos + t->len / 2;
@@ -406,7 +575,7 @@ static uint32_t cutgraph_edgepoints(const CutGraph * g, const CutEdge * e, int t
   float dx = g->v[e->b].x - ax, dy = g->v[e->b].y - ay;
   float L = sqrtf(dx * dx + dy * dy);
   float ux = dx / L, uy = dy / L, nx = -uy, ny = ux;
-  float pts[(3 * EDGEGEN_SEGMENTS + 1) * 2];
+  float pts[CUTGRAPH_TABPOINTS * 2];
   for(int k = 0; k < e->ntabs; k++) {
     const CutTab * t = e->tab + k;
     int m = cutgraph_knobcurve(t->kind, &t->tab, pts);
@@ -422,7 +591,7 @@ static uint32_t cutgraph_edgepoints(const CutGraph * g, const CutEdge * e, int t
 }
 
 static uint32_t cutgraph_edgemax(const CutEdge * e) {
-  return 1 + e->npts + e->ntabs * (3 * EDGEGEN_SEGMENTS + 1) + (cutgraph_waved(e) ? CUTGRAPH_WAVESEG : 0);
+  return 1 + e->npts + e->ntabs * CUTGRAPH_TABPOINTS + (cutgraph_waved(e) ? CUTGRAPH_WAVESEG : 0);
 }
 
 uint32_t cutgraph_maxpoints(const CutGraph * g) {
@@ -456,7 +625,7 @@ static uint32_t cutgraph_walk(const CutGraph * g, uint32_t p, int tabs, float ce
     uint32_t m = cutgraph_edgemax(g->e + (g->pedge[k] >> 1));
     if(m > bufmax) bufmax = m;
   }
-  float stackbuf[(2 * (3 * EDGEGEN_SEGMENTS + 1) + 1) * 2];
+  float stackbuf[(2 * CUTGRAPH_TABPOINTS + 1) * 2];
   float * buf = bufmax * 2 <= sizeof(stackbuf) / sizeof(float) ? stackbuf : malloc(sizeof(float) * 2 * bufmax);
   if(!buf) return 0;
   float tol = CG_SAMEPOINT * cell;
@@ -488,6 +657,7 @@ uint32_t cutgraph_body(const CutGraph * g, uint32_t p, float cell, float ox, flo
 static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed, const uint8_t * wv);
 
 int cutgraph_tabs(CutGraph * g, const CutTabStyle * st, uint32_t seed) {
+  if(st->bend > 0 && cutgraph_strokes(g)) return 1;
   uint8_t * wv = NULL;
   if(st->whimsytab > 0 && !(wv = cutgraph_whimsyverts(g))) return 1;
   int result = cutgraph_givetabs(g, st, seed, wv);
@@ -547,7 +717,16 @@ static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed
       any = 1;
       // Rerolling isn't working: give up a tab on the shortest tabbed edge, as long as
       // both pieces keep one (pieces next to whimsies can be too cramped for all of them)
-      if(pass >= CUTGRAPH_FALLBACK) {
+      // A piece that keeps failing first trades its curls for plain knobs
+      int hadcurl = 0;
+      if(pass >= CUTGRAPH_CURLFALLBACK) {
+        for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
+          CutEdge * e = g->e + (g->pedge[k] >> 1);
+          for(int j = 0; j < e->ntabs; j++) hadcurl |= e->tab[j].kind == CUTKNOB_CURL;
+          if(e->ntabs && e->tab[0].kind == CUTKNOB_CURL) e->flags |= CUTEDGE_NOCURL;
+        }
+      }
+      if(pass >= CUTGRAPH_FALLBACK && !hadcurl) {
         int32_t drop = -1;
         float droplen = 1e30f;
         for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {

@@ -204,9 +204,9 @@ int main(int argc, char ** argv) {
     return 1;
   }
   shapes(argv[1]);
-  const char * stylenames[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "wooden" };
+  const char * stylenames[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "wooden", "wooden2" };
   const char * whimnames[WHIMSY_LEVELS] = { "none", "few", "many" };
-  const uint8_t styles[] = { CUT_STYLE_CLASSIC, CUT_STYLE_WILD, CUT_STYLE_RANDOM, CUT_STYLE_RANDRECT, CUT_STYLE_WOODEN };
+  const uint8_t styles[] = { CUT_STYLE_CLASSIC, CUT_STYLE_WILD, CUT_STYLE_RANDOM, CUT_STYLE_RANDRECT, CUT_STYLE_WOODEN, CUT_STYLE_WOODEN2 };
   const uint32_t targets[] = { 100, 500 };
   for(int si = 0; si < (int)sizeof styles; si++) {
     for(uint8_t wh = WHIMSY_FEW; wh <= WHIMSY_MANY; wh++) {

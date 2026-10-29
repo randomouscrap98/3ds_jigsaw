@@ -1,6 +1,8 @@
 #include "test.h"
 #include "geom.h"
 #include "randcut.h"
+#include "strokecut.h"
+#include "whimsy.h"
 #include "rng.h"
 
 #include <stdlib.h>
@@ -91,4 +93,33 @@ void test_randcut(void) {
   }
   CutGraph c;
   CHECK(randcut_init(&c, 5, 5, 1, 1, randcut_style(0)) == 1);
+}
+
+// Stroke cut (lines only so far): exact piece count (+ whimsies), outlines tile the puzzle,
+// clean shapes, same seed = same cut
+void test_strokecut(void) {
+  const uint16_t sizes[3][2] = { { 7, 5 }, { 15, 10 }, { 28, 17 } };
+  for(int si = 0; si < 3; si++) {
+    for(uint8_t wh = 0; wh < WHIMSY_LEVELS; wh++) {
+      uint16_t w = sizes[si][0], h = sizes[si][1];
+      CutGraph c, d;
+      CHECK(strokecut_graph(&c, w, h, w * h, wh, WHIMSY_SET_CUTE, 99 + si) == 0);
+      CHECK(strokecut_graph(&d, w, h, w * h, wh, WHIMSY_SET_CUTE, 99 + si) == 0);
+      CHECK(c.count >= (uint32_t)w * h && c.count <= (uint32_t)w * h + whimsy_count(wh, w * h));   // Whimsies can be dropped
+      CHECK(d.count == c.count && d.ne == c.ne && d.npts == c.npts &&
+          !memcmp(d.pts, c.pts, sizeof(float) * 2 * c.npts));
+      float * xy = malloc(sizeof(float) * 2 * cutgraph_maxpoints(&c));
+      double area = 0;
+      int shapes = 1;
+      for(uint32_t p = 0; p < c.count; p++) {
+        uint32_t n = cutgraph_outline(&c, p, 1, 0, 0, xy);
+        area += geom_area(xy, n, NULL, NULL);
+        shapes &= edgegen_shape_ok(xy, n, 0.01f);
+      }
+      CHECK(fabs(area - (double)w * h) < 1e-3 * w * h && shapes);
+      free(xy);
+      cutgraph_free(&c);
+      cutgraph_free(&d);
+    }
+  }
 }

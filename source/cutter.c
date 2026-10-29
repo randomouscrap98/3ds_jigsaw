@@ -14,7 +14,8 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
   c->count = (uint32_t)cols * rows;
   int rnd = c->style >= CUT_STYLE_RANDOM;
   const RandCutStyle * rst = randcut_style(c->style == CUT_STYLE_RANDRECT ? RANDCUT_STYLE_RECT :
-      c->style == CUT_STYLE_WOODEN ? RANDCUT_STYLE_WOOD : RANDCUT_STYLE_EVEN);
+      c->style == CUT_STYLE_WOODEN ? RANDCUT_STYLE_WOOD : c->style == CUT_STYLE_WOODEN2 ? RANDCUT_STYLE_WOOD2 :
+      RANDCUT_STYLE_EVEN);
   if(!rnd && c->whimsy == WHIMSY_NONE) {
     if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;

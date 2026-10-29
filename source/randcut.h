@@ -23,12 +23,15 @@ typedef struct {
   float wave;         // Edge waves (CutTabStyle wave; 0 = straight)
   uint8_t knobs;      // Knob kinds (CutTabStyle knobs; 0 = classic only)
   float clearance;    // Thinnest part of a piece (CutTabStyle clearance; 0 = default)
+  float bend;         // Stroke curves (CutTabStyle bend; 0 = off)
+  float curls;        // Share of knobs that are curls (CutTabStyle curls)
 } RandCutStyle;
 
 #define RANDCUT_STYLE_EVEN 0
 #define RANDCUT_STYLE_RECT 1
 #define RANDCUT_STYLE_WOOD 2
-#define RANDCUT_STYLES 3
+#define RANDCUT_STYLE_WOOD2 3
+#define RANDCUT_STYLES 4
 const RandCutStyle * randcut_style(uint8_t style);
 
 #define RANDCUT_MAXTRIES 8        // Whole-cut retries (new points) before failing

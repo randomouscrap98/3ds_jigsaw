@@ -26,6 +26,7 @@ int main(int argc, char ** argv) {
     if(argc > 3 && !strcmp(argv[3], "random")) style = CUT_STYLE_RANDOM;
     if(argc > 3 && !strcmp(argv[3], "randrect")) style = CUT_STYLE_RANDRECT;
     if(argc > 3 && !strcmp(argv[3], "wooden")) style = CUT_STYLE_WOODEN;
+    if(argc > 3 && !strcmp(argv[3], "wooden2")) style = CUT_STYLE_WOODEN2;
     test_dump_cut(argv[2], style);
     return 0;
   }
@@ -56,6 +57,7 @@ int main(int argc, char ** argv) {
   RUN(test_piecebake);
   RUN(test_littlemenu);
   RUN(test_cutsample);
+  RUN(test_strokecut);
   printf("%d checks, %d failures\n", test_checks, test_failures);
   return test_failures ? 1 : 0;
 }

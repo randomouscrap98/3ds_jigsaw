@@ -47,6 +47,7 @@ void test_swizzle(void);
 void test_piecebake(void);
 void test_littlemenu(void);
 void test_cutsample(void);
+void test_strokecut(void);
 void test_dump_cut(const char * path, uint8_t style);  // CUT_STYLE_*
 
 #endif

@@ -9,8 +9,10 @@
 static const RandCutStyle randcut_styles[RANDCUT_STYLES] = {
   { .relax = 4, .collapse = 0.12f, .mintab = 0.45f, .twotab = 1.5f, .maxtab = 1.0f },  // Random
   { .relax = 0, .grid = 0.3f, .collapse = 0.33f, .mintab = 0.45f, .twotab = 1.5f, .maxtab = 1.0f },  // Random Rect
-  { .relax = 4, .collapse = 0.12f, .mintab = 0.6f, .twotab = 1.5f, .maxtab = 1.0f, .wave = 0.3f, .knobs = CUTKNOBS,
+  { .relax = 4, .collapse = 0.12f, .mintab = 0.6f, .twotab = 1.5f, .maxtab = 1.0f, .wave = 0.3f, .knobs = CUTKNOB_WOOD,
     .clearance = 0.1f },  // Wooden
+  { .relax = 4, .collapse = 0.12f, .mintab = 0.6f, .twotab = 1.5f, .maxtab = 1.0f, .knobs = CUTKNOB_WOOD,
+    .clearance = 0.1f, .bend = 1.0f, .curls = 0.7f },  // Wooden 2: strokes + curls
 };
 
 const RandCutStyle * randcut_style(uint8_t style) {
@@ -376,6 +378,8 @@ void randcut_tabstyle(const RandCutStyle * st, CutTabStyle * ts) {
   ts->wave = st->wave;
   ts->knobs = st->knobs;
   ts->clearance = st->clearance;
+  ts->bend = st->bend;
+  ts->curls = st->curls;
 }
 
 uint32_t randcut_tryseed(uint32_t seed, uint32_t t) {
