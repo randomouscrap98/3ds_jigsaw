@@ -14,6 +14,9 @@
 #define SAVEFILE_MUSIC_ORDER   0 // Zero so saves from before the field play in order
 #define SAVEFILE_MUSIC_OFF     1
 #define SAVEFILE_MUSIC_SHUFFLE 2
+#define SAVEFILE_VOLUME_HIGH   0 // Zero so saves from before the field stay at full volume
+#define SAVEFILE_VOLUME_LOW    1
+#define SAVEFILE_VOLUME_MEDIUM 2
 
 // A whole save file: this header, then a boardsave blob. Little endian. Header layout:
 //   0  char[8] "3DSJGSAW"
@@ -28,7 +31,8 @@
 //   30 u32 cut seed (1.2, 0 = unknown: savefile_cutseed of the picture's name). Kept so a
 //      renamed picture still cuts the same way.
 //   34 u8 overlay (OVERLAY_*; 1.2, 0 = none)
-//   35.. reserved, zero
+//   35 u8 music volume (SAVEFILE_VOLUME_*; 1.3, 0 = high)
+//   36.. reserved, zero
 typedef struct {
   uint16_t version;
   uint16_t size;
@@ -43,6 +47,7 @@ typedef struct {
   uint32_t cuthash;   // The cut's fingerprint (0 = unknown, from before 1.2)
   uint32_t seed;      // The cut's seed (0 = unknown: savefile_cutseed of the name)
   uint8_t overlay;    // OVERLAY_*
+  uint8_t volume;     // SAVEFILE_VOLUME_*
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board

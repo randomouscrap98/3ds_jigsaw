@@ -24,6 +24,8 @@
 #define MAIN_REPEAT_DELAY 20
 #define MAIN_REPEAT_INTERVAL 5
 #define MAIN_CHIME_DELAY 4      // Frames between the last piece's click and the completion chime
+#define MAIN_VOLUME_LOW    0.2f   // Music gain at the low / medium volume settings (high = 1)
+#define MAIN_VOLUME_MEDIUM 0.6f
 
 #define MAIN_PERF_SMOOTH 0.1f  // Weight of the newest frame in the perf averages
 
@@ -91,10 +93,16 @@ static void app_hook(APT_HookType type, void * param) {
   }
 }
 
-// Music follows the game's mode
+// Music follows the game's mode and volume
 static void app_music(App * app) {
   uint8_t m = app->game.music;
   music_setmode(&app->music, m == SAVEFILE_MUSIC_OFF ? MUSIC_OFF : m == SAVEFILE_MUSIC_SHUFFLE ? MUSIC_SHUFFLE : MUSIC_ORDER);
+  static const float gain[] = {
+    [SAVEFILE_VOLUME_LOW] = MAIN_VOLUME_LOW,
+    [SAVEFILE_VOLUME_MEDIUM] = MAIN_VOLUME_MEDIUM,
+    [SAVEFILE_VOLUME_HIGH] = 1.0f,
+  };
+  music_setvolume(&app->music, gain[app->game.volume % 3]);
 }
 
 static void app_start_game(App * app, PuzzleChoice choice) {
@@ -224,7 +232,7 @@ int main(int argc, char ** argv) {
       if(ev & GAME_EV_MERGE) sfx_play(&app.sfx, SFX_MERGE);
       if(ev & GAME_EV_COMPLETE) sfx_play_later(&app.sfx, SFX_COMPLETE, MAIN_CHIME_DELAY);
       if(ev & GAME_EV_SKIPSONG) music_skip(&app.music);
-      if(ev & GAME_EV_MUSICMODE) app_music(&app);
+      if(ev & (GAME_EV_MUSICMODE | GAME_EV_VOLUME)) app_music(&app);
       if(ev & GAME_EV_EXIT) app_end_game(&app);
     }
 

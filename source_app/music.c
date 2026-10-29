@@ -177,10 +177,12 @@ static void music_thread(void * arg) {
   MusicPlay p = { 0 };
   enum { IDLE, PLAYING, FADING } state = IDLE;
   u64 fadestart = 0;
+  float applied = -1;  // Gain last given to the channel (-1 = fading, set it again)
   for(;;) {
     LightEvent_Wait(&m->wake);
     LightLock_Lock(&m->lock);
     u8 quit = m->quit, want = m->mode != MUSIC_OFF, shuffle = m->mode == MUSIC_SHUFFLE, skip = m->skip;
+    float vol = m->volume;
     m->skip = 0;
     LightLock_Unlock(&m->lock);
     if(quit) break;
@@ -207,12 +209,16 @@ static void music_thread(void * arg) {
       float t = (svcGetSystemTick() - fadestart) / (float)SYSCLOCK_ARM11 / MUSIC_FADE_S;
       if(t >= 1 || !music_queued(m)) {
         music_clear(m);
-        music_setvol(1);
         state = IDLE;
       } else {
-        music_setvol(1 - t);
+        music_setvol(vol * (1 - t));
+        applied = -1;
       }
       continue;
+    }
+    if(vol != applied) {
+      music_setvol(vol);
+      applied = vol;
     }
     if(state != PLAYING) continue;
     if(skip && p.dec.kind) {
@@ -238,6 +244,7 @@ static void music_thread(void * arg) {
 
 int music_init(Music * m, int ndspok) {
   memset(m, 0, sizeof(Music));
+  m->volume = 1;
   LightLock_Init(&m->lock);
   LightEvent_Init(&m->wake, RESET_ONESHOT);
   if(!ndspok) return 1;
@@ -284,6 +291,13 @@ static void music_request(Music * m, int mode, int skip) {
 
 void music_setmode(Music * m, int mode) {
   music_request(m, mode, 0);
+}
+
+void music_setvolume(Music * m, float volume) {
+  LightLock_Lock(&m->lock);
+  m->volume = volume;
+  LightLock_Unlock(&m->lock);
+  LightEvent_Signal(&m->wake);
 }
 
 void music_skip(Music * m) {

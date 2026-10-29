@@ -30,6 +30,7 @@ typedef struct {
   LightLock lock;       // Guards name, busy and the requests
   u8 quit, mode, skip;  // Requests to the thread (under lock); mode = MUSIC_OFF etc.
   u8 running;
+  float volume;         // Channel gain while playing, 0..1 (under lock)
   uint32_t next;        // Index of the next file to play (thread only)
   s16 * pcm;            // MUSIC_BUFS * MUSIC_FRAMES stereo frames, linear memory
   ndspWaveBuf wave[MUSIC_BUFS];
@@ -45,6 +46,8 @@ void music_free(Music * m);
 // MUSIC_OFF fades out and stops; the others start playing if stopped. Switching between
 // in order and shuffled only changes how the next file is picked. Returns at once.
 void music_setmode(Music * m, int mode);
+// Channel gain 0..1 (fades scale it). Returns at once.
+void music_setvolume(Music * m, float volume);
 // Go to the next file. Returns at once.
 void music_skip(Music * m);
 // Copy the current file name (may be "")

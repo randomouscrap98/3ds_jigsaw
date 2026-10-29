@@ -44,6 +44,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     overlay = hdr.overlay;
     g->table = hdr.table;
     g->music = hdr.music;
+    g->volume = hdr.volume;
     g->playms = (u64)hdr.seconds * 1000;
     g->seed = savefile_seedfor(&hdr, name);
   } else {
@@ -148,6 +149,7 @@ int game_save(Game * g, int background) {
   sh.target = g->target;
   sh.table = g->table;
   sh.music = g->music;
+  sh.volume = g->volume;
   sh.seconds = g->playms / 1000;
   savefile_write(&sh, &g->board, buf);
   char path[STORAGE_MAXPATH];
@@ -261,6 +263,16 @@ int game_update(Game * g, const GameInput * gin) {
       g->music = next[g->music % 3];
       g->dirty = 1;
       ev |= GAME_EV_MUSICMODE;
+    }
+    if(gin->down & GAME_MOD_VOLUME) {
+      static const uint8_t next[] = {
+        [SAVEFILE_VOLUME_LOW] = SAVEFILE_VOLUME_MEDIUM,
+        [SAVEFILE_VOLUME_MEDIUM] = SAVEFILE_VOLUME_HIGH,
+        [SAVEFILE_VOLUME_HIGH] = SAVEFILE_VOLUME_LOW,
+      };
+      g->volume = next[g->volume % 3];
+      g->dirty = 1;
+      ev |= GAME_EV_VOLUME;
     }
     if((gin->down & GAME_MOD_CONDENSE) && g->nsel && g->held < 0 && !g->boxing) game_condense(g);
     const u32 keep = KEY_TOUCH | GAME_MODKEY | GAME_MOD_KEEPKEYS;
@@ -410,6 +422,41 @@ void game_render_bottom(Game * g, Render * r) {
   }
 }
 
+#define GAME_ICONZ 0.9f
+
+// Music mode icon, about 10 px square around (cx, cy): an X for off, a right arrow for in
+// order, a die showing three for shuffled. bg = die pip color.
+static void game_drawmode(uint8_t mode, float cx, float cy, u32 c, u32 bg) {
+  if(mode == SAVEFILE_MUSIC_OFF) {
+    C2D_DrawLine(cx - 4, cy - 4, c, cx + 4, cy + 4, c, 2, GAME_ICONZ);
+    C2D_DrawLine(cx - 4, cy + 4, c, cx + 4, cy - 4, c, 2, GAME_ICONZ);
+  } else if(mode == SAVEFILE_MUSIC_SHUFFLE) {
+    C2D_DrawRectSolid(cx - 5, cy - 5, GAME_ICONZ, 10, 10, c);
+    for(int i = -1; i <= 1; i++) C2D_DrawCircleSolid(cx + 2.8f * i, cy - 2.8f * i, GAME_ICONZ, 1.3f, bg);
+  } else {
+    C2D_DrawRectSolid(cx - 5, cy - 1.5f, GAME_ICONZ, 6, 3, c);
+    C2D_DrawTriangle(cx + 1, cy - 4.5f, c, cx + 1, cy + 4.5f, c, cx + 5.5f, cy, c, GAME_ICONZ);
+  }
+}
+
+// Speaker from x, centered on cy, with no / one / two sound waves for low / medium / high
+static void game_drawvolume(uint8_t volume, float x, float cy, u32 c) {
+  C2D_DrawRectSolid(x, cy - 2, GAME_ICONZ, 3, 4, c);
+  C2D_DrawTriangle(x + 3, cy - 2, c, x + 7, cy - 5, c, x + 7, cy + 5, c, GAME_ICONZ);
+  C2D_DrawTriangle(x + 3, cy - 2, c, x + 7, cy + 5, c, x + 3, cy + 2, c, GAME_ICONZ);
+  int waves = volume == SAVEFILE_VOLUME_HIGH ? 2 : volume == SAVEFILE_VOLUME_MEDIUM ? 1 : 0;
+  for(int w = 0; w < waves; w++) {
+    float rad = 4 + 3.5f * w;
+    const int segs = 6;
+    const float span = 1.0f;  // Radians each side of horizontal
+    for(int i = 0; i < segs; i++) {
+      float a0 = -span + 2 * span * i / segs, a1 = -span + 2 * span * (i + 1) / segs;
+      C2D_DrawLine(x + 7 + rad * cosf(a0), cy + rad * sinf(a0), c,
+          x + 7 + rad * cosf(a1), cy + rad * sinf(a1), c, 1.5f, GAME_ICONZ);
+    }
+  }
+}
+
 void game_render_top(Game * g, TextDraw * td) {
   const u32 white = C2D_Color32(230, 230, 230, 255), dim = C2D_Color32(140, 140, 140, 255);
   render_preview(&g->gfx, 0, 0, 400, 204);
@@ -454,11 +501,11 @@ void game_render_top(Game * g, TextDraw * td) {
       snprintf(g->lastsong, sizeof(g->lastsong), "%s", pf->song);
       g->songstart = osGetTime();
     }
-    char song[300];
-    if(g->music == SAVEFILE_MUSIC_OFF) snprintf(song, sizeof(song), "Music: off");
-    else snprintf(song, sizeof(song), "Music%s: %s", g->music == SAVEFILE_MUSIC_SHUFFLE ? " (shuffled)" : "",
-        pf->song[0] ? pf->song : "none");
-    textdraw_marquee(td, 80, 144, 240, 0.45f, pc,
+    // Volume and mode icons stay put; the rest of the line is the song
+    game_drawvolume(g->volume, 80, 151, pc);
+    game_drawmode(g->music, 106, 151, pc, C2D_Color32(16, 16, 20, a));
+    const char * song = g->music == SAVEFILE_MUSIC_OFF ? "Music off" : pf->song[0] ? pf->song : "No music";
+    textdraw_marquee(td, 118, 144, 202, 0.45f, pc,
         (osGetTime() - g->songstart) * GAME_MARQUEE_SPEED / 1000, song);
   }
 }

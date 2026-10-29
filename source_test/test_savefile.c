@@ -103,6 +103,13 @@ void test_savefile(void) {
   h.overlay = 1;
   savefile_write(&h, &b, buf);
   CHECK(buf[34] == 1 && savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.overlay == 1);
+  // Volume (byte 35); unknown values read as high
+  CHECK(r.volume == SAVEFILE_VOLUME_HIGH);
+  h.volume = SAVEFILE_VOLUME_MEDIUM;
+  savefile_write(&h, &b, buf);
+  CHECK(buf[35] == 2 && savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.volume == SAVEFILE_VOLUME_MEDIUM);
+  buf[35] = 9;
+  CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.volume == SAVEFILE_VOLUME_HIGH);
 
   // Old format (u32 prefix + "JIGS") isn't a save
   uint8_t old[32] = { 0xF4, 0x01, 0, 0, 'J', 'I', 'G', 'S' };

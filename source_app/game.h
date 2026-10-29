@@ -43,10 +43,12 @@
 #define GAME_EV_EXIT     (1 << 2)
 #define GAME_EV_SKIPSONG (1 << 3)
 #define GAME_EV_MUSICMODE (1 << 4)  // g->music changed
+#define GAME_EV_VOLUME   (1 << 5)  // g->volume changed
 
 #define GAME_MODKEY KEY_Y  // Modifier: held = overlay, buttons switch to the second set below
 #define GAME_MOD_SKIPSONG KEY_X
 #define GAME_MOD_MUSICMODE KEY_A  // Cycles off -> in order -> shuffled
+#define GAME_MOD_VOLUME KEY_B     // Cycles low -> medium -> high
 #define GAME_MOD_CONDENSE KEY_SELECT  // Squish the selection into a tidy block
 #define GAME_MOD_KEEPKEYS (KEY_DUP | KEY_DDOWN)  // Buttons that keep working with the modifier (zoom)
 
@@ -93,6 +95,7 @@ typedef struct {
   uint8_t picoverlay;     // Picture overlay (OVERLAY_*; not the hold-Y info overlay)
   uint8_t table;          // Table color (palette index in render)
   uint8_t music;          // Music mode (SAVEFILE_MUSIC_*), saved with the puzzle
+  uint8_t volume;         // Music volume (SAVEFILE_VOLUME_*), saved with the puzzle
   SaveWriter * writer;    // Where saves go (NULL = write immediately)
   int32_t held;           // Group being dragged, or -1
   u8 panning;             // Stylus is dragging the table

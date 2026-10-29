@@ -53,6 +53,7 @@ void savefile_write(const SaveHeader * h, Board * b, uint8_t * buf) {
   for(int i = 0; i < 4; i++) buf[26 + i] = (h->cuthash >> (8 * i)) & 0xFF;
   for(int i = 0; i < 4; i++) buf[SAVEFILE_SEEDAT + i] = (h->seed >> (8 * i)) & 0xFF;
   buf[34] = h->overlay;
+  buf[35] = h->volume;
   boardsave_write(b, buf + SAVEFILE_HEADER);
 }
 
@@ -81,6 +82,8 @@ int savefile_readheader(const uint8_t * buf, size_t len, SaveHeader * h) {
     for(int i = 0; i < 4; i++) h->seed |= (uint32_t)buf[SAVEFILE_SEEDAT + i] << (8 * i);
   }
   if(h->size > 34) h->overlay = buf[34];
+  if(h->size > 35) h->volume = buf[35];
+  if(h->volume > SAVEFILE_VOLUME_MEDIUM) h->volume = SAVEFILE_VOLUME_HIGH;
   return SAVEFILE_OK;
 }
 
