@@ -44,6 +44,8 @@ const RandCutStyle * randcut_style(uint8_t style);
 int randcut_graph(CutGraph * g, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st);
 // Tab rules for random cuts
 void randcut_tabstyle(const RandCutStyle * st, CutTabStyle * ts);
+// Give out tabs (cutgraph_tabs), with corner-paired stroke directions first if the style bends
+int randcut_tabs(CutGraph * g, const RandCutStyle * st, const CutTabStyle * ts, uint32_t seed);
 // Whole cut with tabs: retries with new points until one works. Same seed + style = same
 // cut. Free with cutgraph_free. Returns 0 on success.
 int randcut_init(CutGraph * g, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st);

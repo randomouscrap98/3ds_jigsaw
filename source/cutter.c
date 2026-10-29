@@ -62,7 +62,7 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
       c->g.tries = t + 1;
       // A cut with whimsies asked for gets at least one (or tries again)
       int placed = whimsy_add(&c->g, c->whimsy, c->set, s);
-      if(placed > 0 && !cutgraph_tabs(&c->g, &ts, s)) {
+      if(placed > 0 && !(rnd ? randcut_tabs(&c->g, rst, &ts, s) : cutgraph_tabs(&c->g, &ts, s))) {
         c->whimsies = placed;
         ok = 1;
       } else {

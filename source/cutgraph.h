@@ -16,59 +16,19 @@ typedef struct {
   float x, y;
 } CutVert;
 
-// Knob shapes (a tab's kind)
-#define CUTKNOB_CLASSIC 0   // edgegen's tab
-#define CUTKNOB_BALL 1      // Narrow neck, big round head
-#define CUTKNOB_HOOK 2      // Head leaning to one side (earlet)
-#define CUTKNOB_BLOCK 3     // Wide and squarish
-#define CUTKNOB_FINGER 4    // Long and narrow
-#define CUTKNOB_ROUND 5     // Like the classic tab but with a higher neck (thicker under the head)
-#define CUTKNOB_CURL 6      // Thick spiral finger (not picked by knobs; see CutTabStyle curls)
-#define CUTKNOB_SWIRL 7     // Double spiral: the line curls in and back out between its own
-                            // turns, so both pieces get a finger wrapped round the other's
-#define CUTKNOB_CIRCLE 8    // No neck: a circle sunk partway into the line (its opening is
-                            // narrower than it, so it still locks), small fillets where it meets the line
-#define CUTKNOBS 9
-#define CUTGRAPH_CIRCLE_R 2.3f      // Radius, times the tab size (0.13 tab size: 0.3 of the span)
-#define CUTGRAPH_CIRCLE_SINK 0.6f   // Centre height above the line, times the radius
-#define CUTGRAPH_CIRCLE_FILLET 0.06f  // Fillet reach along the line (span units)
-#define CUTKNOB_WOOD 6      // knobs value for the wood knobs (BALL .. ROUND)
+#include "knobs.h"
 
-// Curl: centerline rises straight for CURL_STEM, then rolls over (like a wave crest), its
-// curvature rising from CURL_K0 to CURL_K1 over CURL_LEN; finger CURL_WIDTH wide, flared at
-// the base. All in tab units (times the tab's length), scaled by the tab's size jitter.
-#ifndef CUTGRAPH_CURL_STEM
-#define CUTGRAPH_CURL_STEM 0.3f     // Swept for the curliest (248°) that is thick enough at 0.1
-#define CUTGRAPH_CURL_LEN 0.9f      // cells on 0.7-1.0 cell edges
-#define CUTGRAPH_CURL_K0 2.6f
-#define CUTGRAPH_CURL_K1 7.0f
-#define CUTGRAPH_CURL_WIDTH 0.2f
-#define CUTGRAPH_CURL_FLARE 0.8f    // Extra half widths at the base (fillet)
-#endif
-#define CUTGRAPH_CURL_SEG 18        // Centerline samples
+// Where curls and swirls go (knobs.h has their shapes)
 #define CUTGRAPH_CURL_MINEDGE 0.8f  // Only edges this long (cells) get curls
-// Swirl, in units of its span (CutTab len = depth = CUTGRAPH_SWIRL_SPAN cells, not scaled by
-// the edge): arms CUTGRAPH_SWIRL_W apart (finger width), CUTGRAPH_SWIRL_TURNS turns each,
-// centre lifted CUTGRAPH_SWIRL_LIFT finger widths, the arch ending CUTGRAPH_SWIRL_ARCH widths
-// past the spiral
 #ifndef CUTGRAPH_SWIRL_SPAN
 #define CUTGRAPH_SWIRL_SPAN 0.7f      // Swept: most swirls that keep their pieces thick enough
 #endif
 #ifndef CUTGRAPH_SWIRL_CLEAR
 #define CUTGRAPH_SWIRL_CLEAR 0.07f    // Thinnest part of a piece with a swirl (cells)
 #endif
-#ifndef CUTGRAPH_SWIRL_W
-#define CUTGRAPH_SWIRL_W 0.13f
-#define CUTGRAPH_SWIRL_TURNS 1.0f
-#define CUTGRAPH_SWIRL_LIFT 1.0f
-#define CUTGRAPH_SWIRL_ARCH 2.5f
-#define CUTGRAPH_SWIRL_MARGIN 0.08f
-#endif
-#define CUTGRAPH_SWIRL_STEPS 14     // Samples per turn
 #ifndef CUTGRAPH_SWIRL_MINEDGE
 #define CUTGRAPH_SWIRL_MINEDGE 0.9f // Only edges this long (cells) get swirls
 #endif
-#define CUTGRAPH_TABPOINTS (4 * CUTGRAPH_CURL_SEG + 12)  // Most points one tab can have
 
 // One tab on a straight edge: drawn over t in [pos - len/2, pos + len/2] (cells from a),
 // with the tab curve's normal offsets scaled by depth (cells)
@@ -115,7 +75,7 @@ typedef struct {
                       // classic: its head sits low, leaving a thin sliver under it)
   float curls;        // Share of knobs that are curls instead (0 = none)
   float swirls;       // Share of knobs (on long enough edges) that are swirls (0 = none)
-  float bend;         // Stroke curves (cutgraph_strokes; 0 = off): edges bend up to this (tangent
+  float bend;         // Stroke curves (directions from cornerbend_dirs; 0 = off): edges bend up to this (tangent
                       // length / edge length), rolled with the tabs
   float knoblen;      // Tabs span this many cells (+-CUTGRAPH_KNOBVARY; 0 = sized to the edge)
   float knobsize;     // Head size (edgegen tab size; 0 = edgegen's), shape jitter halved
@@ -174,11 +134,6 @@ uint8_t * cutgraph_whimsyverts(const CutGraph * g);
 // at least min long, and at least st->whimsytab if an end is a whimsy vertex (wv from
 // cutgraph_whimsyverts; NULL when there are no whimsies)
 int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min, const uint8_t * wv);
-// Directions for stroke curves (CutEdge dir): at each inner corner the two edges closest to
-// opposite continue each other smoothly (one line through the corner), the rest meet that
-// line square on (a T); edges meet the border square on. Only inner, straight, non-whimsy
-// edges get directions. cutgraph_tabs calls it when the style bends. Returns 0 on success.
-int cutgraph_strokes(CutGraph * g);
 // Rebuild every piece's walk from the edges' left/right sides (after edges changed).
 // Returns 0 if every piece is one closed loop; 1 if one is split, pinched or gone (g's
 // walks are then unchanged), -1 out of memory.
@@ -191,9 +146,6 @@ uint32_t cutgraph_maxpoints(const CutGraph * g);
 // CUTGRAPH_PINCH * cl apart along the outline: no thin necks or slivers anywhere (unlike
 // edgegen_shape_ok, which skips nearby points by count), and no corners sharper than ~40°
 int cutgraph_thick_ok(const float * xy, uint32_t n, float cl);
-// Sample a knob of kind (CUTKNOB_*) in edge space like edgegen_tabcurve (at most
-// CUTGRAPH_TABPOINTS points, from (0, 0) to (1, 0)). Returns the count.
-int cutgraph_knobcurve(uint8_t kind, const EdgeTab * tab, float * out);
 // Closed outline of piece p, clockwise (y down), scaled by cell and offset by (ox, oy).
 // xy must hold cutgraph_maxpoints pairs. Returns number of points.
 uint32_t cutgraph_outline(const CutGraph * g, uint32_t p, float cell, float ox, float oy, float * xy);

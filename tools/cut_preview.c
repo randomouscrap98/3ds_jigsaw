@@ -190,9 +190,23 @@ static void shapes(const char * dir) {
   free(out); free(img); free(canvas);
 }
 
+// 1 if name is one of the comma separated names in only (NULL = all)
+static int wanted(const char * only, const char * name) {
+  if(!only) return 1;
+  size_t n = strlen(name);
+  for(const char * p = only; *p; ) {
+    const char * c = strchr(p, ',');
+    size_t len = c ? (size_t)(c - p) : strlen(p);
+    if(len == n && !strncmp(p, name, n)) return 1;
+    if(!c) break;
+    p = c + 1;
+  }
+  return 0;
+}
+
 int main(int argc, char ** argv) {
   if(argc < 2) {
-    fprintf(stderr, "usage: %s OUTDIR [image] [seed]\n", argv[0]);
+    fprintf(stderr, "usage: %s OUTDIR [image] [seed] [style,style,...]\n", argv[0]);
     return 1;
   }
   const char * imgpath = argc > 2 ? argv[2] : "romfs/puzzles/The Gulf Stream.jpg";
@@ -203,12 +217,16 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "can't load %s\n", imgpath);
     return 1;
   }
-  shapes(argv[1]);
   const char * stylenames[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "wooden", "wooden2" };
+  // Only these styles (comma separated names), and then no shape sheet or crop samples
+  const char * only = argc > 4 ? argv[4] : NULL;
+#define WANT(st) wanted(only, stylenames[st])
+  if(!only) shapes(argv[1]);
   const char * whimnames[WHIMSY_LEVELS] = { "none", "few", "many" };
   const uint8_t styles[] = { CUT_STYLE_CLASSIC, CUT_STYLE_WILD, CUT_STYLE_RANDOM, CUT_STYLE_RANDRECT, CUT_STYLE_WOODEN, CUT_STYLE_WOODEN2 };
   const uint32_t targets[] = { 100, 500 };
   for(int si = 0; si < (int)sizeof styles; si++) {
+    if(!WANT(styles[si])) continue;
     for(uint8_t wh = WHIMSY_FEW; wh <= WHIMSY_MANY; wh++) {
       for(int t = 0; t < 2; t++) {
         uint16_t cols, rows;
@@ -259,6 +277,7 @@ int main(int argc, char ** argv) {
     int each = k < CUT_STYLES * WHIMSY_LEVELS;
     uint8_t st = each ? k / WHIMSY_LEVELS : CUT_STYLE_CLASSIC, wh = each ? k % WHIMSY_LEVELS : WHIMSY_NONE;
     uint32_t target = each ? 100 : counts[k - CUT_STYLES * WHIMSY_LEVELS];
+    if(only && (!each || !WANT(st))) continue;
     uint16_t cx, cy, cw, ch;
     cutsample_crop(tw, th, target, &cx, &cy, &cw, &ch);
     double t0 = now_ms();

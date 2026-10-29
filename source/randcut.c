@@ -1,4 +1,5 @@
 #include "randcut.h"
+#include "cornerbend.h"
 #include "rng.h"
 #include "geom.h"
 
@@ -403,6 +404,11 @@ void randcut_tabstyle(const RandCutStyle * st, CutTabStyle * ts) {
   ts->onekind = st->onekind;
 }
 
+int randcut_tabs(CutGraph * g, const RandCutStyle * st, const CutTabStyle * ts, uint32_t seed) {
+  if(st->bend > 0 && cornerbend_dirs(g)) return 1;
+  return cutgraph_tabs(g, ts, seed);
+}
+
 uint32_t randcut_tryseed(uint32_t seed, uint32_t t) {
   return seed ^ (t * 0x85EBCA6Bu);
 }
@@ -415,7 +421,7 @@ int randcut_init(CutGraph * c, float width, float height, uint32_t count, uint32
     uint32_t s = randcut_tryseed(seed, t);
     if(!randcut_graph(c, width, height, count, s, st)) {
       c->tries = t + 1;
-      if(!cutgraph_tabs(c, &ts, s)) return 0;
+      if(!randcut_tabs(c, st, &ts, s)) return 0;
       cutgraph_free(c);
     }
   }
