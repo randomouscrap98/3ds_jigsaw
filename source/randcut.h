@@ -27,6 +27,8 @@ typedef struct {
   float curls;        // Share of knobs that are curls (CutTabStyle curls)
   float swirls;       // Share of knobs that are swirls (CutTabStyle swirls)
   float fallbacktab;  // CutTabStyle fallbacktab (0 = 0.6 * mintab)
+  float knoblen, knobsize;  // CutTabStyle knoblen, knobsize (0 = off)
+  uint8_t onekind;    // CutTabStyle onekind
 } RandCutStyle;
 
 #define RANDCUT_STYLE_EVEN 0

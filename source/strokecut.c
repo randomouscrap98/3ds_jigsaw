@@ -667,29 +667,67 @@ static float sc_turn(const Sc * s, const ScReg * R, uint32_t i) {
 }
 
 typedef struct {
-  uint32_t a, ia, k;    // Region, index of the chain's start in it, steps in the chain
+  uint32_t a, u, v;     // Region and the junctions the edge runs between (found again when it's
+                        // its turn: earlier snakes change the lists)
 } ScSnake;
 
-// Replace the short edge (a's chain ia .. ia + k, whose far side is region b at ib) with a
-// finger of a snaking into b: as wide as the edge at its base, along a smooth line through a
-// few points inside b, round tip. Returns 0 if done, 1 if not (nothing changed), -1 out of memory.
+// A finger of a snaking into b through the edge (a's chain ia .. ia + k, whose far side is
+// region b at ib): along a smooth line through a few points inside b, round tip. A short
+// edge becomes the finger whole (as wide as the edge); a longer one keeps its ends and grows
+// the finger from a stretch in between, through a quickly narrowing neck. Returns 0 if
+// done, 1 if not (nothing changed), -1 out of memory.
 static int sc_snake(Sc * s, uint32_t a, uint32_t ia, uint32_t k, uint32_t b, uint32_t ib, float sc) {
   ScReg * A = s->reg + a, * B = s->reg + b;
-  uint32_t u = A->id[ia], v = A->id[(ia + k) % A->n];
-  float ux, uy, vx, vy;
-  sc_pt(s, u, &ux, &uy);
-  sc_pt(s, v, &vx, &vy);
-  // Only where b's boundary runs straight on through both ends (the strip's sides end on a
-  // line of b's): there the finger's sides carry the strip's on. Where b has a corner
-  // instead (the edge is the stem of a T), a full-width finger would hug b's own edge.
-  if(sc_turn(s, B, ib) > STROKECUT_SNAKESTRAIGHT || sc_turn(s, B, (ib + k) % B->n) > STROKECUT_SNAKESTRAIGHT) {
-#ifdef STROKECUT_DEBUG
-    sc_dbg[0]++;
-#endif
-    return 1;
+  // The chain's points and distances along it
+  float cx[STROKECUT_SNAKECHAIN], cy[STROKECUT_SNAKECHAIN], ca[STROKECUT_SNAKECHAIN];
+  if(k + 1 > STROKECUT_SNAKECHAIN) return 1;
+  for(uint32_t i = 0; i <= k; i++) {
+    sc_pt(s, A->id[(ia + i) % A->n], cx + i, cy + i);
+    ca[i] = i ? ca[i - 1] + hypotf(cx[i] - cx[i - 1], cy[i] - cy[i - 1]) : 0;
   }
-  float w = hypotf(vx - ux, vy - uy), mx = (ux + vx) / 2, my = (uy + vy) / 2;
-  float nx = (vy - uy) / w, ny = -(vx - ux) / w;   // Into b (a walks u -> v clockwise)
+  float L = ca[k];
+  int whole = L <= STROKECUT_SNAKEMAX * sc;
+  float s0, wb, w;   // Base middle (along the chain), base width, finger width
+  if(whole) {
+    // Only where b's boundary runs straight on through both ends (the strip's sides end on
+    // a line of b's): where b has a corner (the edge is a T's stem), a full-width finger
+    // would hug b's own edge
+    if(sc_turn(s, B, ib) > STROKECUT_SNAKESTRAIGHT || sc_turn(s, B, (ib + k) % B->n) > STROKECUT_SNAKESTRAIGHT) {
+#ifdef STROKECUT_DEBUG
+      sc_dbg[0]++;
+#endif
+      return 1;
+    }
+    s0 = L / 2;
+    wb = w = hypotf(cx[k] - cx[0], cy[k] - cy[0]);
+  } else {
+    w = rng_range(&s->r, STROKECUT_NECKMIN, STROKECUT_NECKMAX) * sc;
+    wb = w + 2 * STROKECUT_NECKR * sc;   // Rounded into the edge on both sides
+    float room = L - 2 * STROKECUT_CORNER * sc - wb;
+    if(room < 0) return 1;
+    s0 = STROKECUT_CORNER * sc + wb / 2 + rng_range(&s->r, 0, room);
+  }
+  // Base ends u, v on the chain (the chain's own ends for a whole edge) and the chain points
+  // kept before / after them: chain[0 .. j0] u ... v chain[j1 .. k]
+  float ux, uy, vx, vy;
+  int32_t j0, j1;
+  if(whole) {
+    ux = cx[0]; uy = cy[0]; vx = cx[k]; vy = cy[k];
+    j0 = -1;
+    j1 = k + 1;
+  } else {
+    float su = s0 - wb / 2, sv = s0 + wb / 2;
+    j0 = 0;
+    while(j0 + 1 <= (int32_t)k && ca[j0 + 1] < su) j0++;
+    j1 = k;
+    while(j1 - 1 >= 0 && ca[j1 - 1] > sv) j1--;
+    float f = (su - ca[j0]) / (ca[j0 + 1] - ca[j0]);
+    ux = cx[j0] + (cx[j0 + 1] - cx[j0]) * f; uy = cy[j0] + (cy[j0 + 1] - cy[j0]) * f;
+    f = (sv - ca[j1 - 1]) / (ca[j1] - ca[j1 - 1]);
+    vx = cx[j1 - 1] + (cx[j1] - cx[j1 - 1]) * f; vy = cy[j1 - 1] + (cy[j1] - cy[j1 - 1]) * f;
+  }
+  float bl = hypotf(vx - ux, vy - uy), mx = (ux + vx) / 2, my = (uy + vy) / 2;
+  float nx = (vy - uy) / bl, ny = -(vx - ux) / bl;   // Into b (a walks u -> v clockwise)
   // Control points: on into b, then snaking side to side
   float cp[2 * (STROKECUT_SNAKEPTS + 2)];
   cp[0] = mx - nx * 0.3f; cp[1] = my - ny * 0.3f;   // Phantom before the start (start heading)
@@ -700,18 +738,19 @@ static int sc_snake(Sc * s, uint32_t a, uint32_t ia, uint32_t k, uint32_t b, uin
   int npts = 0, want = 2 + (int)rng_below(&s->r, STROKECUT_SNAKEPTS - 1);
   for(int i = 0; i < want; i++) {
     float bestscore = -1e30f, bx = 0, by = 0, bdx = 0, bdy = 0;
+    const float * bxy = sc_coords(s, B);
+    if(!bxy) return -1;
     for(int c = 0; c < 9; c++) {
-      float turn = i == 0 ? (c - 4) * 0.12f : (c - 4) * 0.4f;
+      float turn = i == 0 ? (c - 4) * 0.06f : (c - 4) * 0.3f;
       float co = cosf(turn), sn = sinf(turn), ndx = dx * co - dy * sn, ndy = dx * sn + dy * co;
       float len = rng_range(&s->r, STROKECUT_SNAKESTEP * 0.8f, STROKECUT_SNAKESTEP * 1.2f) * sc;
       float px = cp[2 * (i + 1)] + ndx * len, py = cp[2 * (i + 1) + 1] + ndy * len;
       float room = sc_bdist(s, B, px, py) - w / 2;
-      if(room < STROKECUT_SNAKEMARGIN * sc || !geom_inside(sc_coords(s, B), B->n, px, py)) continue;
+      if(room < STROKECUT_SNAKEMARGIN * sc || !geom_inside(bxy, B->n, px, py)) continue;
       float score = room + (i > 0 && turn * side > 0 ? 0.15f : 0) + rng_range(&s->r, 0, 0.1f);
       if(score > bestscore) { bestscore = score; bx = px; by = py; bdx = ndx; bdy = ndy; }
     }
     if(bestscore < -1e29f) break;
-    B = s->reg + b;
     side = -side;
     dx = bdx; dy = bdy;
     cp[2 * (i + 2)] = bx;
@@ -732,7 +771,8 @@ static int sc_snake(Sc * s, uint32_t a, uint32_t ia, uint32_t k, uint32_t b, uin
     const float * p0 = cp + 2 * (i - 1), * p1 = cp + 2 * i, * p2 = cp + 2 * (i + 1);
     float p3x = i + 2 < ncp ? cp[2 * (i + 2)] : 2 * p2[0] - p1[0];
     float p3y = i + 2 < ncp ? cp[2 * (i + 2) + 1] : 2 * p2[1] - p1[1];
-    int m = (int)(hypotf(p2[0] - p1[0], p2[1] - p1[1]) / 0.04f) + 2;
+    // Finely at the start, where the neck rounds into the edge
+    int m = (int)(hypotf(p2[0] - p1[0], p2[1] - p1[1]) / (i == 1 ? 0.012f : 0.04f)) + 2;
     for(int j = 0; j < m && nc < 390; j++) {
       float t = (float)j / m, t2 = t * t, t3 = t2 * t;
       cl[2 * nc] = 0.5f * (2 * p1[0] + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3x) * t2 +
@@ -745,30 +785,65 @@ static int sc_snake(Sc * s, uint32_t a, uint32_t ia, uint32_t k, uint32_t b, uin
   cl[2 * nc] = cp[2 * (ncp - 1)];
   cl[2 * nc + 1] = cp[2 * (ncp - 1) + 1];
   nc++;
-  // Sides (left = toward u at the base), then the round tip
+  // A bend tighter than the finger's half width folds its inner side over itself
+  for(int i = 1; i + 1 < nc; i++) {
+    float ax = cl[2 * i] - cl[2 * i - 2], ay = cl[2 * i + 1] - cl[2 * i - 1];
+    float bx = cl[2 * i + 2] - cl[2 * i], by = cl[2 * i + 3] - cl[2 * i + 1];
+    float la = hypotf(ax, ay), lb = hypotf(bx, by);
+    if(la < 1e-6f || lb < 1e-6f) continue;
+    float ang = fabsf(atan2f(ax * by - ay * bx, ax * bx + ay * by));
+    float maxw = w;
+    if(ang > 1e-4f && (la + lb) / 2 / ang < maxw / 2 * 1.3f) {
+#ifdef STROKECUT_DEBUG
+      sc_dbg[1]++;
+#endif
+      return 1;
+    }
+  }
+  // Sides (half the finger's width, tapering), the neck, then the round tip
   float total = 0;
   for(int i = 1; i < nc; i++) total += hypotf(cl[2 * i] - cl[2 * i - 2], cl[2 * i + 1] - cl[2 * i - 1]);
-  int capn = 8, nd = 2 * (nc - 1) + capn - 1;
+  int capn = 8, nf = 8, nd = 2 * (nc - 1) + capn - 1 + 2 * nf;
   float * det = malloc(sizeof(float) * 2 * (nd + 2));
   if(!det) return -1;
-  float acc = 0, ex = 0, ey = 0, hw = w / 2;
-  float lx[400 * 2], rx[400 * 2];
+  float acc = 0, ex = 0, ey = 0, hw = w / 2, neck = (bl - w) / 2;   // Fillet radius (0 = no neck)
+  float lx[400 * 2], rx[400 * 2], tg[400 * 2];
+  int iR = 0;   // First centerline sample past the neck
   for(int i = 0; i < nc; i++) {
     if(i > 0) acc += hypotf(cl[2 * i] - cl[2 * i - 2], cl[2 * i + 1] - cl[2 * i - 1]);
+    if(acc < neck) iR = i + 1;
     int i0 = i > 0 ? i - 1 : 0, i1 = i < nc - 1 ? i + 1 : nc - 1;
     float tx = cl[2 * i1] - cl[2 * i0], ty = cl[2 * i1 + 1] - cl[2 * i0 + 1], tl = hypotf(tx, ty);
     tx /= tl; ty /= tl;
+    tg[2 * i] = tx; tg[2 * i + 1] = ty;
     hw = w / 2 * (1 - STROKECUT_SNAKETAPER * acc / total);
-    // Left of the heading = toward u at the base (u is on the left walking into b from a)
     lx[2 * i] = cl[2 * i] - ty * hw; lx[2 * i + 1] = cl[2 * i + 1] + tx * hw;
     rx[2 * i] = cl[2 * i] + ty * hw; rx[2 * i + 1] = cl[2 * i + 1] - tx * hw;
     ex = tx; ey = ty;
   }
+  // Leaving the edge at a slant would leave b a sharp wedge beside the neck
+  if(iR >= nc - 2 || tg[2 * iR] * nx + tg[2 * iR + 1] * ny < cosf(STROKECUT_SNAKESQUARE)) { free(det); return 1; }
   // Which side starts at u
   int lu = hypotf(lx[0] - ux, lx[1] - uy) < hypotf(rx[0] - ux, rx[1] - uy);
   float * su = lu ? lx : rx, * sv = lu ? rx : lx;
   int d = 0;
-  for(int i = 1; i < nc; i++) { det[2 * d] = su[2 * i]; det[2 * d + 1] = su[2 * i + 1]; d++; }
+  // Neck, u side: a cubic from u leaving along the edge to the finger's side one fillet
+  // radius in, arriving along the finger (v side the same, mirrored, on the way back)
+  float eux = 0, euy = 0, evx = 0, evy = 0;   // The edge's heading at u and v (u toward v)
+  if(neck > 0) {
+    float l;
+    eux = cx[j0 + 1] - cx[j0]; euy = cy[j0 + 1] - cy[j0]; l = hypotf(eux, euy); eux /= l; euy /= l;
+    evx = cx[j1] - cx[j1 - 1]; evy = cy[j1] - cy[j1 - 1]; l = hypotf(evx, evy); evx /= l; evy /= l;
+    float k = neck * 0.55f, sx = su[2 * iR], sy = su[2 * iR + 1];
+    float c1x = ux + eux * k, c1y = uy + euy * k, c2x = sx - tg[2 * iR] * k, c2y = sy - tg[2 * iR + 1] * k;
+    for(int i = 1; i <= nf; i++) {
+      float t = (float)i / nf, u = 1 - t;
+      det[2 * d] = u * u * u * ux + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * sx;
+      det[2 * d + 1] = u * u * u * uy + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * sy;
+      d++;
+    }
+  }
+  for(int i = (neck > 0 ? iR : 0) + 1; i < nc; i++) { det[2 * d] = su[2 * i]; det[2 * d + 1] = su[2 * i + 1]; d++; }
   // Tip: half circle from the u side round to the v side, ahead of the end
   float tcx = cl[2 * (nc - 1)], tcy = cl[2 * (nc - 1) + 1];
   float a0 = atan2f(su[2 * (nc - 1) + 1] - tcy, su[2 * (nc - 1)] - tcx);
@@ -777,24 +852,60 @@ static int sc_snake(Sc * s, uint32_t a, uint32_t ia, uint32_t k, uint32_t b, uin
     float an = a0 + turn * (float)M_PI * i / capn;
     det[2 * d] = tcx + cosf(an) * hw; det[2 * d + 1] = tcy + sinf(an) * hw; d++;
   }
-  for(int i = nc - 1; i >= 1; i--) { det[2 * d] = sv[2 * i]; det[2 * d + 1] = sv[2 * i + 1]; d++; }
-  // The new outlines: a = v .. (round its old way) .. u + finger; b = u .. v + finger backwards
-  uint32_t na = A->n - k + 1, nbb = B->n - k + 1;
-  float * pa = malloc(sizeof(float) * 2 * (na + d)), * pb = malloc(sizeof(float) * 2 * (nbb + d));
-  if(!pa || !pb) { free(det); free(pa); free(pb); return -1; }
+  for(int i = nc - 1; i > (neck > 0 ? iR : 0); i--) { det[2 * d] = sv[2 * i]; det[2 * d + 1] = sv[2 * i + 1]; d++; }
+  if(neck > 0) {
+    float k = neck * 0.55f, sx = sv[2 * iR], sy = sv[2 * iR + 1];
+    float c1x = sx - tg[2 * iR] * k, c1y = sy - tg[2 * iR + 1] * k, c2x = vx - evx * k, c2y = vy - evy * k;
+    for(int i = 0; i < nf; i++) {
+      float t = (float)i / nf, u = 1 - t;
+      det[2 * d] = u * u * u * sx + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * vx;
+      det[2 * d + 1] = u * u * u * sy + 3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * vy;
+      d++;
+    }
+  }
+  // New lists (as ids; -1 = u, -2 = v, -3 - i = detour point i):
+  //   a: chain[0 .. j0], u, detour, v, chain[j1 .. k], the rest of a
+  //   b: chain[k .. j1], v, detour backwards, u, chain[j0 .. 0], the rest of b
+  // (whole edge: u, v are chain[0], chain[k] and j0 = -1, j1 = k + 1)
+  uint32_t ra = A->n - k - 1, rb = B->n - k - 1;   // Rest of a / b (beyond the chain)
+  uint32_t kept = (uint32_t)(j0 + 1) + (k - (uint32_t)j1 + 1);
+  uint32_t nla = kept + ra + 2 + d, nlb = kept + rb + 2 + d;
+  int64_t * la = malloc(sizeof(int64_t) * nla), * lb = malloc(sizeof(int64_t) * nlb);
+  float * pa = malloc(sizeof(float) * 2 * nla), * pb = malloc(sizeof(float) * 2 * nlb);
+  if(!la || !lb || !pa || !pb) { free(det); free(la); free(lb); free(pa); free(pb); return -1; }
   uint32_t ka = 0, kb = 0;
-  for(uint32_t i = 0; i < na; i++) { sc_pt(s, A->id[(ia + k + i) % A->n], pa + 2 * ka, pa + 2 * ka + 1); ka++; }
-  for(int i = 0; i < d; i++) { pa[2 * ka] = det[2 * i]; pa[2 * ka + 1] = det[2 * i + 1]; ka++; }
-  for(uint32_t i = 0; i < nbb; i++) { sc_pt(s, B->id[(ib + k + i) % B->n], pb + 2 * kb, pb + 2 * kb + 1); kb++; }
-  for(int i = d - 1; i >= 0; i--) { pb[2 * kb] = det[2 * i]; pb[2 * kb + 1] = det[2 * i + 1]; kb++; }
+  for(int32_t i = 0; i <= j0; i++) la[ka++] = A->id[(ia + i) % A->n];
+  la[ka++] = -1;
+  for(int i = 0; i < d; i++) la[ka++] = -3 - i;
+  la[ka++] = -2;
+  for(uint32_t i = j1; i <= k; i++) la[ka++] = A->id[(ia + i) % A->n];
+  for(uint32_t i = 0; i < ra; i++) la[ka++] = A->id[(ia + k + 1 + i) % A->n];
+  for(uint32_t i = 0; i <= k - (uint32_t)j1 && j1 <= (int32_t)k; i++) lb[kb++] = B->id[(ib + i) % B->n];
+  lb[kb++] = -2;
+  for(int i = d - 1; i >= 0; i--) lb[kb++] = -3 - i;
+  lb[kb++] = -1;
+  for(int32_t i = j0; i >= 0; i--) lb[kb++] = B->id[(ib + k - i) % B->n];
+  for(uint32_t i = 0; i < rb; i++) lb[kb++] = B->id[(ib + k + 1 + i) % B->n];
+  // Whole edge: u and v are existing points (no new base points)
+  int64_t uid = whole ? (int64_t)A->id[ia] : -1, vid = whole ? (int64_t)A->id[(ia + k) % A->n] : -2;
+  for(int pass = 0; pass < 2; pass++) {
+    int64_t * l = pass ? lb : la;
+    float * pp = pass ? pb : pa;
+    uint32_t n = pass ? kb : ka;
+    for(uint32_t i = 0; i < n; i++) {
+      int64_t id = l[i];
+      if(id == -1) { if(whole) id = uid; else { pp[2 * i] = ux; pp[2 * i + 1] = uy; continue; } }
+      if(id == -2) { if(whole) id = vid; else { pp[2 * i] = vx; pp[2 * i + 1] = vy; continue; } }
+      if(id <= -3) { pp[2 * i] = det[2 * (-3 - id)]; pp[2 * i + 1] = det[2 * (-3 - id) + 1]; continue; }
+      sc_pt(s, id, pp + 2 * i, pp + 2 * i + 1);
+    }
+  }
   float areab = fabsf(geom_area(pb, kb, NULL, NULL));
   int ok = edgegen_shape_ok(pa, ka, 0.001f) && edgegen_shape_ok(pb, kb, 0.001f) &&
       areab >= STROKECUT_SNAKEKEEP * B->area &&
       cutgraph_thick_ok(pa, ka, STROKECUT_SNAKECLEAR) && cutgraph_thick_ok(pb, kb, STROKECUT_SNAKECLEAR);
 #ifdef STROKECUT_DEBUG
-  if(!edgegen_shape_ok(pa, ka, 0.001f) || !edgegen_shape_ok(pb, kb, 0.001f)) {
-    sc_dbg[1]++;
-  }
+  if(!edgegen_shape_ok(pa, ka, 0.001f) || !edgegen_shape_ok(pb, kb, 0.001f)) sc_dbg[1]++;
   else if(areab < STROKECUT_SNAKEKEEP * B->area) sc_dbg[2]++;
   else if(!cutgraph_thick_ok(pa, ka, STROKECUT_SNAKECLEAR)) sc_dbg[3]++;
   else if(!cutgraph_thick_ok(pb, kb, STROKECUT_SNAKECLEAR)) sc_dbg[4]++;
@@ -802,35 +913,53 @@ static int sc_snake(Sc * s, uint32_t a, uint32_t ia, uint32_t k, uint32_t b, uin
 #endif
   free(pa);
   free(pb);
-  if(!ok) { free(det); return 1; }
-  // Apply
-  int64_t first = s->npt;
-  for(int i = 0; i < d; i++) {
-    int64_t id = sc_addpt(s, det[2 * i], det[2 * i + 1]);
-    if(id < 0) { free(det); return -1; }
-    s->snakept[id] = 1;
+  int err = 0;
+  if(ok) {
+    // Apply: new points, then the lists
+    int64_t first = s->npt;
+    for(int i = 0; i < d && !err; i++) {
+      int64_t id = sc_addpt(s, det[2 * i], det[2 * i + 1]);
+      if(id < 0) err = 1;
+      else s->snakept[id] = 1;
+    }
+    if(!whole && !err) {
+      uid = sc_addpt(s, ux, uy);
+      vid = sc_addpt(s, vx, vy);
+      if(uid < 0 || vid < 0) err = 1;
+    }
+    ScReg nA = {0}, nB = {0};
+    for(int pass = 0; pass < 2 && !err; pass++) {
+      int64_t * l = pass ? lb : la;
+      uint32_t n = pass ? kb : ka;
+      ScReg * R = pass ? &nB : &nA;
+      for(uint32_t i = 0; i < n && !err; i++) {
+        int64_t id = l[i] == -1 ? uid : l[i] == -2 ? vid : l[i] <= -3 ? first + (-3 - l[i]) : l[i];
+        err |= sc_push(R, (uint32_t)id);
+      }
+    }
+    if(err) {
+      free(nA.id);
+      free(nB.id);
+    } else {
+      A = s->reg + a;
+      B = s->reg + b;
+      free(A->id);
+      A->id = nA.id; A->n = nA.n; A->cap = nA.cap;
+      free(B->id);
+      B->id = nB.id; B->n = nB.n; B->cap = nB.cap;
+      sc_setarea(s, a);
+      sc_setarea(s, b);
+    }
   }
   free(det);
-  A = s->reg + a;
-  B = s->reg + b;
-  ScReg nA = {0}, nB = {0};
-  int err = 0;
-  for(uint32_t i = 0; i < na && !err; i++) err |= sc_push(&nA, A->id[(ia + k + i) % A->n]);
-  for(int i = 0; i < d && !err; i++) err |= sc_push(&nA, first + i);
-  for(uint32_t i = 0; i < nbb && !err; i++) err |= sc_push(&nB, B->id[(ib + k + i) % B->n]);
-  for(int i = d - 1; i >= 0 && !err; i--) err |= sc_push(&nB, first + i);
-  if(err) { free(nA.id); free(nB.id); return -1; }
-  free(A->id);
-  A->id = nA.id; A->n = nA.n; A->cap = nA.cap;
-  free(B->id);
-  B->id = nB.id; B->n = nB.n; B->cap = nB.cap;
-  sc_setarea(s, a);
-  sc_setarea(s, b);
-  return 0;
+  free(la);
+  free(lb);
+  if(err) return -1;
+  return ok ? 0 : 1;
 }
 
-// Snake about STROKECUT_SNAKES of the short edges between a piece and a roomier neighbour
-// (each piece in at most one snake). Returns 0, or -1 out of memory.
+// Snake about STROKECUT_SNAKES of the edges between a piece and a roomier neighbour
+// (each piece sends and takes at most STROKECUT_SNAKEOUT / STROKECUT_SNAKEIN). Returns 0, or -1 out of memory.
 static int sc_snakes(Sc * s, float sc) {
   ScSnake * cand = NULL;
   uint32_t nc = 0, capc = 0;
@@ -852,20 +981,21 @@ static int sc_snakes(Sc * s, float sc) {
         if(sc_junction(s, A->id[(i + k) % A->n])) break;
         k++;
       }
-      if(L >= STROKECUT_SNAKEMIN * sc && L <= STROKECUT_SNAKEMAX * sc) {
+      if(L >= STROKECUT_SNAKEMIN * sc) {
         if(nc == capc) {
           capc = capc ? capc * 2 : 64;
           ScSnake * nw = realloc(cand, sizeof(ScSnake) * capc);
           if(!nw) { free(cand); return -1; }
           cand = nw;
         }
-        cand[nc++] = (ScSnake) { a, i, k };
+        cand[nc++] = (ScSnake) { a, A->id[i], A->id[(i + k) % A->n] };
       }
       i = (i + k) % A->n;
     } while(i != j0);
   }
-  uint8_t * used = calloc(s->nreg ? s->nreg : 1, 1);
-  if(!used) { free(cand); return -1; }
+  // Snakes each piece has sent and taken
+  uint8_t * out = calloc(s->nreg ? s->nreg : 1, 1), * in = calloc(s->nreg ? s->nreg : 1, 1);
+  if(!out || !in) { free(cand); free(out); free(in); return -1; }
   // Random order, so it isn't always the first pieces that get them
   for(uint32_t i = nc; i > 1; i--) {
     uint32_t j = rng_below(&s->r, i);
@@ -874,21 +1004,32 @@ static int sc_snakes(Sc * s, float sc) {
   int err = 0;
   for(uint32_t c = 0; c < nc && !err; c++) {
     ScSnake * sn = cand + c;
-    if(used[sn->a] || rng_range(&s->r, 0, 1) >= STROKECUT_SNAKES) continue;
+    if(out[sn->a] >= STROKECUT_SNAKEOUT || rng_range(&s->r, 0, 1) >= STROKECUT_SNAKES) continue;
     const ScReg * A = s->reg + sn->a;
+    // Find the edge again: from u along a's list to the next junction, which must be v,
+    // with no snake on it yet
+    uint32_t ia = A->n, k = 0;
+    for(uint32_t i = 0; i < A->n && ia == A->n; i++) {
+      if(A->id[i] != sn->u) continue;
+      uint32_t j = 1, snaked = 0;
+      while(j < A->n && !sc_junction(s, A->id[(i + j) % A->n])) snaked |= s->snakept[A->id[(i + j) % A->n]], j++;
+      if(A->id[(i + j) % A->n] == sn->v && !snaked) { ia = i; k = j; }
+    }
+    if(ia == A->n || k + 1 > STROKECUT_SNAKECHAIN) continue;
     uint32_t ib;
-    int64_t b = sc_across(s, sn->a, A->id[sn->ia], A->id[(sn->ia + 1) % A->n], &ib);
-    if(b < 0 || used[b] || s->reg[b].whimsy || s->reg[b].area < STROKECUT_SNAKEROOM * A->area) continue;
+    int64_t b = sc_across(s, sn->a, A->id[ia], A->id[(ia + 1) % A->n], &ib);
+    if(b < 0 || in[b] >= STROKECUT_SNAKEIN || s->reg[b].whimsy || s->reg[b].area < STROKECUT_SNAKEROOM * A->area) continue;
 #ifdef STROKECUT_DEBUG
     sc_dbg[7]++;
 #endif
     // ib is the far side's step (x1 -> u); the chain there runs from v back to u
-    ib = (ib + s->reg[b].n - (sn->k - 1)) % s->reg[b].n;
+    ib = (ib + s->reg[b].n - (k - 1)) % s->reg[b].n;
     for(int t = 0; t < STROKECUT_SNAKETRIES; t++) {
-      int res = sc_snake(s, sn->a, sn->ia, sn->k, b, ib, sc);
+      int res = sc_snake(s, sn->a, ia, k, b, ib, sc);
       if(res < 0) err = 1;
       if(res <= 0) {
-        used[sn->a] = used[b] = 1;
+        out[sn->a]++;
+        in[b]++;
         break;
       }
     }
@@ -898,7 +1039,8 @@ static int sc_snakes(Sc * s, float sc) {
   fprintf(stderr, "snakes: candidates %ld eligible %ld | too close %ld crossing %ld area %ld thin-a %ld thin-b %ld ok %ld\n",
       sc_dbg[6], sc_dbg[7], sc_dbg[0], sc_dbg[1], sc_dbg[2], sc_dbg[3], sc_dbg[4], sc_dbg[5]);
 #endif
-  free(used);
+  free(out);
+  free(in);
   free(cand);
   sc_recount(s);
   return err ? -1 : 0;

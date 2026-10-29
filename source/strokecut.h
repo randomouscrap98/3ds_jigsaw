@@ -21,14 +21,17 @@
 #define STROKECUT_SHAPE 0.25f     // Curve control points stray up to this times the cut length
 // Snakes: a short edge between a piece and a roomier neighbour becomes a finger of the piece
 // (as wide as the edge, tapering) winding into the neighbour through a few points
-#define STROKECUT_SNAKES 0.5f     // Share of the candidate edges that snake
+#ifndef STROKECUT_SNAKES
+#define STROKECUT_SNAKES 1.0f     // Share of the candidate edges that snake
+#endif
 #ifndef STROKECUT_SNAKEAT
 #define STROKECUT_SNAKEAT 0.99f   // Snakes go in when the puzzle has this share of its pieces (sizes below
 #endif                            // are in final piece sizes, scaled to the pieces then)
 #define STROKECUT_SNAKEMIN 0.3f   // Candidate edges are this long ...
-#define STROKECUT_SNAKEMAX 0.7f   // ... to this (cells, along the edge)
+#define STROKECUT_SNAKEMAX 0.7f   // ... to this (cells, along the edge) become the finger whole;
+                                  // longer ones get a neck
 #ifndef STROKECUT_SNAKEROOM
-#define STROKECUT_SNAKEROOM 1.2f  // The neighbour must be at least this much bigger
+#define STROKECUT_SNAKEROOM 0.6f  // The neighbour must be at least this big (times the snaking piece)
 #endif
 #define STROKECUT_SNAKEKEEP 0.5f  // ... and keep at least this share of its area
 #define STROKECUT_SNAKEPTS 3      // Points the finger winds through (2 .. this)
@@ -36,11 +39,27 @@
 #define STROKECUT_SNAKESTEP 0.3f  // Distance between them (cells)
 #endif
 #ifndef STROKECUT_SNAKEMARGIN
-#define STROKECUT_SNAKEMARGIN 0.05f  // Points keep half the width plus this from the neighbour's edges
+#define STROKECUT_SNAKEMARGIN 0.0f  // Points keep half the width plus this from the neighbour's edges
 #endif
 #define STROKECUT_SNAKETAPER 0.2f // The finger narrows by this share toward the tip
 #define STROKECUT_SNAKECLEAR 0.1f // Thinnest part of either piece afterwards (cells)
-#define STROKECUT_SNAKETRIES 12
+#ifndef STROKECUT_SNAKETRIES
+#define STROKECUT_SNAKETRIES 30
+#endif
+#ifndef STROKECUT_SNAKEOUT
+#define STROKECUT_SNAKEOUT 2      // Most snakes a piece sends ...
+#define STROKECUT_SNAKEIN 2       // ... and takes (3 adds nothing: swept)
+#endif
+// Longer edges: the finger grows from a stretch of the edge through a quickly narrowing neck
+#ifndef STROKECUT_NECKMIN
+#define STROKECUT_NECKMIN 0.15f   // Finger width (cells; tapered tip still clears 0.1) ...
+#endif
+#ifndef STROKECUT_NECKMAX
+#define STROKECUT_NECKMAX 0.4f    // ... to this
+#endif
+#define STROKECUT_SNAKESQUARE 0.5f  // The finger leaves the edge within this of square (radians)
+#define STROKECUT_NECKR 0.12f     // The neck rounds into the edge with this radius on each side (cells)
+#define STROKECUT_SNAKECHAIN 512  // Most points on an edge that can snake
 #ifndef STROKECUT_SNAKESTRAIGHT
 #define STROKECUT_SNAKESTRAIGHT 0.6f  // The neighbour's boundary turns at most this much at the edge's ends
 #endif

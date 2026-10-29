@@ -15,13 +15,13 @@
 #define PINNED_WILD 0x6CE7D16Fu
 #define PINNED_RANDOM 0xB45D299Bu      // 1.2
 #define PINNED_RANDRECT 0x16C37493u    // 1.3
-#define PINNED_WOODEN2 0x5841E83Du     // Provisional (previews)
+#define PINNED_WOODEN2 0xBB1D73F9u     // Provisional (previews)
 #define PINNED_WOODEN 0x72D29B9Fu      // Provisional: still being tuned (not in the menu)
 #define PINNED_WHIMSY { { 0x8C3BD049u, 0x881A00CEu }, { 0xFFEF07BBu, 0xBEC93799u }, \
     { 0x33ED2971u, 0xB5F9C31Fu }, { 0x987CDF7Bu, 0xBEC67F6Cu }, \
     { 0x33BEE477u, 0x0450611Bu }, \
     { 0x025506C2u, 0xF89FC3D4u }, \
-    { 0xF92BA2F8u, 0xA93AD0A5u } }   // 1.2 (Random Rect 1.3, Wooden + Wooden2 provisional), style x Few/Many
+    { 0xE1015134u, 0x90AEF2CDu } }   // 1.2 (Random Rect 1.3, Wooden + Wooden2 provisional), style x Few/Many
 
 void test_layout(void) {
   uint16_t c, r;

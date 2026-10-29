@@ -26,7 +26,12 @@ typedef struct {
 #define CUTKNOB_CURL 6      // Thick spiral finger (not picked by knobs; see CutTabStyle curls)
 #define CUTKNOB_SWIRL 7     // Double spiral: the line curls in and back out between its own
                             // turns, so both pieces get a finger wrapped round the other's
-#define CUTKNOBS 8
+#define CUTKNOB_CIRCLE 8    // No neck: a circle sunk partway into the line (its opening is
+                            // narrower than it, so it still locks), small fillets where it meets the line
+#define CUTKNOBS 9
+#define CUTGRAPH_CIRCLE_R 2.3f      // Radius, times the tab size (0.13 tab size: 0.3 of the span)
+#define CUTGRAPH_CIRCLE_SINK 0.6f   // Centre height above the line, times the radius
+#define CUTGRAPH_CIRCLE_FILLET 0.06f  // Fillet reach along the line (span units)
 #define CUTKNOB_WOOD 6      // knobs value for the wood knobs (BALL .. ROUND)
 
 // Curl: centerline rises straight for CURL_STEM, then rolls over (like a wave crest), its
@@ -112,6 +117,9 @@ typedef struct {
   float swirls;       // Share of knobs (on long enough edges) that are swirls (0 = none)
   float bend;         // Stroke curves (cutgraph_strokes; 0 = off): edges bend up to this (tangent
                       // length / edge length), rolled with the tabs
+  float knoblen;      // Tabs span this many cells (+-CUTGRAPH_KNOBVARY; 0 = sized to the edge)
+  float knobsize;     // Head size (edgegen tab size; 0 = edgegen's), shape jitter halved
+  uint8_t onekind;    // Every tab this CUTKNOB_* (0 = as knobs says)
   float fallbacktab;  // A piece with no tab gets one on its longest edge if at least this long
                       // (0 = 0.6 * mintab)
   float clearance;    // Thinnest part of a piece (cells; 0 = CUTGRAPH_CLEARANCE). When set, also
@@ -127,6 +135,7 @@ typedef struct {
 #define CUTGRAPH_WAVESEG 10       // Line segments along a waved edge
 #define CUTGRAPH_WAVEBODY 4       // ... in hitboxes (cutgraph_body): only roughly the shape
 #define CUTGRAPH_BENDMIN 0.6f     // Stroke edges bend at least this much of the style's bend
+#define CUTGRAPH_KNOBVARY 0.1f    // knoblen / knobsize vary by this share
 #define CUTGRAPH_WAVEMIN 0.5f     // Shorter edges stay straight (a wave on them is a tight wiggle)
 #define CUTGRAPH_WAVEKNOB 0.25f   // An edge with one knob bumps (wave[0]) only this much of the style's wave
 #define CUTGRAPH_WAVETWO 0.3f     // An edge with two knobs waves only this much

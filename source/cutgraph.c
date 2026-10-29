@@ -174,7 +174,29 @@ static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdg
     edgegen_randomtab(r, st->jitter, &t->tab);
   }
   // Drawn last, and only when used, so cuts without them stay as they were
-  if(st->knobs > 1) {
+  if(st->knoblen > 0 || st->knobsize > 0) {
+    // Fixed size knobs (not scaled to the edge), calmer shapes
+    for(int k = 0; k < e->ntabs; k++) {
+      CutTab * t = e->tab + k;
+      if(st->knoblen > 0) {
+        float len = st->knoblen * rng_range(r, 1 - CUTGRAPH_KNOBVARY, 1 + CUTGRAPH_KNOBVARY);
+        for(int i = 0; i < e->shrink; i++) len *= CUTGRAPH_SHRINK;
+        if(len > slot * 0.95f) len = slot * 0.95f;
+        t->len = t->depth = len;
+        float pos = (k + 0.5f) * slot + rng_range(r, -0.4f, 0.4f) * (slot - len);
+        if(pos < len / 2) pos = len / 2;
+        if(pos > L - len / 2) pos = L - len / 2;
+        t->pos = pos;
+      }
+      if(st->knobsize > 0) {
+        t->tab.size = st->knobsize * rng_range(r, 1 - CUTGRAPH_KNOBVARY, 1 + CUTGRAPH_KNOBVARY);
+        t->tab.a *= 0.5f; t->tab.b *= 0.5f; t->tab.c *= 0.5f; t->tab.d *= 0.5f; t->tab.e *= 0.5f;
+      }
+    }
+  }
+  if(st->onekind) {
+    for(int k = 0; k < e->ntabs; k++) e->tab[k].kind = st->onekind;
+  } else if(st->knobs > 1) {
     for(int k = 0; k < e->ntabs; k++) e->tab[k].kind = 1 + rng_below(r, st->knobs - 1);
   }
   if(st->curls > 0) {
@@ -549,7 +571,44 @@ static int cutgraph_swirl(const EdgeTab * tab, float * out) {
   return n;
 }
 
+// Circle standing in the line (no neck), entered and left through small fillets
+static int cutgraph_circle(const EdgeTab * tab, float * out) {
+  float R = CUTGRAPH_CIRCLE_R * tab->size, h = CUTGRAPH_CIRCLE_SINK * R, cx = 0.5f + tab->b * 0.5f;
+  float ow = sqrtf(R * R - h * h), al = atan2f(h, ow), fr = CUTGRAPH_CIRCLE_FILLET, dl = 0.2f;
+  // Arc from just past the left crossing, over the top, to just before the right one (y up,
+  // angles decreasing = clockwise)
+  float p0 = (float)M_PI + al - dl, p1 = -al + dl;
+  int n = 0, arcn = 18;
+#define CI_PT(px, py) do { out[n * 2] = (px); out[n * 2 + 1] = (py) * tab->flip; n++; } while(0)
+  CI_PT(0, 0);
+  float lx = cx - ow - fr, sx = cx + R * cosf(p0), sy = h + R * sinf(p0);
+  float tx = sinf(p0), ty = -cosf(p0);   // Travel direction at p0 (clockwise)
+  float k = fr * 0.8f;
+  for(int i = 0; i <= 6; i++) {
+    float t = i / 6.0f, u = 1 - t;
+    float c1x = lx + k, c1y = 0, c2x = sx - tx * k, c2y = sy - ty * k;
+    CI_PT(u * u * u * lx + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * sx,
+        3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * sy);
+  }
+  for(int i = 1; i < arcn; i++) {
+    float a = p0 + (p1 - p0) * i / arcn;
+    CI_PT(cx + R * cosf(a), h + R * sinf(a));
+  }
+  float ex = cx + R * cosf(p1), ey = h + R * sinf(p1), rx = cx + ow + fr;
+  tx = sinf(p1); ty = -cosf(p1);
+  for(int i = 0; i <= 6; i++) {
+    float t = i / 6.0f, u = 1 - t;
+    float c1x = ex + tx * k, c1y = ey + ty * k, c2x = rx - k, c2y = 0;
+    CI_PT(u * u * u * ex + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * rx,
+        u * u * u * ey + 3 * u * u * t * c1y + 3 * u * t * t * c2y);
+  }
+  CI_PT(1, 0);
+#undef CI_PT
+  return n;
+}
+
 int cutgraph_knobcurve(uint8_t kind, const EdgeTab * tab, float * out) {
+  if(kind == CUTKNOB_CIRCLE) return cutgraph_circle(tab, out);
   if(kind == CUTKNOB_SWIRL) return cutgraph_swirl(tab, out);
   if(kind == CUTKNOB_CURL) return cutgraph_curl(tab, out);
   if(kind == CUTKNOB_CLASSIC || kind >= CUTKNOBS) return edgegen_tabcurve(tab, out);

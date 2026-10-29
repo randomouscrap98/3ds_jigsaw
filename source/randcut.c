@@ -6,6 +6,15 @@
 #include <string.h>
 #include <math.h>
 
+#ifndef RANDCUT_WOOD2_KNOBLEN
+#define RANDCUT_WOOD2_KNOBLEN 0.85f
+#endif
+#ifndef RANDCUT_WOOD2_KNOBSIZE
+#define RANDCUT_WOOD2_KNOBSIZE 0.13f
+#endif
+#ifndef RANDCUT_WOOD2_MINTAB
+#define RANDCUT_WOOD2_MINTAB 0.98f   // Edges that can hold a knob (knoblen + room)
+#endif
 #ifndef RANDCUT_WOOD2_CLEARANCE
 #define RANDCUT_WOOD2_CLEARANCE 0.1f
 #endif
@@ -17,8 +26,9 @@ static const RandCutStyle randcut_styles[RANDCUT_STYLES] = {
     .clearance = 0.1f },  // Wooden
   // Wooden 2: tabs for the stroke cut (strokecut): knobs only on long edges, and on the
   // longest edge of pieces that have nothing else holding them (no snake)
-  { .relax = 4, .collapse = 0.12f, .mintab = 1.4f, .twotab = 2.4f, .maxtab = 1.0f, .knobs = CUTKNOB_WOOD,
-    .clearance = RANDCUT_WOOD2_CLEARANCE, .fallbacktab = 0.4f },
+  { .relax = 4, .collapse = 0.12f, .mintab = RANDCUT_WOOD2_MINTAB, .twotab = 2.4f, .maxtab = 1.0f, .knobs = CUTKNOB_WOOD,
+    .clearance = RANDCUT_WOOD2_CLEARANCE, .fallbacktab = 0.4f, .knoblen = RANDCUT_WOOD2_KNOBLEN,
+    .knobsize = RANDCUT_WOOD2_KNOBSIZE, .onekind = CUTKNOB_CIRCLE },
 };
 
 const RandCutStyle * randcut_style(uint8_t style) {
@@ -388,6 +398,9 @@ void randcut_tabstyle(const RandCutStyle * st, CutTabStyle * ts) {
   ts->curls = st->curls;
   ts->swirls = st->swirls;
   ts->fallbacktab = st->fallbacktab;
+  ts->knoblen = st->knoblen;
+  ts->knobsize = st->knobsize;
+  ts->onekind = st->onekind;
 }
 
 uint32_t randcut_tryseed(uint32_t seed, uint32_t t) {
