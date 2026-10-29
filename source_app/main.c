@@ -25,7 +25,7 @@
 #define MAIN_REPEAT_INTERVAL 5
 #define MAIN_CHIME_DELAY 4      // Frames between the last piece's click and the completion chime
 #define MAIN_VOLUME_LOW    0.2f   // Music gain at the low / medium volume settings (high = 1)
-#define MAIN_VOLUME_MEDIUM 0.6f
+#define MAIN_VOLUME_MEDIUM 0.55f
 
 #define MAIN_PERF_SMOOTH 0.1f  // Weight of the newest frame in the perf averages
 

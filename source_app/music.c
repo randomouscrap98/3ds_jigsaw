@@ -122,7 +122,8 @@ static void music_release(MusicPlay * p) {
 }
 
 // Open the next file that works. Returns 0 if there's nothing playable.
-static int music_opennext(Music * m, MusicPlay * p, int shuffle) {
+// vol: channel gain (ndspChnReset puts the mix back to 1)
+static int music_opennext(Music * m, MusicPlay * p, int shuffle, float vol) {
   char path[STORAGE_MAXPATH];
   while(p->fails < p->nfiles) {
     const char * name = p->files[music_pick(m, p, shuffle)];
@@ -137,7 +138,7 @@ static int music_opennext(Music * m, MusicPlay * p, int shuffle) {
     ndspChnSetInterp(MUSIC_CHANNEL, NDSP_INTERP_LINEAR);
     ndspChnSetRate(MUSIC_CHANNEL, p->dec.rate);
     ndspChnSetFormat(MUSIC_CHANNEL, p->dec.channels == 2 ? NDSP_FORMAT_STEREO_PCM16 : NDSP_FORMAT_MONO_PCM16);
-    music_setvol(1);
+    music_setvol(vol);
     return 1;
   }
   return 0;
@@ -228,7 +229,7 @@ static void music_thread(void * arg) {
     if(!p.dec.kind) {
       // Let the last track finish before changing rate / format
       if(music_queued(m)) continue;
-      if(!music_opennext(m, &p, shuffle)) {
+      if(!music_opennext(m, &p, shuffle, vol)) {
         // Nothing playable: stay quiet until the next start
         music_release(&p);
         music_setname(m, "");
