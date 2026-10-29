@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3DS Jigsaw: add pictures</title>
+<title>3DS Jigsaw: add pictures and music</title>
 <style>
   body { font-family: sans-serif; margin: 0; padding: 1em; background: #1e2026; color: #e6e6e6; }
   #main { max-width: 30em; margin: 2em auto; padding: 1em; background: #2a2d35; border-radius: 1em;
     display: flex; flex-direction: column; gap: 0.75em; }
   h2 { margin: 0.2em; text-align: center; color: #f0c85a; }
+  h3 { margin: 0.6em 0 0 0; color: #f0c85a; }
   p { margin: 0; color: #aaa; font-size: 0.9em; text-align: center; }
   input, button { font-size: 1em; padding: 0.6em; border-radius: 0.5em; border: none; }
   input { background: #e6e6e6; color: #222; }
@@ -27,7 +28,8 @@
 </head>
 <body>
 <div id="main">
-  <h2>Add pictures to 3DS Jigsaw</h2>
+  <h2>Add to 3DS Jigsaw</h2>
+  <h3>Pictures</h3>
   <p>Pictures are shrunk to 1024 pixels on the long side before they're sent.</p>
   <div id="warn" hidden>
     <div>Your browser is blocking the picture shrinker (canvas access), so pictures would arrive
@@ -40,7 +42,12 @@
   </div>
   <input type="file" id="files" multiple accept="image/*" onchange="showNames()">
   <div id="names"></div>
-  <button id="send" onclick="sendAll(false)">Send to 3DS</button>
+  <button id="send" onclick="sendAll(false)">Send pictures</button>
+  <h3>Music</h3>
+  <p>MP3, FLAC or Ogg, sent as they are (roughly 5 seconds per MB). They play during puzzles
+    when music is on.</p>
+  <input type="file" id="songs" multiple accept=".mp3,.flac,.ogg,audio/mpeg,audio/flac,audio/ogg">
+  <button id="sendmusic" onclick="sendMusic()">Send music</button>
   <ul id="log"></ul>
 </div>
 <script>
@@ -69,6 +76,7 @@ let busy = false;
 function setButtons() {
   document.getElementById('send').disabled = busy || !document.getElementById('warn').hidden;
   document.getElementById('originals').disabled = busy;
+  document.getElementById('sendmusic').disabled = busy;
 }
 
 function checkCanvas() {
@@ -83,6 +91,23 @@ function line(text, cls) {
   if(cls) li.className = cls;
   document.getElementById('log').appendChild(li);
   return li;
+}
+
+// POST body to url; li shows "<label> <percent>%" while sending. Resolves to the 3DS's reply
+// text, rejects with it (XHR rather than fetch: fetch can't report upload progress).
+function post(url, body, li, label) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url);
+    xhr.setRequestHeader('Content-Type', body.type || 'application/octet-stream');
+    xhr.upload.onprogress = e => {
+      if(e.lengthComputable) li.textContent = label + ' ' + Math.floor(100 * e.loaded / e.total) + '%';
+    };
+    xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve(xhr.responseText)
+      : reject(new Error(xhr.responseText || ('error ' + xhr.status)));
+    xhr.onerror = () => reject(new Error('connection lost'));
+    xhr.send(body);
+  });
 }
 
 function loadImage(file) {
@@ -151,11 +176,8 @@ async function sendAll(originals) {
     try {
       // The 3DS names it .jpg either way; it reads the picture by its contents
       const body = originals ? file : await shrink(file);
-      li.textContent = file.name + ': sending ' + Math.round(body.size / 1024) + ' KB...';
-      const r = await fetch('/upload?name=' + encodeURIComponent(name),
-        { method: 'POST', headers: { 'Content-Type': body.type || 'application/octet-stream' }, body: body });
-      const text = await r.text();
-      if(!r.ok) throw new Error(text || ('error ' + r.status));
+      const text = await post('/upload?name=' + encodeURIComponent(name), body, li,
+        file.name + ': sending ' + Math.round(body.size / 1024) + ' KB...');
       li.textContent = file.name + ': ' + text;
       li.className = 'ok';
       saved++;
@@ -165,6 +187,31 @@ async function sendAll(originals) {
     }
   }
   line(saved + ' of ' + files.length + ' sent. They are in the puzzle list on the 3DS.');
+  busy = false;
+  setButtons();
+}
+
+// Songs go as they are, under their own names (the 3DS keeps the extension)
+async function sendMusic() {
+  const files = document.getElementById('songs').files;
+  if(!files.length) { line('Pick some music first', 'bad'); return; }
+  busy = true;
+  setButtons();
+  let saved = 0;
+  for(const file of files) {
+    const li = line(file.name + ': sending...');
+    try {
+      const text = await post('/music?name=' + encodeURIComponent(file.name), file, li,
+        file.name + ': sending ' + (file.size / 1048576).toFixed(1) + ' MB...');
+      li.textContent = file.name + ': ' + text;
+      li.className = 'ok';
+      saved++;
+    } catch(e) {
+      li.textContent = file.name + ': failed (' + e.message + ')';
+      li.className = 'bad';
+    }
+  }
+  line(saved + ' of ' + files.length + ' sent.');
   busy = false;
   setButtons();
 }

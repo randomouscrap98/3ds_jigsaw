@@ -15,7 +15,7 @@
 #define PMENU_NUMCOUNTS 4
 #define PMENU_PIECES_NAMES "50\n100\n250\n500"  // Same as pmenu_counts in puzzlemenu.c
 #define PMENU_PIECES_DEFAULT 1                  // 100
-#define PMENU_FIRST 1        // List items before the puzzles ("Add pictures over Wi-Fi")
+#define PMENU_FIRST 1        // List items before the puzzles ("Add files over Wi-Fi")
 #define PMENU_MAXOPTS 9      // Continue, Pieces, Piece style, Whimsies, Overlay, Music, Start new puzzle, Rename,
                              // Delete
 #define PMENU_ACT_CONTINUE 0
@@ -45,7 +45,7 @@ typedef struct {
   uint8_t whimsyset;    // Whimsy shapes for a new game (WHIMSY_SET_*)
   uint8_t overlay;      // Picture overlay for a new game (OVERLAY_*)
   uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
-  u8 upload;            // "Add pictures over Wi-Fi" was picked
+  u8 upload;            // "Add files over Wi-Fi" was picked
   u8 rename;            // "Rename picture" was picked (name is the picture)
   u8 del;               // "Delete puzzle" was confirmed (name is the picture)
   u8 quit;

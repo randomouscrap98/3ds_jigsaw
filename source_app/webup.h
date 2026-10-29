@@ -7,13 +7,13 @@
 
 #include "chunkwriter.h"
 
-// A tiny web server for adding pictures: GET / gives the upload page, POST /upload?name=...
-// with an image body saves it into a folder under a free, safe name. The body streams to
-// the SD through a ChunkWriter (writes on its own thread, so receiving never waits on it).
-// One client at a time, never blocks (call webup_poll every frame), drops a client that
-// goes quiet. Plain BSD
-// sockets: on the 3DS the caller sets up the network (socInit) first; on a PC it just works
-// (host tests). HTTP parsing is picohttpparser.
+// A tiny web server for adding files: GET / gives the upload page, POST <route>?name=...
+// saves the body into the route's folder under a free, safe name (routes: pictures,
+// music). The body streams to the SD through a ChunkWriter (writes on its own thread, so
+// receiving never waits on it). One client at a time, never blocks (call webup_poll every
+// frame), drops a client that goes quiet. Plain BSD sockets: on the 3DS the caller sets up
+// the network (socInit) first; on a PC it just works (host tests). HTTP parsing is
+// picohttpparser.
 
 #define WEBUP_MAXHEAD 8192          // Request line + headers
 #define WEBUP_MAXBODY (500LL << 20) // Biggest upload (sanity cap)
@@ -24,12 +24,23 @@
 #define WEBUP_MSG 160
 
 // What happened (webup_poll result flags); message has the details
-#define WEBUP_EV_SAVED 1      // A picture was saved (message: its file name)
+#define WEBUP_EV_SAVED 1      // A file was saved (message: its file name, route: which kind)
 #define WEBUP_EV_ERROR 2      // An upload failed (message: why)
 #define WEBUP_EV_BUSY 4       // Receiving (received / expected bytes)
 
-// 1 if the file at path is a picture the app can use
-typedef int (*webup_check_fn)(const char * path);
+// 1 if the file at path (a temp file) is one the app can use; name = the name it will get
+typedef int (*webup_check_fn)(const char * path, const char * name);
+
+// What one POST path takes
+typedef struct {
+  const char * path;        // "/upload"
+  const char * dir;         // Saved here
+  const char * ext;         // Always saved with this extension, or NULL: keep the sent
+                            // name's (lowercased), which must be one of keep
+  const char * const * keep;  // NULL-terminated, e.g. { ".mp3", ".flac", NULL }
+  webup_check_fn check;     // NULL = anything goes
+  const char * bad;         // Error text when check refuses
+} WebUpRoute;
 
 typedef struct {
   int lsock, csock;
@@ -41,6 +52,7 @@ typedef struct {
   ChunkWriter cw;           // Body -> <name>.tmp (open while writing is set)
   int writing;
   char name[128];           // Final file name
+  const WebUpRoute * route; // Route of the upload being received / last saved
   size_t expect, received;
   // Response being sent
   char out[512];
@@ -50,14 +62,14 @@ typedef struct {
   // Setup
   const char * page;
   size_t pagelen;
-  char dir[256];
-  webup_check_fn check;
+  const WebUpRoute * routes;
+  int nroutes;
   char message[WEBUP_MSG];
 } WebUp;
 
-// Listen on port (all interfaces). page is served at / (kept by the caller). Returns 0, or
-// 1 with message set.
-int webup_start(WebUp * w, int port, const char * page, size_t pagelen, const char * dir, webup_check_fn check);
+// Listen on port (all interfaces). page is served at /; page and routes are kept by the
+// caller. Returns 0, or 1 with message set.
+int webup_start(WebUp * w, int port, const char * page, size_t pagelen, const WebUpRoute * routes, int nroutes);
 void webup_stop(WebUp * w);
 // Do whatever the sockets allow right now. now = a millisecond clock. Returns WEBUP_EV_*.
 int webup_poll(WebUp * w, uint64_t now);

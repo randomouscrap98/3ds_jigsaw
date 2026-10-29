@@ -1,5 +1,6 @@
 #include "upload.h"
 #include "imageload.h"
+#include "musicdec.h"
 #include "storage.h"
 
 #include <citro2d.h>
@@ -26,9 +27,25 @@ static void upload_line(Upload * u, int good, const char * fmt, const char * tex
   u->linegood[u->nlines++] = good;
 }
 
-static int upload_check(const char * path) {
+static int upload_check(const char * path, const char * name) {
   return imageload_check(path);
 }
+
+// Music: opens and decodes a little (the kind comes from the final name; path is a .tmp)
+static int upload_musiccheck(const char * path, const char * name) {
+  static int16_t pcm[2 * 4096];  // Only the server thread checks
+  MusicDec d;
+  if(musicdec_open(&d, path, musicdec_kind(name), NULL)) return 0;
+  uint32_t got = musicdec_read(&d, pcm, 4096);
+  musicdec_close(&d);
+  return got > 0;
+}
+
+static const char * const upload_musicexts[] = { ".mp3", ".flac", ".ogg", NULL };
+static const WebUpRoute upload_routes[] = {
+  { "/upload", STORAGE_PUZZLES, ".jpg", NULL, upload_check, "That isn't a picture the 3DS can open" },
+  { "/music", STORAGE_MUSIC, NULL, upload_musicexts, upload_musiccheck, "That isn't music the 3DS can play" },
+};
 
 // The page, read once from romfs
 static void upload_loadpage(Upload * u) {
@@ -54,7 +71,7 @@ static int upload_poll(Upload * u) {
   int ev = webup_poll(&u->web, osGetTime());
   u->busy = (ev & WEBUP_EV_BUSY) != 0;
   if(ev & WEBUP_EV_SAVED) {
-    u->added++;
+    if(u->web.route == upload_routes) u->added++;
     upload_line(u, 1, "Added %s", u->web.message);
   }
   if(ev & WEBUP_EV_ERROR) upload_line(u, 0, "%s", u->web.message);
@@ -111,7 +128,7 @@ static void upload_startnet(Upload * u) {
     snprintf(u->problem, sizeof(u->problem), "Not connected to Wi-Fi (still trying)");
     return;
   }
-  if(webup_start(&u->web, UPLOAD_PORT, u->page, u->pagelen, STORAGE_PUZZLES, upload_check)) {
+  if(webup_start(&u->web, UPLOAD_PORT, u->page, u->pagelen, upload_routes, 2)) {
     snprintf(u->problem, sizeof(u->problem), "%s", u->web.message);
     return;
   }
@@ -165,7 +182,7 @@ int upload_update(Upload * u, u32 down) {
 }
 
 void upload_render_top(Upload * u, TextDraw * td) {
-  textdraw_print(td, 10, 6, 0.6f, UPLOAD_TITLE, "Add pictures over Wi-Fi");
+  textdraw_print(td, 10, 6, 0.6f, UPLOAD_TITLE, "Add pictures and music over Wi-Fi");
   if(u->running) {
     textdraw_print(td, 10, 34, 0.5f, UPLOAD_DIM, "On a phone or computer on the same Wi-Fi, open:");
     textdraw_center(td, 200, 52, 0.9f, UPLOAD_WHITE, "%s", u->url);

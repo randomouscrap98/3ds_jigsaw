@@ -7,8 +7,9 @@
 #include "textdraw.h"
 #include "webup.h"
 
-// The "Add pictures over Wi-Fi" screen: starts the network and the upload server, shows the
-// address (and a QR code for it) and what arrived. Pictures land in the puzzles folder.
+// The "Add pictures and music over Wi-Fi" screen: starts the network and the upload server,
+// shows the address (and a QR code for it) and what arrived. Pictures land in the puzzles
+// folder, music (.mp3 / .flac / .ogg, checked by decoding a little) in the music folder.
 
 #define UPLOAD_PORT 80
 #define UPLOAD_PAGE "romfs:/upload.html"

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 CURRENTPATH=`pwd`
-CURRENTNAME=jigsaw
+CURRENTNAME=jigsaw_lite
 
 if [ $# -ne 1 ]
 then

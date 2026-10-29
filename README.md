@@ -48,7 +48,7 @@ close the lid.
 ## Music
 
 Copy MP3, FLAC or Ogg Vorbis files into `sdmc:/3ds/jigsaw/music/` (created on first
-launch). Music plays while a puzzle is open and fades out when you go back to the menu.
+launch), or send them from the **+ Add files over Wi-Fi** page (see below). Music plays while a puzzle is open and fades out when you go back to the menu.
 Each new puzzle has a Music option (Off, In order, Shuffled; In order by default), and it's
 saved with the puzzle. Songs are streamed from the SD card, so long files are fine.
 
@@ -57,11 +57,11 @@ with the music off.
 
 ## Adding pictures
 
-The easy way: pick **+ Add pictures over Wi-Fi** at the top of the puzzle list. With the 3DS
+The easy way: pick **+ Add files over Wi-Fi** at the top of the puzzle list. With the 3DS
 on Wi-Fi, open the address it shows (or scan the QR code) in a browser on a phone or
 computer on the same network, choose pictures (you can change their names) and press Send. The page shrinks them to
 1024 pixels and turns them into JPGs before sending, and they show up in the list when you
-press B. Only one picture travels at a time; anyone on your network could reach the page
+press B. The same page sends music too. Only one file travels at a time; anyone on your network could reach the page
 while that screen is open.
 
 To rename a picture later, pick it and choose **Rename picture**; its saved game and progress

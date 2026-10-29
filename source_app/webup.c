@@ -37,13 +37,13 @@ static int webup_wouldblock(void) {
   return errno == EAGAIN || errno == EWOULDBLOCK;
 }
 
-int webup_start(WebUp * w, int port, const char * page, size_t pagelen, const char * dir, webup_check_fn check) {
+int webup_start(WebUp * w, int port, const char * page, size_t pagelen, const WebUpRoute * routes, int nroutes) {
   memset(w, 0, sizeof(WebUp));
   w->lsock = w->csock = -1;
   w->page = page;
   w->pagelen = pagelen;
-  w->check = check;
-  snprintf(w->dir, sizeof(w->dir), "%s", dir);
+  w->routes = routes;
+  w->nroutes = nroutes;
   w->lsock = socket(AF_INET, SOCK_STREAM, 0);
   if(w->lsock < 0) {
     WEBUP_MSG_SET(w, "Can't open a network socket (%d)", errno);
@@ -67,7 +67,7 @@ int webup_start(WebUp * w, int port, const char * page, size_t pagelen, const ch
 
 // The upload's final and temporary paths
 static void webup_paths(WebUp * w, char * path, char * tmp) {
-  snprintf(path, STORAGE_MAXPATH, "%s/%s", w->dir, w->name);
+  snprintf(path, STORAGE_MAXPATH, "%s/%s", w->route->dir, w->name);
   storage_tmppath(path, tmp);
 }
 
@@ -159,7 +159,7 @@ static int webup_fail(WebUp * w, int code, const char * reason, const char * why
   return WEBUP_EV_ERROR;
 }
 
-// Whole upload received: finish writing, keep it if it's a usable picture
+// Whole upload received: finish writing, keep it if the route's check likes it
 static int webup_finish(WebUp * w) {
   char path[STORAGE_MAXPATH], tmp[STORAGE_MAXTMP];
   webup_paths(w, path, tmp);
@@ -169,9 +169,9 @@ static int webup_finish(WebUp * w) {
     storage_commit(path, 0);
     return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (full?)");
   }
-  if(w->check && !w->check(tmp)) {
+  if(w->route->check && !w->route->check(tmp, w->name)) {
     storage_commit(path, 0);
-    return webup_fail(w, 400, "Bad Request", "That isn't a picture the 3DS can open");
+    return webup_fail(w, 400, "Bad Request", w->route->bad);
   }
   if(storage_commit(path, 1)) return webup_fail(w, 500, "Internal Server Error", "Couldn't save on the SD card");
   WEBUP_MSG_SET(w, "%s", w->name);
@@ -193,6 +193,21 @@ static int webup_body(WebUp * w, const char * data, size_t len) {
   return w->received >= w->expect ? webup_finish(w) : WEBUP_EV_BUSY;
 }
 
+// The extension a file sent as name gets on route (lowercased into ext); 1 if not allowed
+static int webup_ext(const WebUpRoute * route, const char * name, char * ext, size_t extlen) {
+  if(route->ext) {
+    snprintf(ext, extlen, "%s", route->ext);
+    return 0;
+  }
+  const char * dot = strrchr(name, '.');
+  if(!dot || strlen(dot) >= extlen) return 1;
+  size_t n = 0;
+  for(; dot[n]; n++) ext[n] = (dot[n] >= 'A' && dot[n] <= 'Z') ? dot[n] - 'A' + 'a' : dot[n];
+  ext[n] = 0;
+  for(const char * const * k = route->keep; k && *k; k++) if(!strcmp(ext, *k)) return 0;
+  return 1;
+}
+
 // Headers are in (hlen bytes of head): decide what to do
 static int webup_route(WebUp * w, size_t hlen, const char * method, size_t mlen, const char * path, size_t plen,
     struct phr_header * hd, size_t nh) {
@@ -204,7 +219,11 @@ static int webup_route(WebUp * w, size_t hlen, const char * method, size_t mlen,
     webup_respond(w, 200, "OK", "text/html; charset=utf-8", "", w->page, w->pagelen);
     return 0;
   }
-  if(!(post && qlen == 7 && !memcmp(path, "/upload", 7))) {
+  const WebUpRoute * route = NULL;
+  for(int i = 0; post && i < w->nroutes && !route; i++) {
+    if(strlen(w->routes[i].path) == qlen && !memcmp(path, w->routes[i].path, qlen)) route = w->routes + i;
+  }
+  if(!route) {
     webup_respond(w, 404, "Not Found", "text/plain", "Not found", NULL, 0);
     return 0;
   }
@@ -222,12 +241,14 @@ static int webup_route(WebUp * w, size_t hlen, const char * method, size_t mlen,
   if(length == -1) return webup_fail(w, 411, "Length Required", "Upload had no length");
   if(length < 0 || length > WEBUP_MAXBODY) return webup_fail(w, 413, "Payload Too Large", "File too big");
   if(length == 0) return webup_fail(w, 400, "Bad Request", "Upload was empty");
-  char raw[256], base[STORAGE_MAXBASE + 1];
+  char raw[256], base[STORAGE_MAXBASE + 1], ext[8];
   if(webup_query(path, plen, "name", raw, sizeof(raw))) raw[0] = 0;
+  if(webup_ext(route, raw, ext, sizeof(ext))) return webup_fail(w, 415, "Unsupported Media Type", "Not a kind of file the 3DS can use");
   storage_cleanname(raw, base, sizeof(base));
-  if(storage_freename(w->dir, base, ".jpg", w->name, sizeof(w->name))) {
-    return webup_fail(w, 409, "Conflict", "Too many pictures with that name");
+  if(storage_freename(route->dir, base, ext, w->name, sizeof(w->name))) {
+    return webup_fail(w, 409, "Conflict", "Too many files with that name");
   }
+  w->route = route;
   // SD writes on this thread stalled the 3DS's tiny (~8 KB) receive window, so the
   // ChunkWriter writes on its own
   char full[STORAGE_MAXPATH], tmp[STORAGE_MAXTMP];

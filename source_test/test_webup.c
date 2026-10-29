@@ -14,13 +14,24 @@
 // The upload server end to end over localhost: requests go out from a non-blocking client
 // socket while webup_poll runs, like frames on the 3DS
 
-static int webup_isjpeg(const char * path) {
+// File starts with these bytes
+static int webup_starts(const char * path, const char * magic, size_t len) {
   FILE * f = fopen(path, "rb");
   if(!f) return 0;
-  unsigned char b[2] = {0};
-  size_t n = fread(b, 1, 2, f);
+  char b[8] = {0};
+  size_t n = fread(b, 1, len, f);
   fclose(f);
-  return n == 2 && b[0] == 0xFF && b[1] == 0xD8;
+  return n == len && !memcmp(b, magic, len);
+}
+
+static int webup_isjpeg(const char * path, const char * name) {
+  return webup_starts(path, "\xFF\xD8", 2);
+}
+
+// Stand-in music check: "ID3" at the start, and the final name (not the .tmp) is .mp3/.ogg
+static int webup_ismusic(const char * path, const char * name) {
+  const char * dot = strrchr(name, '.');
+  return dot && (!strcmp(dot, ".mp3") || !strcmp(dot, ".ogg")) && webup_starts(path, "ID3", 3);
 }
 
 // Send req (len bytes), run the server until it closes the connection, collect the reply.
@@ -64,13 +75,18 @@ void test_webup(void) {
   CHECK(webup_query("/upload?names=1", 15, "name", out, sizeof(out)) == 1);
   CHECK(webup_query("/upload", 7, "name", out, sizeof(out)) == 1);
 
-  char dir[] = "/tmp/jigsaw_webup_XXXXXX";
-  CHECK(mkdtemp(dir) != NULL);
+  char dir[] = "/tmp/jigsaw_webup_XXXXXX", mdir[] = "/tmp/jigsaw_webupm_XXXXXX";
+  CHECK(mkdtemp(dir) != NULL && mkdtemp(mdir) != NULL);
+  static const char * const musicexts[] = { ".mp3", ".ogg", NULL };
+  const WebUpRoute routes[] = {
+    { "/upload", dir, ".jpg", NULL, webup_isjpeg, "Not a picture" },
+    { "/music", mdir, NULL, musicexts, webup_ismusic, "Not music" },
+  };
   const char page[] = "<html>upload page</html>";
   WebUp w;
   int port = 0;
   for(int p = 18000 + getpid() % 2000, tries = 0; tries < 20 && !port; p++, tries++) {
-    if(!webup_start(&w, p, page, strlen(page), dir, webup_isjpeg)) port = p;
+    if(!webup_start(&w, p, page, strlen(page), routes, 2)) port = p;
   }
   CHECK(port != 0);
   if(!port) return;
@@ -115,6 +131,30 @@ void test_webup(void) {
   http(&w, port, garbage, strlen(garbage), reply, sizeof(reply), &clock);
   CHECK(!strncmp(reply, "HTTP/1.1 400", 12));
 
+  // Music keeps its (lowercased) extension, goes to its own folder, the check sees the final
+  // name; a picture with the same base name doesn't clash
+  const char * song = "POST /music?name=Cat%20photo.MP3 HTTP/1.1\r\nContent-Length: 10\r\n\r\nID3.......";
+  ev = http(&w, port, song, strlen(song), reply, sizeof(reply), &clock);
+  CHECK((ev & WEBUP_EV_SAVED) && w.route == routes + 1 && strstr(reply, "Saved as Cat photo.mp3") != NULL);
+  CHECK(exists(mdir, "Cat photo.mp3") == 10 && exists(dir, "Cat photo.mp3") < 0);
+  ev = http(&w, port, song, strlen(song), reply, sizeof(reply), &clock);
+  CHECK(strstr(reply, "Saved as Cat photo (2).mp3") != NULL);
+  // Wrong or missing extension: refused before the body; check refuses: its text, no .tmp
+  const char * wav = "POST /music?name=a.wav HTTP/1.1\r\nContent-Length: 10\r\n\r\nID3.......";
+  ev = http(&w, port, wav, strlen(wav), reply, sizeof(reply), &clock);
+  CHECK((ev & WEBUP_EV_ERROR) && !strncmp(reply, "HTTP/1.1 415", 12) && exists(mdir, "a.wav") < 0);
+  const char * noext = "POST /music?name=song HTTP/1.1\r\nContent-Length: 10\r\n\r\nID3.......";
+  http(&w, port, noext, strlen(noext), reply, sizeof(reply), &clock);
+  CHECK(!strncmp(reply, "HTTP/1.1 415", 12));
+  const char * notsong = "POST /music?name=b.ogg HTTP/1.1\r\nContent-Length: 10\r\n\r\nOggS......";
+  ev = http(&w, port, notsong, strlen(notsong), reply, sizeof(reply), &clock);
+  CHECK((ev & WEBUP_EV_ERROR) && !strncmp(reply, "HTTP/1.1 400", 12) && strstr(reply, "Not music"));
+  CHECK(exists(mdir, "b.ogg") < 0 && exists(mdir, "b.ogg.tmp") < 0);
+  // GET on a route isn't an upload
+  const char * getmusic = "GET /music HTTP/1.1\r\n\r\n";
+  http(&w, port, getmusic, strlen(getmusic), reply, sizeof(reply), &clock);
+  CHECK(!strncmp(reply, "HTTP/1.1 404", 12));
+
   // Bigger than both buffers: arrives intact
   size_t mlen = 2 * CHUNKWRITER_SIZE + 12345;
   char * mreq = malloc(mlen + 256);
@@ -158,4 +198,7 @@ void test_webup(void) {
   snprintf(p, sizeof(p), "%s/Cat photo.jpg", dir); remove(p);
   snprintf(p, sizeof(p), "%s/Cat photo (2).jpg", dir); remove(p);
   rmdir(dir);
+  snprintf(p, sizeof(p), "%s/Cat photo.mp3", mdir); remove(p);
+  snprintf(p, sizeof(p), "%s/Cat photo (2).mp3", mdir); remove(p);
+  rmdir(mdir);
 }

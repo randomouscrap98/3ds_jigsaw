@@ -145,7 +145,7 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
   tui_menu_unit_t cur = pm->root.current;
   tui_menu_clear(&pm->root);
   int err = 0;
-  TUIMITEM_BASIC(&pm->root, err, "+ Add pictures over Wi-Fi", 0);
+  TUIMITEM_BASIC(&pm->root, err, "+ Add files over Wi-Fi", 0);
   if(pm->nentries == 0) {
     // littlemenu can't cope with an empty menu, so always have something
     TUIMITEM_BASIC(&pm->root, err, "(no images in /3ds/jigsaw/puzzles)", 0);
