@@ -24,7 +24,9 @@ typedef struct {
 #define CUTKNOB_FINGER 4    // Long and narrow
 #define CUTKNOB_ROUND 5     // Like the classic tab but with a higher neck (thicker under the head)
 #define CUTKNOB_CURL 6      // Thick spiral finger (not picked by knobs; see CutTabStyle curls)
-#define CUTKNOBS 7
+#define CUTKNOB_SWIRL 7     // Double spiral: the line curls in and back out between its own
+                            // turns, so both pieces get a finger wrapped round the other's
+#define CUTKNOBS 8
 #define CUTKNOB_WOOD 6      // knobs value for the wood knobs (BALL .. ROUND)
 
 // Curl: centerline rises straight for CURL_STEM, then rolls over (like a wave crest), its
@@ -40,6 +42,27 @@ typedef struct {
 #endif
 #define CUTGRAPH_CURL_SEG 18        // Centerline samples
 #define CUTGRAPH_CURL_MINEDGE 0.8f  // Only edges this long (cells) get curls
+// Swirl, in units of its span (CutTab len = depth = CUTGRAPH_SWIRL_SPAN cells, not scaled by
+// the edge): arms CUTGRAPH_SWIRL_W apart (finger width), CUTGRAPH_SWIRL_TURNS turns each,
+// centre lifted CUTGRAPH_SWIRL_LIFT finger widths, the arch ending CUTGRAPH_SWIRL_ARCH widths
+// past the spiral
+#ifndef CUTGRAPH_SWIRL_SPAN
+#define CUTGRAPH_SWIRL_SPAN 0.7f      // Swept: most swirls that keep their pieces thick enough
+#endif
+#ifndef CUTGRAPH_SWIRL_CLEAR
+#define CUTGRAPH_SWIRL_CLEAR 0.07f    // Thinnest part of a piece with a swirl (cells)
+#endif
+#ifndef CUTGRAPH_SWIRL_W
+#define CUTGRAPH_SWIRL_W 0.13f
+#define CUTGRAPH_SWIRL_TURNS 1.0f
+#define CUTGRAPH_SWIRL_LIFT 1.0f
+#define CUTGRAPH_SWIRL_ARCH 2.5f
+#define CUTGRAPH_SWIRL_MARGIN 0.08f
+#endif
+#define CUTGRAPH_SWIRL_STEPS 14     // Samples per turn
+#ifndef CUTGRAPH_SWIRL_MINEDGE
+#define CUTGRAPH_SWIRL_MINEDGE 0.9f // Only edges this long (cells) get swirls
+#endif
 #define CUTGRAPH_TABPOINTS (4 * CUTGRAPH_CURL_SEG + 12)  // Most points one tab can have
 
 // One tab on a straight edge: drawn over t in [pos - len/2, pos + len/2] (cells from a),
@@ -53,6 +76,7 @@ typedef struct {
 #define CUTEDGE_GRID 1      // Tabs preset from edgegen: rerolls only change the tab shape
 #define CUTEDGE_WHIMSY 2    // Part of a whimsy's outline: never gets tabs
 #define CUTEDGE_NOCURL 4    // A curl here didn't fit: plain knobs only from now on
+#define CUTEDGE_SNAKE 8     // A snake (strokecut): never gets tabs, and its pieces need none
 
 // a < b. left = the piece walking a -> b in its clockwise walk, right = the one walking
 // b -> a (-1 = border). Polyline edges have npts points between a and b in pts[p0..].
@@ -85,8 +109,11 @@ typedef struct {
   uint8_t knobs;      // Knob kinds used: 0 or 1 = classic only; n > 1 = CUTKNOB_* 1 .. n-1 (no
                       // classic: its head sits low, leaving a thin sliver under it)
   float curls;        // Share of knobs that are curls instead (0 = none)
+  float swirls;       // Share of knobs (on long enough edges) that are swirls (0 = none)
   float bend;         // Stroke curves (cutgraph_strokes; 0 = off): edges bend up to this (tangent
                       // length / edge length), rolled with the tabs
+  float fallbacktab;  // A piece with no tab gets one on its longest edge if at least this long
+                      // (0 = 0.6 * mintab)
   float clearance;    // Thinnest part of a piece (cells; 0 = CUTGRAPH_CLEARANCE). When set, also
                       // checked by cutgraph_thick_ok (no pinches next to corners, no sharp points)
 } CutTabStyle;

@@ -25,6 +25,8 @@ typedef struct {
   float clearance;    // Thinnest part of a piece (CutTabStyle clearance; 0 = default)
   float bend;         // Stroke curves (CutTabStyle bend; 0 = off)
   float curls;        // Share of knobs that are curls (CutTabStyle curls)
+  float swirls;       // Share of knobs that are swirls (CutTabStyle swirls)
+  float fallbacktab;  // CutTabStyle fallbacktab (0 = 0.6 * mintab)
 } RandCutStyle;
 
 #define RANDCUT_STYLE_EVEN 0

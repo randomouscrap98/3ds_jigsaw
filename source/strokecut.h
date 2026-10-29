@@ -19,6 +19,31 @@
 #define STROKECUT_TRIES 60        // Attempts per cut before trying another region
 #define STROKECUT_ANCHORS 12      // Whole attempts (both strokes) to anchor a whimsy before dropping it
 #define STROKECUT_SHAPE 0.25f     // Curve control points stray up to this times the cut length
+// Snakes: a short edge between a piece and a roomier neighbour becomes a finger of the piece
+// (as wide as the edge, tapering) winding into the neighbour through a few points
+#define STROKECUT_SNAKES 0.5f     // Share of the candidate edges that snake
+#ifndef STROKECUT_SNAKEAT
+#define STROKECUT_SNAKEAT 0.99f   // Snakes go in when the puzzle has this share of its pieces (sizes below
+#endif                            // are in final piece sizes, scaled to the pieces then)
+#define STROKECUT_SNAKEMIN 0.3f   // Candidate edges are this long ...
+#define STROKECUT_SNAKEMAX 0.7f   // ... to this (cells, along the edge)
+#ifndef STROKECUT_SNAKEROOM
+#define STROKECUT_SNAKEROOM 1.2f  // The neighbour must be at least this much bigger
+#endif
+#define STROKECUT_SNAKEKEEP 0.5f  // ... and keep at least this share of its area
+#define STROKECUT_SNAKEPTS 3      // Points the finger winds through (2 .. this)
+#ifndef STROKECUT_SNAKESTEP
+#define STROKECUT_SNAKESTEP 0.3f  // Distance between them (cells)
+#endif
+#ifndef STROKECUT_SNAKEMARGIN
+#define STROKECUT_SNAKEMARGIN 0.05f  // Points keep half the width plus this from the neighbour's edges
+#endif
+#define STROKECUT_SNAKETAPER 0.2f // The finger narrows by this share toward the tip
+#define STROKECUT_SNAKECLEAR 0.1f // Thinnest part of either piece afterwards (cells)
+#define STROKECUT_SNAKETRIES 12
+#ifndef STROKECUT_SNAKESTRAIGHT
+#define STROKECUT_SNAKESTRAIGHT 0.6f  // The neighbour's boundary turns at most this much at the edge's ends
+#endif
 
 // Just the graph (polyline edges, no tabs): count pieces, then whimsies (level, set) after
 // them, flagged CUTEDGE_WHIMSY. Returns 0 on success (on failure g is empty).

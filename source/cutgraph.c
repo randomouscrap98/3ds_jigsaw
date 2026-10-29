@@ -125,6 +125,20 @@ float cutgraph_edgelen(const CutGraph * g, const CutEdge * e) {
   return sqrtf(dx * dx + dy * dy);
 }
 
+// Length along the edge: the chord for straight edges, through the points for polylines
+static float cutgraph_arclen(const CutGraph * g, const CutEdge * e) {
+  if(!e->npts) return cutgraph_edgelen(g, e);
+  float L = 0, px = g->v[e->a].x, py = g->v[e->a].y;
+  for(uint32_t i = 0; i <= e->npts; i++) {
+    float qx = i < e->npts ? g->pts[2 * (e->p0 + i)] : g->v[e->b].x;
+    float qy = i < e->npts ? g->pts[2 * (e->p0 + i) + 1] : g->v[e->b].y;
+    L += hypotf(qx - px, qy - py);
+    px = qx;
+    py = qy;
+  }
+  return L;
+}
+
 int cutgraph_iswhimsy(const CutGraph * g, uint32_t p) {
   for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
     if(!(g->e[g->pedge[k] >> 1].flags & CUTEDGE_WHIMSY)) return 0;
@@ -143,7 +157,7 @@ static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdg
     for(int k = 0; k < e->ntabs; k++) edgegen_randomtab(r, st->jitter, &e->tab[k].tab);
     return;
   }
-  float L = cutgraph_edgelen(g, e);
+  float L = cutgraph_arclen(g, e);
   float slot = e->ntabs ? L / e->ntabs : 0;
   for(int k = 0; k < e->ntabs; k++) {
     // A tab is drawn over at most maxtab of the edge; leftover room jitters its position
@@ -166,9 +180,23 @@ static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdg
   if(st->curls > 0) {
     // Curls scale with their tab: on short edges, or shrunk to fit, they get too thin
     int fits = e->shrink == 0 && e->ntabs == 1 && !(e->flags & CUTEDGE_NOCURL) &&
-        cutgraph_edgelen(g, e) >= CUTGRAPH_CURL_MINEDGE;
+        cutgraph_arclen(g, e) >= CUTGRAPH_CURL_MINEDGE;
     for(int k = 0; k < e->ntabs; k++) {
       if(rng_range(r, 0, 1) < st->curls && fits) e->tab[k].kind = CUTKNOB_CURL;
+    }
+  }
+  if(st->swirls > 0) {
+    // Swirls have a fixed size (they need it to stay thick): long single-knob edges only
+    float L = cutgraph_arclen(g, e);
+    int fits = e->shrink == 0 && e->ntabs == 1 && !(e->flags & CUTEDGE_NOCURL) && L >= CUTGRAPH_SWIRL_MINEDGE;
+    if(rng_range(r, 0, 1) < st->swirls && fits) {
+      CutTab * t = e->tab;
+      t->kind = CUTKNOB_SWIRL;
+      t->len = t->depth = CUTGRAPH_SWIRL_SPAN;
+      float pos = L / 2 + rng_range(r, -0.5f, 0.5f) * (L - CUTGRAPH_SWIRL_SPAN) * 0.6f;
+      if(pos < t->len / 2) pos = t->len / 2;
+      if(pos > L - t->len / 2) pos = L - t->len / 2;
+      t->pos = pos;
     }
   }
   if(st->bend > 0 && (e->dir[0] != 0 || e->dir[1] != 0)) {
@@ -176,7 +204,7 @@ static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdg
     for(int i = 0; i < e->shrink; i++) b *= CUTGRAPH_SHRINK;
     e->bend = rng_range(r, b * CUTGRAPH_BENDMIN, b);
   }
-  if(st->wave > 0 && cutgraph_inner(e) && cutgraph_edgelen(g, e) >= CUTGRAPH_WAVEMIN) {
+  if(st->wave > 0 && cutgraph_inner(e) && !e->npts && cutgraph_edgelen(g, e) >= CUTGRAPH_WAVEMIN) {
     float w = st->wave;
     for(int i = 0; i < e->shrink; i++) w *= CUTGRAPH_SHRINK;
     // A bump bends a knob on top of it (its sides fan and the neck pinches), while an S is
@@ -202,9 +230,18 @@ static int cutgraph_piecetabs(const CutGraph * g, uint32_t p) {
   return n;
 }
 
-// An edge that can carry tabs: between two pieces, straight, not part of a whimsy
+// An edge that can carry tabs: between two pieces, not part of a whimsy (straight, or a
+// polyline from a stroke cut)
 static int cutgraph_inner(const CutEdge * e) {
-  return e->left >= 0 && e->right >= 0 && e->npts == 0 && !(e->flags & CUTEDGE_WHIMSY);
+  return e->left >= 0 && e->right >= 0 && !(e->flags & (CUTEDGE_WHIMSY | CUTEDGE_SNAKE));
+}
+
+// A piece with a snake is held by it (needs no tab)
+static int cutgraph_snaked(const CutGraph * g, uint32_t p) {
+  for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
+    if(g->e[g->pedge[k] >> 1].flags & CUTEDGE_SNAKE) return 1;
+  }
+  return 0;
 }
 
 uint8_t * cutgraph_whimsyverts(const CutGraph * g) {
@@ -219,7 +256,7 @@ uint8_t * cutgraph_whimsyverts(const CutGraph * g) {
 
 int cutgraph_tabbable(const CutGraph * g, const CutTabStyle * st, const CutEdge * e, float min, const uint8_t * wv) {
   if(!cutgraph_inner(e)) return 0;
-  float L = cutgraph_edgelen(g, e);
+  float L = cutgraph_arclen(g, e);
   if(L < min) return 0;
   if(wv && L < st->whimsytab && (wv[e->a] || wv[e->b])) return 0;
   return 1;
@@ -258,7 +295,7 @@ int cutgraph_strokes(CutGraph * g) {
       float dx = q->x - p->x, dy = q->y - p->y, l = sqrtf(dx * dx + dy * dy);
       d[k][0] = l > 0 ? dx / l : 0;
       d[k][1] = l > 0 ? dy / l : 0;
-      curve[k] = cutgraph_inner(e);
+      curve[k] = cutgraph_inner(e) && !e->npts;
       any |= curve[k];
       border |= e->left < 0 || e->right < 0;
     }
@@ -457,7 +494,63 @@ static int cutgraph_curl(const EdgeTab * tab, float * out) {
   return n;
 }
 
+// Double spiral standing on the line: up a leg into one arm, in to the centre, out along the
+// other arm (Archimedean arms half a turn apart: the gap between them is the finger width),
+// then an arch over and down to the line. Built turning one way, mirrored for the other.
+static int cutgraph_swirl(const EdgeTab * tab, float * out) {
+  float w = CUTGRAPH_SWIRL_W, b = w / (float)M_PI, pm = 2 * (float)M_PI * CUTGRAPH_SWIRL_TURNS;
+  float rout = b * pm, cx = CUTGRAPH_SWIRL_MARGIN + rout, cy = rout + CUTGRAPH_SWIRL_LIFT * w;
+  float th0 = (float)M_PI - pm;
+  int steps = (int)(CUTGRAPH_SWIRL_STEPS * CUTGRAPH_SWIRL_TURNS);
+  int n = 0;
+#define SW_PT(px, py) do { out[n * 2] = (px); out[n * 2 + 1] = (py); n++; } while(0)
+#define SW_ARM(phi, sgn, X, Y) do { float _r = b * (phi) * (sgn); X = cx + _r * cosf((phi) + th0); Y = cy + _r * sinf((phi) + th0); } while(0)
+  float ax, ay, ax2, ay2, bx, by, bx2, by2, d = 0.01f;
+  SW_ARM(pm, 1, ax, ay);          // Arm A's outer end (left), walked inward
+  SW_ARM(pm - d, 1, ax2, ay2);
+  SW_ARM(pm, -1, bx, by);         // Arm B's outer end (right), walked outward
+  SW_ARM(pm - d, -1, bx2, by2);
+  float tax = ax2 - ax, tay = ay2 - ay, tl = hypotf(tax, tay);
+  tax /= tl; tay /= tl;
+  float tbx = bx - bx2, tby = by - by2;
+  tl = hypotf(tbx, tby);
+  tbx /= tl; tby /= tl;
+  float k = cy * 0.55f;
+  SW_PT(0, 0);
+  // Leg straight up into arm A
+  for(int i = 0; i <= 8; i++) {
+    float t = i / 8.0f, u = 1 - t, x0 = ax, c1y = k, c2x = ax - tax * k, c2y = ay - tay * k;
+    SW_PT(u * u * u * x0 + 3 * u * u * t * x0 + 3 * u * t * t * c2x + t * t * t * ax,
+        3 * u * u * t * c1y + 3 * u * t * t * c2y + t * t * t * ay);
+  }
+  for(int i = 1; i <= steps; i++) { float X, Y; SW_ARM(pm * (1 - (float)i / steps), 1, X, Y); SW_PT(X, Y); }
+  for(int i = 1; i <= steps; i++) { float X, Y; SW_ARM(pm * (float)i / steps, -1, X, Y); SW_PT(X, Y); }
+  // Arch: on along arm B's heading, over and down to the line
+  float qx = bx + CUTGRAPH_SWIRL_ARCH * w;
+  for(int i = 1; i <= 10; i++) {
+    float t = i / 10.0f, u = 1 - t;
+    float c1x = bx + tbx * k, c1y = by + tby * k, c2x = qx, c2y = by + tby * k;
+    SW_PT(u * u * u * bx + 3 * u * u * t * c1x + 3 * u * t * t * c2x + t * t * t * qx,
+        u * u * u * by + 3 * u * u * t * c1y + 3 * u * t * t * c2y);
+  }
+  SW_PT(1, 0);
+#undef SW_ARM
+#undef SW_PT
+  if(tab->a < 0) {
+    // Turning the other way: mirrored along the line, walked from the other end
+    for(int i = 0; i < n; i++) out[i * 2] = 1 - out[i * 2];
+    for(int i = 0; i < n / 2; i++) {
+      float tx = out[i * 2], ty = out[i * 2 + 1];
+      out[i * 2] = out[(n - 1 - i) * 2]; out[i * 2 + 1] = out[(n - 1 - i) * 2 + 1];
+      out[(n - 1 - i) * 2] = tx; out[(n - 1 - i) * 2 + 1] = ty;
+    }
+  }
+  for(int i = 0; i < n; i++) out[i * 2 + 1] *= tab->flip;
+  return n;
+}
+
 int cutgraph_knobcurve(uint8_t kind, const EdgeTab * tab, float * out) {
+  if(kind == CUTKNOB_SWIRL) return cutgraph_swirl(tab, out);
   if(kind == CUTKNOB_CURL) return cutgraph_curl(tab, out);
   if(kind == CUTKNOB_CLASSIC || kind >= CUTKNOBS) return edgegen_tabcurve(tab, out);
   // Same frame as edgegen's tab: neck at p3 / p6, head between them through p4, p5. t is
@@ -561,12 +654,101 @@ static uint32_t cutgraph_wavepoints(const CutGraph * g, const CutEdge * e, int t
   return n;
 }
 
+// Point i of a polyline edge (0 = a, npts + 1 = b)
+static void cutgraph_polypt(const CutGraph * g, const CutEdge * e, uint32_t i, float * x, float * y) {
+  if(i == 0) { *x = g->v[e->a].x; *y = g->v[e->a].y; }
+  else if(i > e->npts) { *x = g->v[e->b].x; *y = g->v[e->b].y; }
+  else { *x = g->pts[2 * (e->p0 + i - 1)]; *y = g->pts[2 * (e->p0 + i - 1) + 1]; }
+}
+
+// Unit normal (-dy, dx) at polyline point i: the average of the steps on either side
+static void cutgraph_polynormal(const CutGraph * g, const CutEdge * e, uint32_t i, float * nx, float * ny) {
+  float x0, y0, x1, y1;
+  cutgraph_polypt(g, e, i > 0 ? i - 1 : 0, &x0, &y0);
+  cutgraph_polypt(g, e, i <= e->npts ? i + 1 : i, &x1, &y1);
+  float dx = x1 - x0, dy = y1 - y0, l = hypotf(dx, dy);
+  *nx = l > 0 ? -dy / l : 0;
+  *ny = l > 0 ? dx / l : 0;
+}
+
+// Point and smooth unit normal at s along a polyline edge (normals blend along each step)
+static void cutgraph_polyat(const CutGraph * g, const CutEdge * e, float s, float * px, float * py, float * qx, float * qy) {
+  float acc = 0;
+  *px = g->v[e->a].x; *py = g->v[e->a].y; *qx = *qy = 0;
+  for(uint32_t i = 0; i <= e->npts; i++) {
+    float x0, y0, x1, y1;
+    cutgraph_polypt(g, e, i, &x0, &y0);
+    cutgraph_polypt(g, e, i + 1, &x1, &y1);
+    float l = hypotf(x1 - x0, y1 - y0);
+    if(acc + l >= s || i == e->npts) {
+      float f = l > 0 ? (s - acc) / l : 0;
+      if(f < 0) f = 0;
+      if(f > 1) f = 1;
+      float n0x, n0y, n1x, n1y;
+      cutgraph_polynormal(g, e, i, &n0x, &n0y);
+      cutgraph_polynormal(g, e, i + 1, &n1x, &n1y);
+      float nx = n0x + (n1x - n0x) * f, ny = n0y + (n1y - n0y) * f, nl = hypotf(nx, ny);
+      *px = x0 + (x1 - x0) * f;
+      *py = y0 + (y1 - y0) * f;
+      *qx = nl > 0 ? nx / nl : 0;
+      *qy = nl > 0 ? ny / nl : 0;
+      return;
+    }
+    acc += l;
+  }
+}
+
+// Polyline edge points with tabs (a included, b excluded): the polyline's own points,
+// with tabs replacing the stretches they cover (drawn along the line's smoothed normal)
+static uint32_t cutgraph_polypoints(const CutGraph * g, const CutEdge * e, float * xy) {
+  uint32_t n = 0, i = 1;
+  float acc = 0, px, py, qx, qy;
+  xy[n * 2] = g->v[e->a].x; xy[n * 2 + 1] = g->v[e->a].y; n++;
+  float pts[CUTGRAPH_TABPOINTS * 2];
+  // acc = distance along the line to point i
+  float x0 = g->v[e->a].x, y0 = g->v[e->a].y;
+  for(int k = 0; k < e->ntabs; k++) {
+    const CutTab * t = e->tab + k;
+    float s0 = t->pos - t->len / 2, s1 = t->pos + t->len / 2;
+    for(; i <= e->npts; i++) {
+      float x1, y1;
+      cutgraph_polypt(g, e, i, &x1, &y1);
+      float d = acc + hypotf(x1 - x0, y1 - y0);
+      if(d >= s0) break;
+      acc = d;
+      x0 = x1; y0 = y1;
+      xy[n * 2] = x1; xy[n * 2 + 1] = y1; n++;
+    }
+    int m = cutgraph_knobcurve(t->kind, &t->tab, pts);
+    for(int j = 0; j < m; j++) {
+      float o = pts[j * 2 + 1] * t->depth;
+      cutgraph_polyat(g, e, s0 + pts[j * 2] * t->len, &px, &py, &qx, &qy);
+      xy[n * 2] = px + o * qx; xy[n * 2 + 1] = py + o * qy; n++;
+    }
+    // Skip the points the tab covers
+    for(; i <= e->npts; i++) {
+      float x1, y1;
+      cutgraph_polypt(g, e, i, &x1, &y1);
+      float d = acc + hypotf(x1 - x0, y1 - y0);
+      if(d > s1) break;
+      acc = d;
+      x0 = x1; y0 = y1;
+    }
+  }
+  for(; i <= e->npts; i++) {
+    cutgraph_polypt(g, e, i, &px, &py);
+    xy[n * 2] = px; xy[n * 2 + 1] = py; n++;
+  }
+  return n;
+}
+
 // Canonical (a -> b) points of an edge in cell units, a included, b excluded
 static uint32_t cutgraph_edgepoints(const CutGraph * g, const CutEdge * e, int tabs, float * xy) {
   float ax = g->v[e->a].x, ay = g->v[e->a].y;
   uint32_t n = 0;
   xy[n * 2] = ax; xy[n * 2 + 1] = ay; n++;
   if(e->npts) {
+    if(tabs && e->ntabs) return cutgraph_polypoints(g, e, xy);
     memcpy(xy + 2, g->pts + 2 * e->p0, sizeof(float) * 2 * e->npts);
     return 1 + e->npts;
   }
@@ -671,20 +853,20 @@ static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed
   for(uint32_t i = 0; i < g->ne; i++) {
     CutEdge * e = g->e + i;
     if(e->flags & (CUTEDGE_GRID | CUTEDGE_WHIMSY)) continue;
-    float L = cutgraph_edgelen(g, e);
+    float L = cutgraph_arclen(g, e);
     e->ntabs = !cutgraph_tabbable(g, st, e, st->mintab, wv) ? 0 : L >= st->twotab ? 2 : 1;
     cutgraph_rolltabs(g, st, e, &r);
   }
   // Every piece but a whimsy needs a tab or blank: give tabless pieces one on their longest
   // inner edge
   for(uint32_t p = 0; p < g->count; p++) {
-    if(cutgraph_piecetabs(g, p) || cutgraph_iswhimsy(g, p)) continue;
+    if(cutgraph_piecetabs(g, p) || cutgraph_iswhimsy(g, p) || cutgraph_snaked(g, p)) continue;
     int32_t best = -1;
     float bestlen = 0;
     for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
       CutEdge * e = g->e + (g->pedge[k] >> 1);
-      if(!cutgraph_tabbable(g, st, e, st->mintab * 0.6f, wv)) continue;
-      float L = cutgraph_edgelen(g, e);
+      if(!cutgraph_tabbable(g, st, e, st->fallbacktab > 0 ? st->fallbacktab : st->mintab * 0.6f, wv)) continue;
+      float L = cutgraph_arclen(g, e);
       if(L > bestlen) { bestlen = L; best = g->pedge[k] >> 1; }
     }
     if(best < 0) return 1;
@@ -711,7 +893,15 @@ static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed
       // Whimsies and the pieces around them have their own checks (a star's tips are meant
       // to be sharp, and so are the corners where a whimsy meets a cut). The thickness check
       // goes first: it's cheaper and catches most bad pieces.
-      int good = (st->clearance <= 0 || cutgraph_touchwhimsy(g, p) || cutgraph_thick_ok(xy, n, st->clearance)) &&
+      // Swirls need a little less (their fingers are as thin as they can be at their size)
+      float cl = st->clearance;
+      if(cl > CUTGRAPH_SWIRL_CLEAR) {
+        for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
+          const CutEdge * ek = g->e + (g->pedge[k] >> 1);
+          if(ek->ntabs && ek->tab[0].kind == CUTKNOB_SWIRL) cl = CUTGRAPH_SWIRL_CLEAR;
+        }
+      }
+      int good = (st->clearance <= 0 || cutgraph_touchwhimsy(g, p) || cutgraph_thick_ok(xy, n, cl)) &&
           edgegen_shape_ok(xy, n, CUTGRAPH_CLEARANCE);
       if(good) continue;
       any = 1;
@@ -722,8 +912,8 @@ static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed
       if(pass >= CUTGRAPH_CURLFALLBACK) {
         for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
           CutEdge * e = g->e + (g->pedge[k] >> 1);
-          for(int j = 0; j < e->ntabs; j++) hadcurl |= e->tab[j].kind == CUTKNOB_CURL;
-          if(e->ntabs && e->tab[0].kind == CUTKNOB_CURL) e->flags |= CUTEDGE_NOCURL;
+          for(int j = 0; j < e->ntabs; j++) hadcurl |= e->tab[j].kind == CUTKNOB_CURL || e->tab[j].kind == CUTKNOB_SWIRL;
+          if(e->ntabs && (e->tab[0].kind == CUTKNOB_CURL || e->tab[0].kind == CUTKNOB_SWIRL)) e->flags |= CUTEDGE_NOCURL;
         }
       }
       if(pass >= CUTGRAPH_FALLBACK && !hadcurl) {
@@ -731,8 +921,11 @@ static int cutgraph_givetabs(CutGraph * g, const CutTabStyle * st, uint32_t seed
         float droplen = 1e30f;
         for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
           CutEdge * e = g->e + (g->pedge[k] >> 1);
-          if(!e->ntabs || cutgraph_piecetabs(g, e->left) <= e->ntabs || cutgraph_piecetabs(g, e->right) <= e->ntabs) continue;
-          float L = cutgraph_edgelen(g, e);
+          if(!e->ntabs) continue;
+          int keepl = !cutgraph_snaked(g, e->left), keepr = !cutgraph_snaked(g, e->right);
+          if((keepl && cutgraph_piecetabs(g, e->left) <= e->ntabs) ||
+              (keepr && cutgraph_piecetabs(g, e->right) <= e->ntabs)) continue;
+          float L = cutgraph_arclen(g, e);
           if(L < droplen) { droplen = L; drop = g->pedge[k] >> 1; }
         }
         if(drop >= 0) {

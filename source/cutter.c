@@ -1,4 +1,5 @@
 #include "cutter.h"
+#include "strokecut.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -22,7 +23,25 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
     return 0;
   }
   c->usegraph = 1;
-  if(rnd && c->whimsy == WHIMSY_NONE) {
+  if(c->style == CUT_STYLE_WOODEN2) {
+    // Stroke cut: whimsies are part of it (placed first, strokes grow from them)
+    CutTabStyle ts;
+    randcut_tabstyle(rst, &ts);
+    if(c->whimsy != WHIMSY_NONE) ts.whimsytab = WHIMSY_TABEDGE;
+    int ok = 0;
+    for(uint32_t t = 0; t < RANDCUT_MAXTRIES && !ok; t++) {
+      uint32_t s = randcut_tryseed(seed, t);
+      if(strokecut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s)) continue;
+      if(!cutgraph_tabs(&c->g, &ts, s)) {
+        c->g.tries = t + 1;
+        ok = 1;
+      } else {
+        cutgraph_free(&c->g);
+      }
+    }
+    if(!ok) return 1;
+    c->whimsies = c->g.count - c->count;
+  } else if(rnd && c->whimsy == WHIMSY_NONE) {
     if(randcut_init(&c->g, cols, rows, c->count, seed, rst)) return 1;
   } else {
     // Whimsies go in before tabs; a cut that can't be tabbed cleanly is retried with new

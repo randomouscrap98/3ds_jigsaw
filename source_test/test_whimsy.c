@@ -51,7 +51,7 @@ void test_whimsy(void) {
         for(uint32_t k = g->pstart[p]; k < g->pstart[p + 1]; k++) {
           const CutEdge * e = g->e + (g->pedge[k] >> 1);
           sides &= (g->pedge[k] & 1 ? e->right : e->left) == (int32_t)p;
-          tabs += e->ntabs;
+          tabs += e->ntabs + !!(e->flags & CUTEDGE_SNAKE);   // A snake holds its pieces
         }
         int isw = cutgraph_iswhimsy(g, p);
         whim += isw;
