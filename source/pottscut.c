@@ -118,6 +118,66 @@ static uint32_t pt_whimsies(Pt * t, uint32_t want, uint8_t set, float res) {
   return n;
 }
 
+// Each piece keeps only its largest 4-connected part; the rest goes to neighbouring pieces.
+// queue, comp: scratch, one int per square. Returns 0 on success (1 if a piece has nothing).
+static int pt_keeplargest(Pt * t, int * queue, int32_t * comp) {
+  uint32_t count = t->count;
+  int n = t->w * t->h, err = 0;
+  {
+    int32_t * best = malloc(sizeof(int32_t) * count), * bestsize = calloc(count, sizeof(int32_t));
+    if(!best || !bestsize) err = 1;
+    for(int i = 0; i < n && !err; i++) comp[i] = -1;
+    int ncomp = 0;
+    int32_t * csize = NULL;
+    for(int i = 0; i < n && !err; i++) {
+      if(comp[i] >= 0 || t->frozen[i]) continue;
+      int32_t l = t->lab[i];
+      int qh = 0, qt = 0, size = 0;
+      queue[qt++] = i;
+      comp[i] = ncomp;
+      while(qh < qt) {
+        int c = queue[qh++], x = c % t->w, y = c / t->w;
+        size++;
+        int nb[4] = { x > 0 ? c - 1 : -1, x < t->w - 1 ? c + 1 : -1, y > 0 ? c - t->w : -1, y < t->h - 1 ? c + t->w : -1 };
+        for(int k = 0; k < 4; k++) {
+          if(nb[k] >= 0 && comp[nb[k]] < 0 && !t->frozen[nb[k]] && t->lab[nb[k]] == l) {
+            comp[nb[k]] = ncomp;
+            queue[qt++] = nb[k];
+          }
+        }
+      }
+      int32_t * cs = realloc(csize, sizeof(int32_t) * (ncomp + 1));
+      if(!cs) { err = 1; break; }
+      csize = cs;
+      csize[ncomp] = size;
+      if(size > bestsize[l]) { bestsize[l] = size; best[l] = ncomp; }
+      ncomp++;
+    }
+    for(uint32_t l = 0; l < count && !err; l++) if(!bestsize[l]) err = 1;   // A piece got nothing
+    // Squares in a piece's other parts go to a neighbouring piece's main part, repeatedly
+    for(int i = 0; i < n && !err; i++) if(!t->frozen[i] && comp[i] != best[t->lab[i]]) t->lab[i] = -2;
+    int left = 1;
+    while(left && !err) {
+      left = 0;
+      int changed = 0;
+      for(int i = 0; i < n; i++) {
+        if(t->lab[i] != -2) continue;
+        int x = i % t->w, y = i / t->w;
+        int32_t nb[4] = { pt_lab(t, x - 1, y), pt_lab(t, x + 1, y), pt_lab(t, x, y - 1), pt_lab(t, x, y + 1) };
+        int32_t take = -1;
+        for(int k = 0; k < 4; k++) if(nb[k] >= 0 && (uint32_t)nb[k] < count) take = nb[k];
+        if(take >= 0) { t->lab[i] = take; changed = 1; }
+        else left = 1;
+      }
+      if(left && !changed) err = 1;
+    }
+    free(best);
+    free(bestsize);
+    free(csize);
+    }
+  return err;
+}
+
 // Even blobs: sites relaxed a few times, every free square to its nearest site; then each
 // piece keeps only its largest 4-connected part (the rest goes to neighbours). Returns 0 on success.
 static int pt_blobs(Pt * t, float res) {
@@ -195,59 +255,7 @@ static int pt_blobs(Pt * t, float res) {
       }
     }
   }
-  // Keep each piece's largest part
-  if(!err) {
-    int32_t * best = malloc(sizeof(int32_t) * count), * bestsize = calloc(count, sizeof(int32_t));
-    if(!best || !bestsize) err = 1;
-    for(int i = 0; i < n && !err; i++) comp[i] = -1;
-    int ncomp = 0;
-    int32_t * csize = NULL;
-    for(int i = 0; i < n && !err; i++) {
-      if(comp[i] >= 0 || t->frozen[i]) continue;
-      int32_t l = t->lab[i];
-      int qh = 0, qt = 0, size = 0;
-      queue[qt++] = i;
-      comp[i] = ncomp;
-      while(qh < qt) {
-        int c = queue[qh++], x = c % t->w, y = c / t->w;
-        size++;
-        int nb[4] = { x > 0 ? c - 1 : -1, x < t->w - 1 ? c + 1 : -1, y > 0 ? c - t->w : -1, y < t->h - 1 ? c + t->w : -1 };
-        for(int k = 0; k < 4; k++) {
-          if(nb[k] >= 0 && comp[nb[k]] < 0 && !t->frozen[nb[k]] && t->lab[nb[k]] == l) {
-            comp[nb[k]] = ncomp;
-            queue[qt++] = nb[k];
-          }
-        }
-      }
-      int32_t * cs = realloc(csize, sizeof(int32_t) * (ncomp + 1));
-      if(!cs) { err = 1; break; }
-      csize = cs;
-      csize[ncomp] = size;
-      if(size > bestsize[l]) { bestsize[l] = size; best[l] = ncomp; }
-      ncomp++;
-    }
-    for(uint32_t l = 0; l < count && !err; l++) if(!bestsize[l]) err = 1;   // A piece got nothing
-    // Squares in a piece's other parts go to a neighbouring piece's main part, repeatedly
-    for(int i = 0; i < n && !err; i++) if(!t->frozen[i] && comp[i] != best[t->lab[i]]) t->lab[i] = -2;
-    int left = 1;
-    while(left && !err) {
-      left = 0;
-      int changed = 0;
-      for(int i = 0; i < n; i++) {
-        if(t->lab[i] != -2) continue;
-        int x = i % t->w, y = i / t->w;
-        int32_t nb[4] = { pt_lab(t, x - 1, y), pt_lab(t, x + 1, y), pt_lab(t, x, y - 1), pt_lab(t, x, y + 1) };
-        int32_t take = -1;
-        for(int k = 0; k < 4; k++) if(nb[k] >= 0 && (uint32_t)nb[k] < count) take = nb[k];
-        if(take >= 0) { t->lab[i] = take; changed = 1; }
-        else left = 1;
-      }
-      if(left && !changed) err = 1;
-    }
-    free(best);
-    free(bestsize);
-    free(csize);
-  }
+  if(!err) err = pt_keeplargest(t, queue, comp);
   free(sx); free(sy); free(ax); free(ay); free(an); free(queue); free(comp);
   return err;
 }
@@ -551,4 +559,41 @@ int pottscut_graph(CutGraph * g, float width, float height, uint32_t count, uint
     }
   }
   return 1;
+}
+
+int pottscut_fromlabels(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
+    const PottsStyle * run, uint32_t seed) {
+  memset(g, 0, sizeof(CutGraph));
+  Pt t;
+  memset(&t, 0, sizeof(Pt));
+  t.w = w;
+  t.h = h;
+  t.lab = lab;
+  t.count = t.nlab = count;
+  t.frozen = calloc((size_t)w * h, 1);
+  int * queue = malloc(sizeof(int) * w * h);
+  int32_t * comp = malloc(sizeof(int32_t) * w * h);
+  int err = !t.frozen || !queue || !comp;
+  if(!err) err = pt_keeplargest(&t, queue, comp);
+  if(!err && run) {
+    t.area = malloc(sizeof(int32_t) * count);
+    t.perim = malloc(sizeof(int32_t) * count);
+    err = !t.area || !t.perim;
+    if(!err) {
+      rng_init(&t.r, seed);
+      t.a0 = (float)w * h / count;
+      t.p0 = run->perim * 4 * sqrtf(t.a0);
+      pt_unchecker(&t);
+      pt_measure(&t);
+      pt_run(&t, run);
+    }
+  }
+  if(!err && pt_unchecker(&t)) err = 1;
+  if(!err) err = pt_tograph(&t, g, res, smooth);
+  free(t.area);
+  free(t.perim);
+  free(t.frozen);
+  free(queue);
+  free(comp);
+  return err;
 }

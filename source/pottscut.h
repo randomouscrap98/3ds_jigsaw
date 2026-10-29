@@ -38,4 +38,11 @@ const PottsStyle * pottscut_style(uint8_t style);
 int pottscut_graph(CutGraph * g, float width, float height, uint32_t count, uint8_t whimsy, uint8_t set,
     uint32_t seed, const PottsStyle * st);
 
+// The lines and graph from a finished label grid (w x h squares, res per cell, labels 0 ..
+// count - 1, no whimsies): each piece keeps its largest part, then (run not NULL) the
+// automaton runs on it with run's settings from seed, corner-only touches are fixed, and the
+// lines are traced and smoothed. lab is changed. Returns 0 on success. (mazecut)
+int pottscut_fromlabels(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
+    const PottsStyle * run, uint32_t seed);
+
 #endif
