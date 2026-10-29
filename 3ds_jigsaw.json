@@ -1,0 +1,16 @@
+{
+	"github": "randomouscrap98/3ds_jigsaw",
+	"systems": [
+		"3DS"
+	],
+	"categories": [
+		"app"
+	],
+	"llm_generation": "yes",
+	"icon": "https://raw.githubusercontent.com/randomouscrap98/3ds_jigsaw/main/icon.png",
+	"image": "https://raw.githubusercontent.com/randomouscrap98/3ds_jigsaw/main/meta/banner.png",
+	"unique_ids": [
+		768753
+	],
+	"long_description": "Jigsaw puzzles on the 3DS, made from your own pictures. Pick a picture, choose 50 to 500 pieces and a cut style (classic, irregular, wild, or a random non-grid cut), optionally with whimsy pieces (hearts, stars, flowers and clouds cut into the puzzle), and put it together on the touch screen, with your own music playing if you like. A dozen paintings come with it to get you started."
+}
