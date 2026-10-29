@@ -279,11 +279,13 @@ static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
   int opt = pm->options.current;
   if(puzzlemenu_active(pm) != &pm->options || opt < 0 || opt >= pm->options.numitems) return 0;
   if(e->hassave && pm->optact[opt] == PMENU_ACT_CONTINUE) {
-    thumb_cut(&pm->thumb, e->save.header.style, e->save.header.whimsy, e->save.header.whimsyset);
+    thumb_cut(&pm->thumb, e->save.header.style, e->save.header.whimsy, e->save.header.whimsyset,
+        e->save.header.target);
     return 1;
   }
   if(!pm->optcut[opt]) return 0;
-  thumb_cut(&pm->thumb, (unsigned)pm->style % CUT_STYLES, (unsigned)pm->whimsy % WHIMSY_LEVELS, WHIMSY_SET_CUTE);
+  thumb_cut(&pm->thumb, (unsigned)pm->style % CUT_STYLES, (unsigned)pm->whimsy % WHIMSY_LEVELS, WHIMSY_SET_CUTE,
+      pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS]);
   return 1;
 }
 
@@ -407,13 +409,12 @@ void puzzlemenu_render_bottom(PuzzleMenu * pm, TextDraw * td) {
   if(ts != THUMB_NONE) {
     // Picture fills the screen above a strip of controls. Nothing shows while it loads.
     if(ts == THUMB_READY) {
-      Tex3DS_SubTexture * sub = &pm->thumb.sub;
-      C2D_DrawImageAt(thumb_image(&pm->thumb), (320 - sub->width) / 2,
-          (PMENU_THUMBH - sub->height) / 2, 0.5f, NULL, 1, 1);
-      if(pm->showcut && thumb_cutready(&pm->thumb)) {
-        C2D_DrawImageAt(thumb_cutimage(&pm->thumb), (320 - sub->width) / 2,
-            (PMENU_THUMBH - sub->height) / 2, 0.5f, NULL, 1, 1);
-      }
+      // With the cut sample, only the part the puzzle keeps (its crop), the cut over it
+      int cut = pm->showcut && thumb_cutready(&pm->thumb);
+      C2D_Image img = cut ? thumb_cropimage(&pm->thumb) : thumb_image(&pm->thumb);
+      float x = (320 - img.subtex->width) / 2, y = (PMENU_THUMBH - img.subtex->height) / 2;
+      C2D_DrawImageAt(img, x, y, 0.5f, NULL, 1, 1);
+      if(cut) C2D_DrawImageAt(thumb_cutimage(&pm->thumb), x, y, 0.5f, NULL, 1, 1);
     } else if(ts == THUMB_FAILED) {
       textdraw_center(td, 160, PMENU_THUMBH / 2 - 8, 0.6f, dim, "Can't preview");
     }

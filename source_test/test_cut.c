@@ -395,7 +395,7 @@ void test_cutsample(void) {
       lines += (a[i] & 0xFF) >= CUTSAMPLE_LINEALPHA / 2;
       clear += a[i] == 0;
     }
-    // Lines everywhere but mostly see-through (Classic: 18% line, 66% clear)
+    // Lines everywhere but mostly see-through (48 pieces: 18% line, 66% clear)
     CHECK(lines > (uint32_t)(w * h) / 20 && clear > (uint32_t)(w * h) / 2);
   }
   CHECK(cutsample_draw(CUT_STYLE_CLASSIC, WHIMSY_NONE, 0, 200, 320, a) == 0);  // Portrait

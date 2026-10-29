@@ -58,14 +58,20 @@ static uint32_t * thumb_make(Thumb * t, const char * path, u8 overlay, u16 * out
 
 // Cut sample the size of path's thumbnail, swizzled into a new texture-sized buffer. NULL on
 // any failure.
-static uint32_t * thumb_makecut(Thumb * t, const char * path, u8 style, u8 whimsy, u8 set, u16 * outw, u16 * outh) {
+// Covers the puzzle's crop of the thumbnail (at (*outx, *outy) in it), not the whole of it.
+static uint32_t * thumb_makecut(Thumb * t, const char * path, u8 style, u8 whimsy, u8 set, uint32_t target,
+    u16 * outx, u16 * outy, u16 * outw, u16 * outh) {
   if(thumb_decode(t, path)) return NULL;
-  uint32_t * lin = malloc(sizeof(uint32_t) * t->plainw * t->plainh);
+  u16 x, y, w, h;
+  cutsample_crop(t->plainw, t->plainh, target, &x, &y, &w, &h);
+  uint32_t * lin = malloc(sizeof(uint32_t) * w * h);
   uint32_t * tex = calloc(THUMB_TEXW * THUMB_TEXH, sizeof(uint32_t));
-  if(lin && tex && !cutsample_draw(style, whimsy, set, t->plainw, t->plainh, lin)) {
-    swizzle_copy(tex, THUMB_TEXW, 0, 0, lin, t->plainw, t->plainh, t->plainw);
-    *outw = t->plainw;
-    *outh = t->plainh;
+  if(lin && tex && !cutsample_draw(style, whimsy, set, w, h, lin)) {
+    swizzle_copy(tex, THUMB_TEXW, 0, 0, lin, w, h, w);
+    *outx = x;
+    *outy = y;
+    *outw = w;
+    *outh = h;
   } else {
     free(tex);
     tex = NULL;
@@ -89,6 +95,7 @@ static void thumb_thread(void * arg) {
       int cwork = cgen != t->cuttaken && t->path[0] && t->cuton;
       t->cuttaken = cgen;
       u8 cstyle = t->cutstyle, cwhimsy = t->cutwhimsy, cset = t->cutset;
+      uint32_t ctarget = t->cuttarget;
       if(work || cwork) {
         memcpy(path, t->path, sizeof(path));
         t->busy = 1;
@@ -114,12 +121,14 @@ static void thumb_thread(void * arg) {
       }
       // The cut sample before the disk use, so it shows up sooner
       if(cwork) {
-        u16 w = 0, h = 0;
-        uint32_t * buf = thumb_makecut(t, path, cstyle, cwhimsy, cset, &w, &h);
+        u16 x = 0, y = 0, w = 0, h = 0;
+        uint32_t * buf = thumb_makecut(t, path, cstyle, cwhimsy, cset, ctarget, &x, &y, &w, &h);
         LightLock_Lock(&t->lock);
         if(t->cutwant == cgen) {
           free(t->cutresult);
           t->cutresult = buf;
+          t->cutresultx = x;
+          t->cutresulty = y;
           t->cutresultw = w;
           t->cutresulth = h;
           t->cutdonegen = cgen;
@@ -239,6 +248,7 @@ int thumb_poll(Thumb * t) {
       memcpy(t->cuttex.data, t->cutresult, t->cuttex.size);
       C3D_TexFlush(&t->cuttex);
       t->cutsub = texutil_subtex(0, 0, t->cutresultw, t->cutresulth, THUMB_TEXW, THUMB_TEXH);
+      t->cropsub = texutil_subtex(t->cutresultx, t->cutresulty, t->cutresultw, t->cutresulth, THUMB_TEXW, THUMB_TEXH);
       t->cutstate = THUMB_READY;
     } else {
       t->cutstate = THUMB_FAILED;
@@ -273,15 +283,16 @@ C2D_Image thumb_image(Thumb * t) {
   return (C2D_Image) { .tex = &t->tex, .subtex = &t->sub };
 }
 
-void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set) {
+void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set, uint32_t target) {
   if(!t->running || !t->hascuttex) return;
   LightLock_Lock(&t->lock);
-  int same = t->cuton && t->cutstyle == style && t->cutwhimsy == whimsy && t->cutset == set;
+  int same = t->cuton && t->cutstyle == style && t->cutwhimsy == whimsy && t->cutset == set && t->cuttarget == target;
   if(!same) {
     t->cuton = 1;
     t->cutstyle = style;
     t->cutwhimsy = whimsy;
     t->cutset = set;
+    t->cuttarget = target;
     t->cutwant++;
   }
   LightLock_Unlock(&t->lock);
@@ -295,4 +306,8 @@ int thumb_cutready(Thumb * t) {
 
 C2D_Image thumb_cutimage(Thumb * t) {
   return (C2D_Image) { .tex = &t->cuttex, .subtex = &t->cutsub };
+}
+
+C2D_Image thumb_cropimage(Thumb * t) {
+  return (C2D_Image) { .tex = &t->tex, .subtex = &t->cropsub };
 }

@@ -51,11 +51,13 @@ typedef struct {
   C3D_Tex cuttex;
   Tex3DS_SubTexture cutsub;
   u8 cutstyle, cutwhimsy, cutset;
+  uint32_t cuttarget;           // Piece count: the sample sits on that puzzle's crop
   u8 cuton;                     // A cut sample has been asked for
   u32 cutwant, cuttaken, cutdonegen;
   uint32_t * cutresult;         // Owned; swizzled THUMB_TEXW x THUMB_TEXH, NULL = failed
-  u16 cutresultw, cutresulth;
+  u16 cutresultx, cutresulty, cutresultw, cutresulth;
   u8 cutstate;                  // THUMB_*, main thread only
+  Tex3DS_SubTexture cropsub;    // Main thread: the crop of the picture the cut sample covers
   u8 hascuttex;
   volatile u8 busy;
   volatile u8 quit;
@@ -73,11 +75,14 @@ void thumb_clear(Thumb * t, int wait);
 // Call each frame on the main thread; uploads a finished thumbnail. Returns THUMB_*.
 int thumb_poll(Thumb * t);
 C2D_Image thumb_image(Thumb * t);
-// Ask for the cut sample with these settings over the current (and any later) picture;
-// asking for the settings already wanted does nothing
-void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set);
+// Ask for the cut sample with these settings over the current (and any later) picture,
+// covering the crop a puzzle of about target pieces keeps; asking for the settings already
+// wanted does nothing
+void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set, uint32_t target);
 // The cut sample, if one matching the picture is ready (thumb_poll uploads it)
 int thumb_cutready(Thumb * t);
 C2D_Image thumb_cutimage(Thumb * t);
+// The part of the picture under the cut sample (the puzzle's crop); only when thumb_cutready
+C2D_Image thumb_cropimage(Thumb * t);
 
 #endif

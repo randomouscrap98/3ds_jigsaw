@@ -253,26 +253,36 @@ int main(int argc, char ** argv) {
   uint32_t * cut = malloc(sizeof(uint32_t) * tw * th);
   uint8_t * out = malloc((size_t)tw * th * 3);
   imgscale_area(src, sw, sh, 3, 0, 0, sw, sh, thumb, tw, th);
-  for(uint8_t st = 0; st < CUT_STYLES; st++) {
-    for(uint8_t wh = 0; wh < WHIMSY_LEVELS; wh++) {
-      double t0 = now_ms();
-      if(cutsample_draw(st, wh, WHIMSY_SET_CUTE, tw, th, cut)) {
-        printf("sample %s %s: FAILED\n", stylenames[st], whimnames[wh]);
-        continue;
-      }
-      printf("sample %s %s (%ux%u): %.1f ms\n", stylenames[st], whimnames[wh], tw, th, now_ms() - t0);
-      for(size_t i = 0; i < (size_t)tw * th; i++) {
-        uint32_t p = cut[i];
+  // Every style x whimsy level at 100 pieces, then Classic at each menu piece count (crops)
+  const uint32_t counts[] = { 50, 100, 250, 500 };
+  for(int k = 0; k < CUT_STYLES * WHIMSY_LEVELS + 4; k++) {
+    int each = k < CUT_STYLES * WHIMSY_LEVELS;
+    uint8_t st = each ? k / WHIMSY_LEVELS : CUT_STYLE_CLASSIC, wh = each ? k % WHIMSY_LEVELS : WHIMSY_NONE;
+    uint32_t target = each ? 100 : counts[k - CUT_STYLES * WHIMSY_LEVELS];
+    uint16_t cx, cy, cw, ch;
+    cutsample_crop(tw, th, target, &cx, &cy, &cw, &ch);
+    double t0 = now_ms();
+    if(cutsample_draw(st, wh, WHIMSY_SET_CUTE, cw, ch, cut)) {
+      printf("sample %s %s %u: FAILED\n", stylenames[st], whimnames[wh], target);
+      continue;
+    }
+    printf("sample %s %s %u (%ux%u of %ux%u): %.1f ms\n", stylenames[st], whimnames[wh], target, cw, ch, tw, th,
+        now_ms() - t0);
+    for(uint16_t y = 0; y < ch; y++) {
+      for(uint16_t x = 0; x < cw; x++) {
+        uint32_t p = cut[(size_t)y * cw + x];
+        const uint8_t * in = thumb + 3 * ((size_t)(y + cy) * tw + x + cx);
         float a = (p & 0xFF) / 255.0f;
-        for(int k = 0; k < 3; k++) {
-          float c = (p >> (24 - 8 * k)) & 0xFF;
-          out[3 * i + k] = (uint8_t)(thumb[3 * i + k] * (1 - a) + c * a + 0.5f);
+        for(int c = 0; c < 3; c++) {
+          float v = (p >> (24 - 8 * c)) & 0xFF;
+          out[3 * ((size_t)y * cw + x) + c] = (uint8_t)(in[c] * (1 - a) + v * a + 0.5f);
         }
       }
-      char path[1024];
-      snprintf(path, sizeof path, "%s/sample_%s_%s.png", argv[1], stylenames[st], whimnames[wh]);
-      stbi_write_png(path, tw, th, 3, out, tw * 3);
     }
+    char path[1024];
+    if(each) snprintf(path, sizeof path, "%s/sample_%s_%s.png", argv[1], stylenames[st], whimnames[wh]);
+    else snprintf(path, sizeof path, "%s/sample_crop_%u.png", argv[1], target);
+    stbi_write_png(path, cw, ch, 3, out, cw * 3);
   }
   free(thumb);
   free(cut);

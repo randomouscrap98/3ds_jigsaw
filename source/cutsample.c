@@ -34,6 +34,24 @@ static float cutsample_clamp01(float v) {
   return v < 0 ? 0 : v > 1 ? 1 : v;
 }
 
+void cutsample_crop(uint16_t w, uint16_t h, uint32_t target, uint16_t * x, uint16_t * y, uint16_t * cw, uint16_t * ch) {
+  Layout l;
+  if(layout_crop(&l, w, h, target)) {
+    *x = *y = 0;
+    *cw = w;
+    *ch = h;
+    return;
+  }
+  *cw = (uint16_t)(l.cropw + 0.5f);
+  *ch = (uint16_t)(l.croph + 0.5f);
+  if(*cw > w) *cw = w;
+  if(*ch > h) *ch = h;
+  if(*cw < 1) *cw = 1;
+  if(*ch < 1) *ch = 1;
+  *x = (w - *cw) / 2;
+  *y = (h - *ch) / 2;
+}
+
 int cutsample_draw(uint8_t style, uint8_t whimsy, uint8_t set, uint16_t w, uint16_t h, uint32_t * px) {
   if(!w || !h) return 1;
   uint16_t cols, rows;
@@ -45,11 +63,14 @@ int cutsample_draw(uint8_t style, uint8_t whimsy, uint8_t set, uint16_t w, uint1
   int err = !dist || !xy;
   if(!err) {
     for(size_t i = 0; i < (size_t)w * h; i++) dist[i] = 1e9f;
-    // Cover the whole picture (the grid's shape is close to it), centered
-    float cell = fmaxf((float)w / cols, (float)h / rows);
-    float ox = (w - cols * cell) / 2, oy = (h - rows * cell) / 2;
+    // Stretched to fill the image exactly (a few percent at most), so the border is its edge
+    float sx = (float)w / cols, sy = (float)h / rows;
     for(uint32_t p = 0; p < c.count; p++) {
-      uint32_t n = cutter_outline(&c, p, cell, ox, oy, xy);
+      uint32_t n = cutter_outline(&c, p, 1, 0, 0, xy);
+      for(uint32_t i = 0; i < n; i++) {
+        xy[2 * i] *= sx;
+        xy[2 * i + 1] *= sy;
+      }
       for(uint32_t i = 0; i < n; i++) {
         uint32_t j = (i + 1) % n;
         cutsample_segment(dist, w, h, xy[2 * i], xy[2 * i + 1], xy[2 * j], xy[2 * j + 1]);
