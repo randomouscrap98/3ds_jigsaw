@@ -250,6 +250,7 @@ int thumb_poll(Thumb * t) {
       t->cutsub = texutil_subtex(0, 0, t->cutresultw, t->cutresulth, THUMB_TEXW, THUMB_TEXH);
       t->cropsub = texutil_subtex(t->cutresultx, t->cutresulty, t->cutresultw, t->cutresulth, THUMB_TEXW, THUMB_TEXH);
       t->cutstate = THUMB_READY;
+      t->cutstale = 0;
     } else {
       t->cutstate = THUMB_FAILED;
     }
@@ -283,7 +284,7 @@ C2D_Image thumb_image(Thumb * t) {
   return (C2D_Image) { .tex = &t->tex, .subtex = &t->sub };
 }
 
-void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set, uint32_t target) {
+void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set, uint32_t target, int hideold) {
   if(!t->running || !t->hascuttex) return;
   LightLock_Lock(&t->lock);
   int same = t->cuton && t->cutstyle == style && t->cutwhimsy == whimsy && t->cutset == set && t->cuttarget == target;
@@ -296,12 +297,19 @@ void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set, uint32_t target) {
     t->cutwant++;
   }
   LightLock_Unlock(&t->lock);
-  // The old sample stays up until the new one is ready
-  if(!same) LightEvent_Signal(&t->wake);
+  // The old sample's crop stays either way, so the picture doesn't jump
+  if(!same) {
+    if(hideold) t->cutstale = 1;
+    LightEvent_Signal(&t->wake);
+  }
 }
 
 int thumb_cutready(Thumb * t) {
   return t->cutstate == THUMB_READY && t->state == THUMB_READY;
+}
+
+int thumb_cutcurrent(Thumb * t) {
+  return thumb_cutready(t) && !t->cutstale;
 }
 
 C2D_Image thumb_cutimage(Thumb * t) {

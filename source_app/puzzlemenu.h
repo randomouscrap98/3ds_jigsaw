@@ -22,7 +22,8 @@
 #define PMENU_ACT_NEW 0xFFFFFFFE
 #define PMENU_ACT_RENAME 0xFFFFFFFD
 #define PMENU_ACT_NONE 0xFFFFFFFF
-#define PMENU_VALUEWIDTH 9   // Room for the piece style value in the options menu
+#define PMENU_VALUEWIDTH 13  // Room for the piece style value ("Random Rect") in the options menu; labels
+                             // get PMENU_WIDTH - this - 1 chars (longest: "View finished puzzle (h:mm:ss)")
 #define PMENU_VALUEX 200     // Pixel x of that value column (top screen)
 #define PMENU_OVERLAY_NAMES "None\nHologram\nRainbow"         // OVERLAY_* order
 #define PMENU_MUSIC_NAMES "Off\nIn order\nShuffled"  // Menu order of the music modes
@@ -64,6 +65,7 @@ typedef struct {
   uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
   u8 optcut[PMENU_MAXOPTS];              // Options item shows the cut sample over the picture
   u8 showcut;                            // Cursor is on such an item (or on Continue)
+  u8 cutsrc;                             // Cut sample last asked for: 1 = the save's, 2 = the settings'
   tui_menu_number_t pieces;              // Piece count picked in options: index into the counts
   tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
   tui_menu_number_t whimsy;              // Whimsies picked in options (kept between puzzles)

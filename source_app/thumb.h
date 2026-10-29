@@ -57,6 +57,7 @@ typedef struct {
   uint32_t * cutresult;         // Owned; swizzled THUMB_TEXW x THUMB_TEXH, NULL = failed
   u16 cutresultx, cutresulty, cutresultw, cutresulth;
   u8 cutstate;                  // THUMB_*, main thread only
+  u8 cutstale;                  // Main thread: READY, but for older settings (new one on the way)
   Tex3DS_SubTexture cropsub;    // Main thread: the crop of the picture the cut sample covers
   u8 hascuttex;
   volatile u8 busy;
@@ -77,10 +78,13 @@ int thumb_poll(Thumb * t);
 C2D_Image thumb_image(Thumb * t);
 // Ask for the cut sample with these settings over the current (and any later) picture,
 // covering the crop a puzzle of about target pieces keeps; asking for the settings already
-// wanted does nothing
-void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set, uint32_t target);
-// The cut sample, if one matching the picture is ready (thumb_poll uploads it)
+// wanted does nothing. hideold: the current sample's lines hide until the new one is ready
+// (else they stay up meanwhile)
+void thumb_cut(Thumb * t, u8 style, u8 whimsy, u8 set, uint32_t target, int hideold);
+// A cut sample for this picture is uploaded (thumb_poll does it); maybe for older settings
 int thumb_cutready(Thumb * t);
+// ...and it's for the settings last asked for
+int thumb_cutcurrent(Thumb * t);
 C2D_Image thumb_cutimage(Thumb * t);
 // The part of the picture under the cut sample (the puzzle's crop); only when thumb_cutready
 C2D_Image thumb_cropimage(Thumb * t);
