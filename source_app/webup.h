@@ -5,14 +5,18 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "chunkwriter.h"
+
 // A tiny web server for adding pictures: GET / gives the upload page, POST /upload?name=...
-// with an image body saves it into a folder under a free, safe name. One client at a time,
-// never blocks (call webup_poll every frame), drops a client that goes quiet. Plain BSD
+// with an image body saves it into a folder under a free, safe name. The body streams to
+// the SD through a ChunkWriter (writes on its own thread, so receiving never waits on it).
+// One client at a time, never blocks (call webup_poll every frame), drops a client that
+// goes quiet. Plain BSD
 // sockets: on the 3DS the caller sets up the network (socInit) first; on a PC it just works
 // (host tests). HTTP parsing is picohttpparser.
 
 #define WEBUP_MAXHEAD 8192          // Request line + headers
-#define WEBUP_MAXBODY (8 << 20)     // Biggest upload (the page sends ~1024 px JPEGs: < 1 MB)
+#define WEBUP_MAXBODY (500LL << 20) // Biggest upload (sanity cap)
 #define WEBUP_TIMEOUT_MS 15000      // A client quiet this long is dropped
 #define WEBUP_LINGER_MS 2000        // After a response: wait this long for the client to hang up
 #define WEBUP_CHUNK 16384           // Read/write size
@@ -34,7 +38,8 @@ typedef struct {
   char head[WEBUP_MAXHEAD + 1];
   size_t headlen;
   // Upload being received
-  char * body;              // expect bytes (RAM; written to the SD when complete)
+  ChunkWriter cw;           // Body -> <name>.tmp (open while writing is set)
+  int writing;
   char name[128];           // Final file name
   size_t expect, received;
   // Response being sent

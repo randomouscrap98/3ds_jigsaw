@@ -115,8 +115,26 @@ void test_webup(void) {
   http(&w, port, garbage, strlen(garbage), reply, sizeof(reply), &clock);
   CHECK(!strncmp(reply, "HTTP/1.1 400", 12));
 
-  // A client that stops halfway is dropped after the timeout; nothing reaches the SD (the
-  // body is kept in RAM until complete)
+  // Bigger than both buffers: arrives intact
+  size_t mlen = 2 * CHUNKWRITER_SIZE + 12345;
+  char * mreq = malloc(mlen + 256);
+  h = sprintf(mreq, "POST /upload?name=big HTTP/1.1\r\nContent-Length: %lu\r\n\r\n", (unsigned long)mlen);
+  for(size_t i = 0; i < mlen; i++) mreq[h + i] = (char)(i * 7 + i / 1000);
+  mreq[h] = (char)0xFF; mreq[h + 1] = (char)0xD8;
+  ev = http(&w, port, mreq, h + mlen, reply, sizeof(reply), &clock);
+  CHECK((ev & WEBUP_EV_SAVED) && strstr(reply, "Saved as big.jpg") != NULL);
+  char bp[512];
+  snprintf(bp, sizeof(bp), "%s/big.jpg", dir);
+  FILE * bf = fopen(bp, "rb");
+  char * back = malloc(mlen + 1);
+  size_t bn = bf ? fread(back, 1, mlen + 1, bf) : 0;
+  if(bf) fclose(bf);
+  CHECK(bn == mlen && !memcmp(back, mreq + h, mlen));
+  free(back);
+  free(mreq);
+  remove(bp);
+
+  // A client that stops halfway is dropped after the timeout; its .tmp is removed
   int s = socket(AF_INET, SOCK_STREAM, 0);
   struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(port) };
   a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
@@ -125,7 +143,7 @@ void test_webup(void) {
   CHECK(send(s, part, strlen(part), MSG_NOSIGNAL) > 0);
   ev = 0;
   for(int i = 0; i < 1000; i++) ev |= webup_poll(&w, ++clock);
-  CHECK((ev & WEBUP_EV_BUSY) && exists(dir, "stuck.jpg.tmp") < 0);
+  CHECK((ev & WEBUP_EV_BUSY) && exists(dir, "stuck.jpg") < 0);
   clock += WEBUP_TIMEOUT_MS + 1;
   ev = webup_poll(&w, clock);
   CHECK((ev & WEBUP_EV_ERROR) && exists(dir, "stuck.jpg.tmp") < 0 && exists(dir, "stuck.jpg") < 0);

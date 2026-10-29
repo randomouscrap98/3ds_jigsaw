@@ -65,10 +65,25 @@ int webup_start(WebUp * w, int port, const char * page, size_t pagelen, const ch
   return 0;
 }
 
+// The upload's final and temporary paths
+static void webup_paths(WebUp * w, char * path, char * tmp) {
+  snprintf(path, STORAGE_MAXPATH, "%s/%s", w->dir, w->name);
+  storage_tmppath(path, tmp);
+}
+
+// Throw away an unfinished upload (stop writing, remove the .tmp)
+static void webup_discard(WebUp * w) {
+  if(!w->writing) return;
+  chunkwriter_abort(&w->cw);
+  w->writing = 0;
+  char path[STORAGE_MAXPATH], tmp[STORAGE_MAXTMP];
+  webup_paths(w, path, tmp);
+  storage_commit(path, 0);
+}
+
 // Drop the client; an unfinished upload is thrown away
 static void webup_drop(WebUp * w) {
-  free(w->body);
-  w->body = NULL;
+  webup_discard(w);
   if(w->csock >= 0) close(w->csock);
   w->csock = -1;
   w->state = WEBUP_IDLE;
@@ -138,21 +153,18 @@ static void webup_respond(WebUp * w, int code, const char * reason, const char *
 }
 
 static int webup_fail(WebUp * w, int code, const char * reason, const char * why) {
+  webup_discard(w);
   WEBUP_MSG_SET(w, "%s", why);
   webup_respond(w, code, reason, "text/plain; charset=utf-8", why, NULL, 0);
   return WEBUP_EV_ERROR;
 }
 
-// Whole upload received (in RAM): write it out, keep it if it's a usable picture
+// Whole upload received: finish writing, keep it if it's a usable picture
 static int webup_finish(WebUp * w) {
   char path[STORAGE_MAXPATH], tmp[STORAGE_MAXTMP];
-  snprintf(path, sizeof(path), "%s/%s", w->dir, w->name);
-  storage_tmppath(path, tmp);
-  FILE * f = fopen(tmp, "wb");
-  int ok = f && fwrite(w->body, 1, w->expect, f) == w->expect;
-  if(f && fclose(f)) ok = 0;
-  free(w->body);
-  w->body = NULL;
+  webup_paths(w, path, tmp);
+  int ok = !chunkwriter_close(&w->cw);
+  w->writing = 0;
   if(!ok) {
     storage_commit(path, 0);
     return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (full?)");
@@ -169,10 +181,14 @@ static int webup_finish(WebUp * w) {
   return WEBUP_EV_SAVED;
 }
 
-// Body bytes that came with the headers; finishes when all are in
+// Body bytes that came with the headers (fewer than one buffer); finishes when all are in
 static int webup_body(WebUp * w, const char * data, size_t len) {
+  size_t room;
+  char * dst = chunkwriter_space(&w->cw, &room);
   if(len > w->expect - w->received) len = w->expect - w->received;
-  memcpy(w->body + w->received, data, len);
+  if(len > room) len = room;
+  memcpy(dst, data, len);
+  chunkwriter_wrote(&w->cw, len);
   w->received += len;
   return w->received >= w->expect ? webup_finish(w) : WEBUP_EV_BUSY;
 }
@@ -204,7 +220,7 @@ static int webup_route(WebUp * w, size_t hlen, const char * method, size_t mlen,
     }
   }
   if(length == -1) return webup_fail(w, 411, "Length Required", "Upload had no length");
-  if(length < 0 || length > WEBUP_MAXBODY) return webup_fail(w, 413, "Payload Too Large", "Picture too big");
+  if(length < 0 || length > WEBUP_MAXBODY) return webup_fail(w, 413, "Payload Too Large", "File too big");
   if(length == 0) return webup_fail(w, 400, "Bad Request", "Upload was empty");
   char raw[256], base[STORAGE_MAXBASE + 1];
   if(webup_query(path, plen, "name", raw, sizeof(raw))) raw[0] = 0;
@@ -212,10 +228,15 @@ static int webup_route(WebUp * w, size_t hlen, const char * method, size_t mlen,
   if(storage_freename(w->dir, base, ".jpg", w->name, sizeof(w->name))) {
     return webup_fail(w, 409, "Conflict", "Too many pictures with that name");
   }
-  // The body goes to RAM and is written in one go at the end: SD writes while receiving
-  // stalled the 3DS's tiny (~8 KB) receive window. length was checked against WEBUP_MAXBODY.
-  w->body = malloc(length);
-  if(!w->body) return webup_fail(w, 503, "Service Unavailable", "Not enough memory for that picture");
+  // SD writes on this thread stalled the 3DS's tiny (~8 KB) receive window, so the
+  // ChunkWriter writes on its own
+  char full[STORAGE_MAXPATH], tmp[STORAGE_MAXTMP];
+  webup_paths(w, full, tmp);
+  if(chunkwriter_open(&w->cw, tmp)) {
+    storage_commit(full, 0);
+    return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (or out of memory)");
+  }
+  w->writing = 1;
   w->expect = length;
   w->received = 0;
   w->state = WEBUP_BODY;
@@ -254,8 +275,14 @@ static int webup_step(WebUp * w, uint64_t now, size_t * moved) {
     return webup_route(w, r, method, mlen, path, plen, hd, nh);
   }
   if(w->state == WEBUP_BODY) {
-    size_t want = w->expect - w->received < WEBUP_CHUNK ? w->expect - w->received : WEBUP_CHUNK;
-    ssize_t n = recv(w->csock, w->body + w->received, want, 0);
+    if(chunkwriter_failed(&w->cw)) return webup_fail(w, 500, "Internal Server Error", "Couldn't write to the SD card (full?)");
+    size_t room;
+    char * dst = chunkwriter_space(&w->cw, &room);
+    if(!dst) return 0;  // Both buffers still being written: let TCP hold the rest
+    size_t want = w->expect - w->received;
+    if(want > room) want = room;
+    if(want > WEBUP_CHUNK) want = WEBUP_CHUNK;
+    ssize_t n = recv(w->csock, dst, want, 0);
     if(n == 0 || (n < 0 && !webup_wouldblock())) {
       WEBUP_MSG_SET(w, "Upload cut off");
       webup_drop(w);
@@ -264,6 +291,7 @@ static int webup_step(WebUp * w, uint64_t now, size_t * moved) {
     if(n < 0) return 0;
     w->last = now;
     *moved = n;
+    chunkwriter_wrote(&w->cw, n);
     w->received += n;
     return w->received >= w->expect ? webup_finish(w) : WEBUP_EV_BUSY;
   }

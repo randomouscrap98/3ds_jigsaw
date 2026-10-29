@@ -32,6 +32,7 @@ void test_savefile(void);
 void test_sfxgen(void);
 void test_storage(void);
 void test_webup(void);
+void test_chunkwriter(void);
 void test_picfiles(void);
 void test_overlay(void);
 void test_dump_sfx(const char * dir);

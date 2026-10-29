@@ -39,6 +39,7 @@ int main(int argc, char ** argv) {
   RUN(test_savefile);
   RUN(test_sfxgen);
   RUN(test_storage);
+  RUN(test_chunkwriter);
   RUN(test_webup);
   RUN(test_picfiles);
   RUN(test_overlay);

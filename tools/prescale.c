@@ -1,9 +1,9 @@
 // Host tool: shrink an image so its long side is at most MAXSIDE and write it out as a
-// lossless PNG, or as a JPEG if out ends in .jpg (quality PRESCALE_JPGQ, 4:4:4).
+// lossless PNG, or as a JPEG if out ends in .jpg (quality PRESCALE_JPGQ or the given one, 4:4:4).
 // Uses the same area-average scaler as the 3DS (source/imgscale.c). Never upscales.
 // Near-black borders (like museum photos shot against black) are trimmed first, plus a
 // small inset so no dark fringe survives.
-//   prescale <maxside> <in> <out.png|out.jpg>
+//   prescale <maxside> <in> <out.png|out.jpg> [jpeg quality]
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,11 +32,11 @@ static float prescale_line(const uint8_t * p, int w, int x, int y, int dx, int d
 #include "stb_image_write.h"
 
 int main(int argc, char ** argv) {
-  if(argc != 4) {
-    fprintf(stderr, "usage: %s <maxside> <in> <out.png|out.jpg>\n", argv[0]);
+  if(argc != 4 && argc != 5) {
+    fprintf(stderr, "usage: %s <maxside> <in> <out.png|out.jpg> [jpeg quality]\n", argv[0]);
     return 2;
   }
-  int maxside = atoi(argv[1]), w, h, n;
+  int maxside = atoi(argv[1]), quality = argc == 5 ? atoi(argv[4]) : PRESCALE_JPGQ, w, h, n;
   uint8_t * src = stbi_load(argv[2], &w, &h, &n, 3);
   if(!src) {
     fprintf(stderr, "%s: %s\n", argv[2], stbi_failure_reason());
@@ -64,7 +64,7 @@ int main(int argc, char ** argv) {
   const char * ext = strrchr(argv[3], '.');
   int ok;
   if(ext && (!strcasecmp(ext, ".jpg") || !strcasecmp(ext, ".jpeg"))) {
-    ok = stbi_write_jpg(argv[3], dw, dh, 3, dst, PRESCALE_JPGQ);
+    ok = stbi_write_jpg(argv[3], dw, dh, 3, dst, quality);
   } else {
     stbi_write_png_compression_level = 9;
     ok = stbi_write_png(argv[3], dw, dh, 3, dst, dw * 3);

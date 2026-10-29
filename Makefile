@@ -38,6 +38,10 @@ DATA		:=	data
 INCLUDES	:=	source source/external source_app
 GRAPHICS	:=	gfx
 ROMFS		:=	romfs
+# Lite build: same app, default puzzles from ROMFS_LITE (q70) in place of romfs/puzzles
+ROMFS_LITE	:=	romfs_lite
+LITE		:=	$(TARGET)_lite
+LITEROMFS	:=	$(BUILD)/romfs_lite
 GFXBUILD	:=	$(BUILD)
 APP_TITLE := 3DS Jigsaw
 APP_DESCRIPTION := Jigsaw puzzles from your own pictures
@@ -46,7 +50,7 @@ APP_AUTHOR := haloopdy
 # App version: the only place to change it (shown in the menu, stamped in saves, CIA
 # version). Objects depend on this Makefile, so changing it rebuilds everything.
 APP_VERSION_MAJOR := 1
-APP_VERSION_MINOR := 2
+APP_VERSION_MINOR := 3
 APP_VERSION_MICRO := 0
 APP_VERSION_STRING := $(APP_VERSION_MAJOR).$(APP_VERSION_MINOR).$(APP_VERSION_MICRO)
 
@@ -71,7 +75,7 @@ CFLAGS	:=	-g -Wall -Wno-undef -O2 -mword-relocations \
 
 CFLAGS	+=	$(INCLUDE) -D__3DS__ \
 			-DAPP_VERSION_MAJOR=$(APP_VERSION_MAJOR) -DAPP_VERSION_MINOR=$(APP_VERSION_MINOR) -DAPP_VERSION_MICRO=$(APP_VERSION_MICRO) \
-			-DAPP_VERSION_STRING=\"$(APP_VERSION_STRING)\"
+			-DAPP_VERSION_STRING=\"$(APP_VERSION_STRING)\" $(EXTRA_CFLAGS)
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 
@@ -168,7 +172,7 @@ ifneq ($(ROMFS),)
 	export _3DSXFLAGS += --romfs=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: all clean cia 3dsx
+.PHONY: all clean cia 3dsx lite
 
 #---------------------------------------------------------------------------------
 # CIA tool configuration
@@ -181,14 +185,11 @@ MAKEROM_ARGS	:=	-elf "$(OUTPUT).elf" -rsf "$(RSF_PATH)" \
 					-DAPP_TITLE="$(APP_TITLE)" \
 					-DAPP_PRODUCT_CODE="$(PRODUCT_CODE)" \
 					-DAPP_UNIQUE_ID="$(UNIQUE_ID)" \
-					-DAPP_VERSION_MAJOR="$(APP_VERSION_MAJOR)"
-
-ifneq ($(strip $(ROMFS)),)
-	MAKEROM_ARGS	+=	-DAPP_ROMFS="$(ROMFS)"
-endif
+					-DAPP_VERSION_MAJOR="$(APP_VERSION_MAJOR)" \
+					-major $(APP_VERSION_MAJOR) -minor $(APP_VERSION_MINOR) -micro $(APP_VERSION_MICRO)
 
 #---------------------------------------------------------------------------------
-all: 3dsx
+all: 3dsx lite
 
 #---------------------------------------------------------------------------------
 3dsx:
@@ -196,19 +197,31 @@ all: 3dsx
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
-cia: 3dsx
+# Lite: the same .elf and .smdh with the lite romfs (assembled fresh each time)
+lite: 3dsx
+	@rm -rf $(LITEROMFS)
+	@cp -r $(ROMFS) $(LITEROMFS)
+	@rm -rf $(LITEROMFS)/puzzles
+	@cp -r $(ROMFS_LITE)/puzzles $(LITEROMFS)/puzzles
+	@3dsxtool $(OUTPUT).elf $(LITE).3dsx $(filter-out --romfs=%,$(_3DSXFLAGS)) --romfs=$(LITEROMFS)
+	@echo built ... $(LITE).3dsx
+
+#---------------------------------------------------------------------------------
+# Both CIAs share the title ID: installing one replaces the other
+cia: 3dsx lite
 	@echo Building CIA...
 	@$(BANNERTOOL) makebanner -i $(BANNER_IMAGE) -a $(BANNER_AUDIO) -o $(BUILD)/banner.bnr
 	@$(BANNERTOOL) makesmdh -s "$(APP_TITLE)" -l "$(APP_DESCRIPTION)" \
 		-p "$(APP_AUTHOR)" -i $(APP_ICON) -o $(BUILD)/icon.icn
-	@$(MAKEROM) -f cia -o $(OUTPUT).cia -target t -exefslogo \
-		$(MAKEROM_ARGS) -major $(APP_VERSION_MAJOR) -minor $(APP_VERSION_MINOR) -micro $(APP_VERSION_MICRO)
+	@$(MAKEROM) -f cia -o $(OUTPUT).cia -target t -exefslogo $(MAKEROM_ARGS) -DAPP_ROMFS="$(ROMFS)"
 	@echo Built $(TARGET).cia
+	@$(MAKEROM) -f cia -o $(LITE).cia -target t -exefslogo $(MAKEROM_ARGS) -DAPP_ROMFS="$(LITEROMFS)"
+	@echo Built $(LITE).cia
 
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf $(TARGET).cia
+	@rm -fr $(BUILD) $(TARGET).3dsx $(OUTPUT).smdh $(TARGET).elf $(TARGET).cia $(LITE).3dsx $(LITE).cia
 
 
 #---------------------------------------------------------------------------------
