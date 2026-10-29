@@ -37,6 +37,9 @@
 #define GAME_MARQUEE_SPEED 30.0f  // Song name scroll, pixels per second
 #define GAME_SELECTKEYS (KEY_A | KEY_DLEFT)  // Held at touch-down: box-select / tap-toggle
 #define GAME_TAPDIST 6            // Stylus moving less than this (pixels) is a tap, not a box
+#define GAME_TURNDIST 10          // Tapping a piece (moving less than this, pixels)...
+#define GAME_TURNMS 250           // ...and letting go within this turns it, unless it would snap
+#define GAME_TURNMAX 50           // Groups bigger than this don't turn on a tap
 
 #define GAME_EV_MERGE    (1 << 0)
 #define GAME_EV_COMPLETE (1 << 1)
@@ -105,8 +108,9 @@ typedef struct {
   uint32_t nsel;          // Number of selected groups
   uint8_t * boxsel;       // Scratch: what the box being drawn covers (for display)
   float boxwx, boxwy;     // World point where the box started
-  float boxsx, boxsy;     // Screen point where the box started
-  float boxmove;          // Farthest the stylus got from the box start (pixels)
+  float downsx, downsy;   // Screen point where the stylus touched down
+  float downmove;         // Farthest the stylus got from there (pixels)
+  u64 downms;             // osGetTime at touch-down
   float lastwx, lastwy;   // World point under the stylus last frame
   float lastsx, lastsy;   // Screen point of the stylus last frame
   u8 dirty;

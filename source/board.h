@@ -52,6 +52,8 @@ void board_raise(Board * b, uint16_t group);
 void board_move(Board * b, uint16_t group, float dx, float dy);
 // Rotate group a quarter turn (dir +1 = clockwise, -1 = counterclockwise) around pivot
 void board_rotate(Board * b, uint16_t group, int dir, float px, float py);
+// Would board_drop merge anything? (Changes nothing)
+int board_can_merge(Board * b, uint16_t group, float snap);
 // Let go of a group: snap/merge it with any matching neighbours within snap distance.
 // Repeats until nothing else merges. The dropped group keeps its id and absorbs the
 // others. It moves to line up with the first one it snaps to; in the merges that follow

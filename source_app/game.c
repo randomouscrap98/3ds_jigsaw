@@ -200,7 +200,7 @@ static void game_movesel(Game * g, float dx, float dy) {
 static void game_endbox(Game * g) {
   float wx, wy;
   camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
-  if(g->boxmove < GAME_TAPDIST) {
+  if(g->downmove < GAME_TAPDIST) {
     int32_t gid = board_pick(&g->board, wx, wy);
     if(gid >= 0) {
       g->sel[gid] = !g->sel[gid];
@@ -222,7 +222,15 @@ static int game_release(Game * g) {
     // Moving a selection never snaps: it only goes where it's put
     g->dirty = 1;
   } else if(g->held >= 0) {
-    int merges = board_drop(&g->board, g->held, g->board.geo->cell * GAME_SNAP);
+    // A quick tap turns the group a quarter, around the stylus, unless it would snap where
+    // it is (snapping wins, so turns are deliberate)
+    Board * b = &g->board;
+    float snap = b->geo->cell * GAME_SNAP;
+    if(g->downmove < GAME_TURNDIST && osGetTime() - g->downms < GAME_TURNMS &&
+       b->groups[g->held].count <= GAME_TURNMAX && !board_can_merge(b, g->held, snap)) {
+      board_rotate(b, g->held, 1, g->lastwx, g->lastwy);
+    }
+    int merges = board_drop(b, g->held, snap);
     if(merges) ev |= GAME_EV_MERGE;
     if(merges && board_complete(&g->board)) ev |= GAME_EV_COMPLETE;
     g->dirty = 1;
@@ -321,9 +329,6 @@ int game_update(Game * g, const GameInput * gin) {
       g->boxing = 1;
       g->boxwx = wx;
       g->boxwy = wy;
-      g->boxsx = in->touch.px;
-      g->boxsy = in->touch.py;
-      g->boxmove = 0;
     } else if(gid >= 0 && g->sel[gid]) {
       g->held = gid;
       g->movingsel = 1;
@@ -346,15 +351,17 @@ int game_update(Game * g, const GameInput * gin) {
     g->lastwy = wy;
     g->lastsx = in->touch.px;
     g->lastsy = in->touch.py;
+    g->downsx = in->touch.px;
+    g->downsy = in->touch.py;
+    g->downmove = 0;
+    g->downms = now;
   } else if(in->held & KEY_TOUCH) {
     float sx = in->touch.px, sy = in->touch.py;
-    if(g->boxing) {
-      float d = hypotf(sx - g->boxsx, sy - g->boxsy);
-      if(d > g->boxmove) g->boxmove = d;
-    }
+    float d = hypotf(sx - g->downsx, sy - g->downsy);
+    if(d > g->downmove) g->downmove = d;
     if(g->panning) {
       camera_pan(c, g->lastsx - sx, g->lastsy - sy);
-    } else if(g->held >= 0 || (g->boxing && g->boxmove >= GAME_TAPDIST)) {
+    } else if(g->held >= 0 || (g->boxing && g->downmove >= GAME_TAPDIST)) {
       // Dragging near the edge scrolls the table along
       float ex = 0, ey = 0;
       if(sx < GAME_EDGEPAN) ex = -GAME_EDGEPANSPEED;
@@ -409,7 +416,7 @@ int game_update(Game * g, const GameInput * gin) {
 }
 
 void game_render_bottom(Game * g, Render * r) {
-  if(g->boxing && g->boxmove >= GAME_TAPDIST) {
+  if(g->boxing && g->downmove >= GAME_TAPDIST) {
     // Show what the box would select while it's being drawn (it replaces the selection)
     float wx, wy;
     camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);

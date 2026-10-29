@@ -197,6 +197,10 @@ static int32_t board_find_merge(Board * b, uint16_t gid, float snap) {
   return -1;
 }
 
+int board_can_merge(Board * b, uint16_t group, float snap) {
+  return board_find_merge(b, group, snap) >= 0;
+}
+
 int board_drop(Board * b, uint16_t group, float snap) {
   int merges = 0;
   for(;;) {
