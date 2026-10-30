@@ -1,6 +1,7 @@
 #include "test.h"
 #include "geom.h"
 #include "cutter.h"
+#include "woodcut.h"
 #include "boardsave.h"
 #include "savefile.h"
 #include "rng.h"
@@ -33,14 +34,14 @@ void test_cutgraph_grid(void) {
 }
 
 
-// Whimsy cuts: same checks as random cuts, for every style and level
-void test_whimsy(void) {
-  for(uint8_t st = 0; st < CUT_STYLES; st++) {
-    if(st == CUT_STYLE_WOODEN4) continue;   // No whimsies yet
+// Whimsy cuts: same checks as random cuts, for one style (wooden ones too) at every level
+void test_whimsy_style(uint8_t st) {
+  if(st == CUT_STYLE_WOODEN4) return;   // No whimsies yet
+  {
     for(uint8_t wh = WHIMSY_FEW; wh <= WHIMSY_MANY; wh++) {
       Cutter c, d;
-      CHECK(cutter_init(&c, st, wh, WHIMSY_SET_CUTE, 16, 11, 300 + st) == 0);
-      CHECK(cutter_init(&d, st, wh, WHIMSY_SET_CUTE, 16, 11, 300 + st) == 0);
+      CHECK(woodcut_init(&c, st, wh, WHIMSY_SET_CUTE, 16, 11, 300 + st) == 0);
+      CHECK(woodcut_init(&d, st, wh, WHIMSY_SET_CUTE, 16, 11, 300 + st) == 0);
       CHECK(c.whimsies > 0 && c.count == 16 * 11 + c.whimsies && c.usegraph);
       const CutGraph * g = &c.g;
       CHECK(d.count == c.count && d.g.ne == g->ne && !memcmp(d.g.e, g->e, sizeof(CutEdge) * g->ne) &&
@@ -87,6 +88,10 @@ void test_whimsy(void) {
       cutter_free(&c);
     }
   }
+}
+
+void test_whimsy(void) {
+  for(uint8_t st = 0; st < CUT_STYLES; st++) test_whimsy_style(st);
 }
 
 

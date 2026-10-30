@@ -1,7 +1,4 @@
 #include "cutter.h"
-#include "strokecut.h"
-#include "pottscut.h"
-#include "snakecut.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -15,52 +12,26 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
   c->cols = cols;
   c->rows = rows;
   c->count = (uint32_t)cols * rows;
-  int rnd = c->style >= CUT_STYLE_RANDOM;
-  const RandCutStyle * rst = randcut_style(c->style == CUT_STYLE_RANDRECT ? RANDCUT_STYLE_RECT :
-      c->style == CUT_STYLE_WOODEN ? RANDCUT_STYLE_WOOD : c->style == CUT_STYLE_WOODEN2 ? RANDCUT_STYLE_WOOD2 :
-      RANDCUT_STYLE_EVEN);
-  if(!rnd && c->whimsy == WHIMSY_NONE) {
+  if(c->style < CUT_STYLE_RANDOM && c->whimsy == WHIMSY_NONE) {
     if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;
     return 0;
   }
+  return cutter_graph(c, c->style < CUT_STYLE_RANDOM ? NULL :
+      randcut_style(c->style == CUT_STYLE_RANDRECT ? RANDCUT_STYLE_RECT : RANDCUT_STYLE_EVEN), seed);
+}
+
+int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed) {
+  int rnd = rst != NULL;
+  uint16_t cols = c->cols, rows = c->rows;
   c->usegraph = 1;
-  if(c->style == CUT_STYLE_WOODEN2 || c->style == CUT_STYLE_WOODEN3 || c->style == CUT_STYLE_WOODEN4 ||
-      c->style == CUT_STYLE_WOODEN5) {
-    // Stroke / Potts cut: whimsies are part of them (placed first). Wooden2's tab rules for both.
-    CutTabStyle ts;
-    randcut_tabstyle(randcut_style(RANDCUT_STYLE_WOOD2), &ts);
-    if(c->whimsy != WHIMSY_NONE) ts.whimsytab = WHIMSY_TABEDGE;
-    int ok = 0;
-    for(uint32_t t = 0; t < RANDCUT_MAXTRIES && !ok; t++) {
-      uint32_t s = randcut_tryseed(seed, t);
-      int gerr = c->style == CUT_STYLE_WOODEN2 ? strokecut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s)
-          : c->style == CUT_STYLE_WOODEN4 ? snakecut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s, snakecut_style(SNAKECUT_STYLE_DEFAULT))
-          : c->style == CUT_STYLE_WOODEN5 ? snakecut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s, snakecut_style(SNAKECUT_STYLE_TJUNCTION))
-          : pottscut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s, pottscut_style(POTTSCUT_STYLE_DEFAULT));
-      if(gerr) continue;
-      if(c->style == CUT_STYLE_WOODEN3 || c->style == CUT_STYLE_WOODEN4) {
-        // Potts / snake pieces interlock by their shapes: no knobs
-        c->g.tries = t + 1;
-        ok = 1;
-        break;
-      }
-      if(!cutgraph_tabs(&c->g, &ts, s)) {
-        c->g.tries = t + 1;
-        ok = 1;
-      } else {
-        cutgraph_free(&c->g);
-      }
-    }
-    if(!ok) return 1;
-    c->whimsies = c->g.count - c->count;
-  } else if(rnd && c->whimsy == WHIMSY_NONE) {
+  if(rnd && c->whimsy == WHIMSY_NONE) {
     if(randcut_init(&c->g, cols, rows, c->count, seed, rst)) return 1;
   } else {
     // Whimsies go in before tabs; a cut that can't be tabbed cleanly is retried with new
     // whimsy spots (and for random, new points)
     CutTabStyle ts;
-    randcut_tabstyle(rst, &ts);
+    randcut_tabstyle(rnd ? rst : randcut_style(RANDCUT_STYLE_EVEN), &ts);
     ts.whimsytab = WHIMSY_TABEDGE;
     if(!rnd) {
       ts.jitter = edgegen_style(c->style);

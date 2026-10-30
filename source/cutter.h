@@ -10,19 +10,14 @@
 #include <stdint.h>
 
 // Cut styles as stored in saves, cache names and the menu. 0-2 are grid cuts (edgegen
-// styles), 3-5 are random (Voronoi) cuts: scattered points, points on a jittered grid, or
-// scattered points with waved edges and mixed knobs (wooden).
+// styles), 3-4 are random (Voronoi) cuts: scattered points or points on a jittered grid.
+// (The shelved wooden experiments live in woodcut, numbered from CUT_STYLES.)
 #define CUT_STYLE_CLASSIC 0
 #define CUT_STYLE_IRREGULAR 1
 #define CUT_STYLE_WILD 2
 #define CUT_STYLE_RANDOM 3
 #define CUT_STYLE_RANDRECT 4
-#define CUT_STYLE_WOODEN 5      // Not in the menu yet (previews)
-#define CUT_STYLE_WOODEN2 6     // Not in the menu yet (previews): stroke cut (strokecut) + snakes
-#define CUT_STYLE_WOODEN3 7     // Not in the menu yet (previews): cellular Potts cut (pottscut)
-#define CUT_STYLE_WOODEN4 8     // Not in the menu yet (previews): stroke cut + painted snakes (snakecut)
-#define CUT_STYLE_WOODEN5 9     // Not in the menu yet (previews): stroke cut + T-junction snakes (snakecut) + Wooden2 knobs
-#define CUT_STYLES 10
+#define CUT_STYLES 5
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
 
@@ -45,6 +40,10 @@ typedef struct {
 // whimsy levels/sets are none/cute. Returns 0 on success.
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed);
 void cutter_free(Cutter * c);
+// For cutter_init and woodcut: with style, whimsy, set, cols, rows and count filled in,
+// builds c->g (usegraph): a random cut with rst, or a grid (edgegen style c->style) with
+// whimsies when rst is NULL. Sets whimsies, count and maxpoints. Returns 0 on success.
+int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed);
 // Closed outline of piece p (clockwise, y down) in the puzzle frame scaled by cell, then
 // offset by (ox, oy). xy must hold maxpoints pairs. Returns the number of points.
 uint32_t cutter_outline(const Cutter * c, uint32_t p, float cell, float ox, float oy, float * xy);

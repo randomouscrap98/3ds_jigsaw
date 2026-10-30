@@ -100,6 +100,8 @@ typedef struct {
   uint8_t music;          // Music mode (SAVEFILE_MUSIC_*), saved with the puzzle
   uint8_t volume;         // Music volume (SAVEFILE_VOLUME_*), saved with the puzzle
   SaveWriter * writer;    // Where saves go (NULL = write immediately)
+  progress_fn progress;   // Status screen for blocking saves (game_init's cb; may be NULL)
+  void * progressdata;
   int32_t held;           // Group being dragged, or -1
   u8 panning;             // Stylus is dragging the table
   u8 boxing;              // Stylus is drawing a selection box (or tapping to toggle)

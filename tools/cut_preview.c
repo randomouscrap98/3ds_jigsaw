@@ -6,7 +6,7 @@
 // (solved, whimsies tinted) and OUTDIR/<style>_<whimsy>_<count>_pieces.png (the image on
 // the pieces, pulled apart), OUTDIR/sample_<style>_<whimsy>.png (the menu's cut sample over
 // the picture at thumbnail size), plus stats on stdout.
-#include "cutter.h"
+#include "woodcut.h"
 #include "piecebake.h"
 #include "imgscale.h"
 #include "layout.h"
@@ -217,7 +217,7 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "can't load %s\n", imgpath);
     return 1;
   }
-  const char * stylenames[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "wooden", "wooden2", "wooden3", "wooden4", "wooden5" };
+  const char * stylenames[WOODCUT_STYLES_END] = { "classic", "irregular", "wild", "random", "randrect", "wooden", "wooden2", "wooden3", "wooden4", "wooden5" };
   // Only these styles (comma separated names), and then no shape sheet or crop samples
   const char * only = argc > 4 ? argv[4] : NULL;
 #define WANT(st) wanted(only, stylenames[st])
@@ -233,7 +233,7 @@ int main(int argc, char ** argv) {
         layout_grid(sw, sh, targets[t], &cols, &rows);
         Cutter c;
         double t0 = now_ms();
-        if(cutter_init(&c, styles[si], wh, WHIMSY_SET_CUTE, cols, rows, seed)) {
+        if(woodcut_init(&c, styles[si], wh, WHIMSY_SET_CUTE, cols, rows, seed)) {
           printf("%s %s %u: FAILED\n", stylenames[styles[si]], whimnames[wh], targets[t]);
           continue;
         }

@@ -19,6 +19,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   memset(g, 0, sizeof(Game));
   g->held = -1;
   g->writer = writer;
+  g->progress = cb;
+  g->progressdata = udata;
   g->music = music;
   snprintf(g->name, sizeof(g->name), "%s", name);
   int cont = target == 0;
@@ -301,6 +303,8 @@ int game_update(Game * g, const GameInput * gin) {
 
   if(in->down & KEY_START) {
     ev |= game_release(g);
+    // The SD can take seconds (waiting on an autosave in flight too): don't look frozen
+    if(g->progress) g->progress(g->progressdata, "Saving...", 0, 1);
     // Leaving after a failed save would lose the progress, so stay and say so
     if(game_save(g, 0) == 0) return ev | GAME_EV_EXIT;
   }

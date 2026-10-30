@@ -1,15 +1,15 @@
 # Host-side test build for the pure modules in source/. Plain gcc, no devkitPro.
 #   make -f Makefile.host        build + run tests
 CC      ?= gcc
-CFLAGS  := -g -O1 -Wall -Wextra -Wno-unused-parameter -std=gnu11 -Isource -Isource/external -Isource_app -fsanitize=address,undefined
-SRCS    := $(wildcard source/*.c) source/external/littlemenu.c source/external/stb_vorbis.c source_app/storage.c source_app/webup.c source_app/chunkwriter.c source_app/picfiles.c source/external/picohttpparser.c $(wildcard source_test/*.c)
+CFLAGS  := -g -O1 -Wall -Wextra -Wno-unused-parameter -std=gnu11 -Isource -Isource/wood -Isource/external -Isource_app -fsanitize=address,undefined
+SRCS    := $(wildcard source/*.c) $(wildcard source/wood/*.c) source/external/littlemenu.c source/external/stb_vorbis.c source_app/storage.c source_app/webup.c source_app/chunkwriter.c source_app/picfiles.c source/external/picohttpparser.c $(wildcard source_test/*.c)
 OUT     := build_host/tests
 
 .PHONY: test clean
 test: $(OUT)
 	./$(OUT)
 
-$(OUT): $(SRCS) $(wildcard source/*.h) source_app/storage.h source_app/webup.h source_app/chunkwriter.h source_app/picfiles.h $(wildcard source_test/*.h)
+$(OUT): $(SRCS) $(wildcard source/*.h) $(wildcard source/wood/*.h) source_app/storage.h source_app/webup.h source_app/chunkwriter.h source_app/picfiles.h $(wildcard source_test/*.h)
 	@mkdir -p build_host
 	$(CC) $(CFLAGS) $(SRCS) -lm -pthread -o $@
 
@@ -28,10 +28,10 @@ build_host/makeart: tools/makeart.c source/edgegen.c source/imgscale.c source/rn
 	$(CC) -O2 -Wall -Isource -Itools tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c -lm -o $@
 
 # Cut preview (tools/cut_preview.c): whimsy shapes + cuts with whimsies, for tuning
-CUTSRCS := source/snakecut.c source/pottscut.c source/knobs.c source/cornerbend.c source/strokecut.c source/cutsample.c source/swizzle.c source/geom.c source/cutter.c source/randcut.c source/cutgraph.c source/whimsy.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c
-build_host/cut_preview: tools/cut_preview.c $(CUTSRCS) $(wildcard source/*.h)
+CUTSRCS := source/wood/woodcut.c source/wood/snakecut.c source/wood/pottscut.c source/knobs.c source/cornerbend.c source/wood/strokecut.c source/cutsample.c source/swizzle.c source/geom.c source/cutter.c source/randcut.c source/cutgraph.c source/whimsy.c source/edgegen.c source/piecegeo.c source/piecebake.c source/imgscale.c source/layout.c source/rng.c
+build_host/cut_preview: tools/cut_preview.c $(CUTSRCS) $(wildcard source/*.h) $(wildcard source/wood/*.h)
 	@mkdir -p build_host
-	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/cut_preview.c $(CUTSRCS) -lm -o $@
+	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/wood -Isource/external -Itools tools/cut_preview.c $(CUTSRCS) -lm -o $@
 
 # Rainbow wash preview (tools/rainbow_preview.c): rainbow_preview OUTDIR IMAGE MODE PALETTE [strength minlight mindark]...
 build_host/rainbow_preview: tools/rainbow_preview.c source/rainbow.c source/rainbow.h

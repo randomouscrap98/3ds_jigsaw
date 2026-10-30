@@ -47,7 +47,9 @@ void test_swizzle(void);
 void test_piecebake(void);
 void test_littlemenu(void);
 void test_cutsample(void);
-void test_strokecut(void);
-void test_dump_cut(const char * path, uint8_t style);  // CUT_STYLE_*
+void test_randcut_style(uint8_t st);   // RANDCUT_STYLE_*
+void test_whimsy_style(uint8_t st);    // CUT_STYLE_* or woodcut style
+void test_wood(void);                  // Shelved wooden cuts (tests wood)
+void test_dump_cut(const char * path, uint8_t style);  // CUT_STYLE_* or woodcut style
 
 #endif

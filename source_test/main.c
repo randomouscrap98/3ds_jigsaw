@@ -1,6 +1,6 @@
 #include "test.h"
 #include "edgegen.h"
-#include "cutter.h"
+#include "woodcut.h"
 
 #include <string.h>
 
@@ -33,6 +33,11 @@ int main(int argc, char ** argv) {
     test_dump_cut(argv[2], style);
     return 0;
   }
+  if(argc > 1 && !strcmp(argv[1], "wood")) {
+    RUN(test_wood);
+    printf("%d checks, %d failures\n", test_checks, test_failures);
+    return test_failures ? 1 : 0;
+  }
   RUN(test_board);
   RUN(test_piecegeo);
   RUN(test_randcut);
@@ -60,7 +65,6 @@ int main(int argc, char ** argv) {
   RUN(test_piecebake);
   RUN(test_littlemenu);
   RUN(test_cutsample);
-  RUN(test_strokecut);
   printf("%d checks, %d failures\n", test_checks, test_failures);
   return test_failures ? 1 : 0;
 }
