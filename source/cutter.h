@@ -21,7 +21,8 @@
 #define CUT_STYLE_WOODEN2 6     // Not in the menu yet (previews): stroke cut (strokecut) + snakes
 #define CUT_STYLE_WOODEN3 7     // Not in the menu yet (previews): cellular Potts cut (pottscut)
 #define CUT_STYLE_WOODEN4 8     // Not in the menu yet (previews): stroke cut + painted snakes (snakecut)
-#define CUT_STYLES 9
+#define CUT_STYLE_WOODEN5 9     // Not in the menu yet (previews): stroke cut + T-junction snakes (snakecut) + Wooden2 knobs
+#define CUT_STYLES 10
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
 

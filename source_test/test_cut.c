@@ -17,6 +17,7 @@
 #define PINNED_RANDRECT 0x16C37493u    // 1.3
 #define PINNED_WOODEN3 0xE5BAC95Bu     // Provisional (previews)
 #define PINNED_WOODEN4 0x953877A3u           // Provisional (previews)
+#define PINNED_WOODEN5 0u              // Provisional (previews)
 #define PINNED_WOODEN2 0xBB1D73F9u     // Provisional (previews)
 #define PINNED_WOODEN 0x72D29B9Fu      // Provisional: still being tuned (not in the menu)
 #define PINNED_WHIMSY { { 0x8C3BD049u, 0x881A00CEu }, { 0xFFEF07BBu, 0xBEC93799u }, \
@@ -25,7 +26,8 @@
     { 0x025506C2u, 0xF89FC3D4u }, \
     { 0xE1015134u, 0x90AEF2CDu }, \
     { 0xC2BF74A1u, 0x350E7B3Fu }, \
-    { 0x953877A3u, 0x953877A3u } }   // 1.2 (Random Rect 1.3, Wooden, Wooden2, Wooden3, Wooden4 provisional; Wooden4 has no whimsies yet), style x Few/Many
+    { 0x953877A3u, 0x953877A3u }, \
+    { 0u, 0u } }   // 1.2 (Random Rect 1.3, Wooden, Wooden2, Wooden3, Wooden4, Wooden5 provisional; Wooden4 has no whimsies yet), style x Few/Many
 
 void test_layout(void) {
   uint16_t c, r;
@@ -40,7 +42,7 @@ void test_layout(void) {
   // Every cut style packs into 3 pages at every count, with no overlaps, never upscaling
   uint32_t targets[4] = { 50, 100, 250, 500 };
   uint32_t sizes[4][2] = { { 4000, 3000 }, { 1024, 1024 }, { 600, 1400 }, { 1024, 768 } };
-  const char * names[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "wooden", "wooden2", "wooden3", "wooden4" };
+  const char * names[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "wooden", "wooden2", "wooden3", "wooden4", "wooden5" };
   for(int s = 0; s < 4; s++) {
     for(int t = 0; t < 4; t++) {
       printf("  %4ux%-4u %3u:", sizes[s][0], sizes[s][1], targets[t]);
@@ -110,7 +112,7 @@ static uint32_t cut_hash(uint8_t style, uint8_t whimsy, uint16_t cols, uint16_t 
 }
 
 void test_cut_pinned(void) {
-  const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT, PINNED_WOODEN, PINNED_WOODEN2, PINNED_WOODEN3, PINNED_WOODEN4 };
+  const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT, PINNED_WOODEN, PINNED_WOODEN2, PINNED_WOODEN3, PINNED_WOODEN4, PINNED_WOODEN5 };
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
     uint32_t h = cut_hash(st, WHIMSY_NONE, 13, 9, 4242);
     if(h != want[st]) printf("  style %u hash %08lX\n", st, (unsigned long)h);

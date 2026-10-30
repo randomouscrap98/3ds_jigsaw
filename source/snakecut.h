@@ -46,16 +46,27 @@ typedef struct {
   float ywmin, ywmax;   // Yin-yang band width (cells)
   float yturns0, yturns1; // Yin-yang turns
   uint8_t smooth;       // Smoothing passes on the traced lines
+  // Stroke base only
+  uint8_t keepsnakes;   // The stroke cut keeps its own snakes (fingers)
+  float tshare;         // Share of T junctions that snake: a finger of the piece across the bar
+                        // runs down the stem, replacing it (and on along the straightest line)
+  float tamp;           // ... swinging this far either side of the old line (cells)
+  float twave0, twave1; // ... once per this length (cells)
+  float tlen0, tlen1;   // ... this long past the bar (cells)
+  float tturn;          // Bars and continued lines turn at most this much (radians)
+  float check;          // Traced pieces must be this thick everywhere (cutgraph_thick_ok, cells; 0 = no check), or retry
 } SnakeStyle;
 
-#define SNAKECUT_STYLE_DEFAULT 0
-#define SNAKECUT_STYLES 1
+#define SNAKECUT_STYLE_DEFAULT 0    // Wooden4: geometric base, hooked snakes, yin-yangs
+#define SNAKECUT_STYLE_TJUNCTION 1  // Wooden5: stroke cut with its snakes, plus T-junction snakes
+#define SNAKECUT_STYLES 2
 const SnakeStyle * snakecut_style(uint8_t style);
 
 #define SNAKECUT_TRIES 8
 
-// Just the graph (polyline edges, no tabs): count pieces (no whimsies yet; whimsy and set
-// are ignored). Same seed + style = same cut. Returns 0 on success (on failure g is empty).
+// Just the graph (polyline edges, no tabs): count pieces, then (stroke base only) whimsies
+// (level, set) after them, flagged CUTEDGE_WHIMSY; edges along snakes are flagged
+// CUTEDGE_SNAKE. Same seed + style = same cut. Returns 0 on success (on failure g is empty).
 int snakecut_graph(CutGraph * g, float width, float height, uint32_t count, uint8_t whimsy, uint8_t set,
     uint32_t seed, const SnakeStyle * st);
 

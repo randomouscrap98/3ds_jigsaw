@@ -355,6 +355,8 @@ typedef struct {
   uint32_t start, len;  // Interior points: cpts[start .. start + len) (x, y in cells)
 } PtChain;
 
+#define PT_WSMOOTH 2   // fromlabelsx: whimsy outlines get only this many smoothing passes (keep their shape)
+
 // Douglas-Peucker: keep[] marks points of p[0 .. n) to keep (ends always), tolerance tol
 static void pt_dp(const float * p, uint32_t i0, uint32_t i1, float tol, uint8_t * keep) {
   if(i1 <= i0 + 1) return;
@@ -370,7 +372,7 @@ static void pt_dp(const float * p, uint32_t i0, uint32_t i1, float tol, uint8_t 
   pt_dp(p, bi, i1, tol, keep);
 }
 
-static int pt_tograph(Pt * t, CutGraph * g, float res, uint8_t smooth, const uint8_t * curvy, float simplify) {
+static int pt_tograph(Pt * t, CutGraph * g, float res, uint8_t smooth, uint8_t wsmooth, const uint8_t * curvy, float simplify) {
   int W = t->w, H = t->h, lw = W + 1, nlat = lw * (H + 1);
   // Boundary sides: h[y * W + x] between squares (x, y - 1) and (x, y); v[y * lw + x] between (x - 1, y) and (x, y)
   uint8_t * hs = calloc((size_t)W * (H + 1), 1), * vs = calloc((size_t)lw * H, 1);
@@ -480,7 +482,8 @@ static int pt_tograph(Pt * t, CutGraph * g, float res, uint8_t smooth, const uin
     PtChain * c = ch + k;
     if(c->left < 0 || c->right < 0 || c->len == 0) continue;
     float ax = (c->from % lw) / res, ay = (c->from / lw) / res, bx = (c->to % lw) / res, by = (c->to / lw) / res;
-    for(int pass = 0; pass < smooth; pass++) {
+    int passes = (uint32_t)c->left >= t->count || (uint32_t)c->right >= t->count ? wsmooth : smooth;
+    for(int pass = 0; pass < passes; pass++) {
       float * p = cp + 2 * c->start;
       for(uint32_t i = 0; i < c->len; i++) {
         float px = i ? p[2 * i - 2] : ax, py = i ? p[2 * i - 1] : ay;
@@ -615,7 +618,7 @@ static int pt_build(CutGraph * g, float width, float height, uint32_t count, uin
     pt_run(&t, st);
     if(pt_unchecker(&t)) err = 1;
   }
-  if(!err) err = pt_tograph(&t, g, res, st->smooth, NULL, 0);
+  if(!err) err = pt_tograph(&t, g, res, st->smooth, st->smooth, NULL, 0);
   free(t.lab);
   free(t.frozen);
   free(t.area);
@@ -638,26 +641,28 @@ int pottscut_graph(CutGraph * g, float width, float height, uint32_t count, uint
 
 int pottscut_fromlabels(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
     const PottsStyle * run, uint32_t seed) {
-  return pottscut_fromlabelsx(g, lab, w, h, count, res, smooth, run, seed, NULL, 0);
+  return pottscut_fromlabelsx(g, lab, w, h, count, 0, res, smooth, run, seed, NULL, 0);
 }
 
-int pottscut_fromlabelsx(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
-    const PottsStyle * run, uint32_t seed, const uint8_t * curvy, float simplify) {
+int pottscut_fromlabelsx(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, uint32_t whimsies, float res,
+    uint8_t smooth, const PottsStyle * run, uint32_t seed, const uint8_t * curvy, float simplify) {
   memset(g, 0, sizeof(CutGraph));
   Pt t;
   memset(&t, 0, sizeof(Pt));
   t.w = w;
   t.h = h;
   t.lab = lab;
-  t.count = t.nlab = count;
+  t.count = count;
+  t.nlab = count + whimsies;
   t.frozen = calloc((size_t)w * h, 1);
+  for(int i = 0; i < w * h && t.frozen; i++) t.frozen[i] = lab[i] >= (int32_t)count;
   int * queue = malloc(sizeof(int) * w * h);
   int32_t * comp = malloc(sizeof(int32_t) * w * h);
   int err = !t.frozen || !queue || !comp;
   if(!err) err = pt_keeplargest(&t, queue, comp);
   if(!err && run) {
-    t.area = malloc(sizeof(int32_t) * count);
-    t.perim = malloc(sizeof(int32_t) * count);
+    t.area = malloc(sizeof(int32_t) * t.nlab);
+    t.perim = malloc(sizeof(int32_t) * t.nlab);
     err = !t.area || !t.perim;
     if(!err) {
       rng_init(&t.r, seed);
@@ -677,7 +682,7 @@ int pottscut_fromlabelsx(CutGraph * g, int32_t * lab, int w, int h, uint32_t cou
 #endif
     err = 1;
   }
-  if(!err) err = pt_tograph(&t, g, res, smooth, curvy, simplify);
+  if(!err) err = pt_tograph(&t, g, res, smooth, whimsies ? (smooth < PT_WSMOOTH ? smooth : PT_WSMOOTH) : smooth, curvy, simplify);
 #ifdef POTTSCUT_DEBUG
   if(err) fprintf(stderr, "fromlabels: err %d\n", err);
 #endif

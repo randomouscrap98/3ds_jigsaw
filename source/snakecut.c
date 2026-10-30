@@ -9,6 +9,27 @@
 #include <math.h>
 #ifdef SNAKECUT_DEBUG
 #include <stdio.h>
+// Labels as a PPM (hashed colours, snake squares dark) when SNAKECUT_DUMP names a prefix
+static void sk_dump(const int32_t * lab, const int32_t * snk, int w, int h, const char * stage) {
+  const char * pre = getenv("SNAKECUT_DUMP");
+  if(!pre) return;
+  char path[512];
+  snprintf(path, sizeof path, "%s_%s.ppm", pre, stage);
+  FILE * f = fopen(path, "wb");
+  if(!f) return;
+  fprintf(f, "P6 %d %d 255\n", w, h);
+  for(int i = 0; i < w * h; i++) {
+    uint32_t c = (uint32_t)lab[i] * 2654435761u;
+    unsigned char px[3] = { 80 + (c >> 24) % 170, 80 + (c >> 16) % 170, 80 + (c >> 8) % 170 };
+    if(lab[i] < 0) px[0] = px[1] = px[2] = 0;
+    if(snk && snk[i] > 0) { px[0] /= 2; px[1] /= 2; px[2] /= 2; }
+    fwrite(px, 1, 3, f);
+  }
+  fclose(f);
+}
+#define SK_DUMP(k, stage) sk_dump((k).lab, (k).snk, (k).w, (k).h, stage)
+#else
+#define SK_DUMP(k, stage)
 #endif
 
 static const SnakeStyle snakecut_styles[SNAKECUT_STYLES] = {
@@ -18,6 +39,9 @@ static const SnakeStyle snakecut_styles[SNAKECUT_STYLES] = {
     .lead0 = 0.3f, .lead1 = 0.8f, .emin = 0.3f, .emax = 0.7f, .ecc = 1.8f, .sweep0 = 3.5f, .sweep1 = 5.6f,
     .sbend = 0.3f, .s1sweep0 = 1.6f, .s1sweep1 = 2.6f, .twin = 0.35f, .mirror = 0.5f, .taper = 0.08f, .gap = 0.22f, .thin = 0.08f, .minpart = 0.35f, .tiny = 0.35f,
     .ywmin = 0.32f, .ywmax = 0.42f, .yturns0 = 1.0f, .yturns1 = 1.5f, .smooth = 12 },
+  { .res = 20, .geo = 0, .keepsnakes = 1, .base = 1.0f, .snakes = 0, .wmin = 0.2f, .wmax = 0.35f, .taper = 0.08f,
+    .gap = 0.22f, .thin = 0.1f, .minpart = 0.35f, .tiny = 0, .smooth = 12,
+    .tshare = 0.3f, .tamp = 0.15f, .twave0 = 1.0f, .twave1 = 1.5f, .tlen0 = 0.8f, .tlen1 = 2.5f, .tturn = 0.5f, .check = 0.1f },
 };
 
 const SnakeStyle * snakecut_style(uint8_t style) {
@@ -42,7 +66,10 @@ typedef struct {
   int nedge;
   uint8_t * sent;     // Snakes per piece
   uint32_t nlab;
+  uint32_t nwhim;     // The last nwhim labels are whimsies (squares marked snake -1: never change)
 } Sk;
+
+#define SK_ISWHIM(k, l) ((uint32_t)(l) >= (k)->nlab - (k)->nwhim)
 
 static int sk_other4(const Sk * k, int i, int32_t * other) {
   int x = i % k->w, y = i / k->w;
@@ -272,8 +299,10 @@ static int sk_pair(Sk * k) {
   return 1;
 }
 
-// Squares marked -2 go to their neighbours (most common labelled 4-neighbour), repeatedly
+// Squares marked -2 go to their neighbours (most common labelled 4-neighbour), repeatedly;
+// to whimsies only when nothing else touches them
 static void sk_absorb(Sk * k) {
+  for(int whim = 0; whim < 2; whim++) {
   int changed = 1;
   while(changed) {
     changed = 0;
@@ -284,13 +313,14 @@ static void sk_absorb(Sk * k) {
       int32_t best = -1;
       int bestn = 0;
       for(int j = 0; j < 4; j++) {
-        if(nb[j] < 0 || k->lab[nb[j]] < 0) continue;
+        if(nb[j] < 0 || k->lab[nb[j]] < 0 || (!whim && SK_ISWHIM(k, k->lab[nb[j]]))) continue;
         int n = 0;
         for(int m = 0; m < 4; m++) n += nb[m] >= 0 && k->lab[nb[m]] == k->lab[nb[j]];
         if(n > bestn) { bestn = n; best = k->lab[nb[j]]; }
       }
       if(best >= 0) { k->lab[i] = best; changed = 1; }
     }
+  }
   }
 }
 
@@ -379,8 +409,9 @@ static int sk_parts(Sk * k, float a0) {
   err = err || !nl || !ns;
   uint32_t m = 0;
   for(int c = 0; c < ncomp && !err; c++) nl[c] = -2;
-  for(uint32_t l = 0; l < k->nlab && !err; l++) if(best[l]) { nl[best[l] - 1] = m; ns[m] = k->sent[l]; m++; }
-  for(int c = 0; c < ncomp && !err; c++) if(nl[c] == -2 && csize[c] >= k->st->minpart * a0) nl[c] = m++;
+  for(uint32_t l = 0; l < k->nlab && !err; l++) if(best[l] && !SK_ISWHIM(k, l)) { nl[best[l] - 1] = m; ns[m] = k->sent[l]; m++; }
+  for(int c = 0; c < ncomp && !err; c++) if(nl[c] == -2 && !SK_ISWHIM(k, clab[c]) && csize[c] >= k->st->minpart * a0) nl[c] = m++;
+  for(uint32_t l = 0; l < k->nlab && !err; l++) if(best[l] && SK_ISWHIM(k, l)) { nl[best[l] - 1] = m; m++; }
   if(!err) {
     for(int i = 0; i < n; i++) k->lab[i] = nl[comp[i]];
     free(k->sent);
@@ -406,7 +437,7 @@ static int sk_cmpu64(const void * a, const void * b) {
 // Merge the smallest pieces into neighbours until count are left and none is smaller than
 // tiny squares (labels end up 0 .. nlab - 1). Returns 0, 1 if there are fewer than count, -1 out of memory.
 static int sk_merge(Sk * k, uint32_t count, float tiny) {
-  if(k->nlab < count) return 1;
+  if(k->nlab - k->nwhim < count) return 1;
   int n = k->w * k->h, ne = 0, err = 0;
   uint64_t * keys = malloc(sizeof(uint64_t) * 2 * n);
   uint32_t * par = malloc(sizeof(uint32_t) * k->nlab), * area = calloc(k->nlab, sizeof(uint32_t));
@@ -433,11 +464,11 @@ static int sk_merge(Sk * k, uint32_t count, float tiny) {
       ea[ue] = keys[i] >> 32; eb[ue] = (uint32_t)keys[i]; el[ue] = 1; ue++;
     }
   }
-  uint32_t left = k->nlab;
+  uint32_t left = k->nlab - k->nwhim;
   for(uint32_t l = 0; l < k->nlab && !err; l++) par[l] = l;
   while(!err && left > 1) {
     int64_t u = -1;
-    for(uint32_t l = 0; l < k->nlab; l++) if(par[l] == l && (u < 0 || area[l] < area[u])) u = l;
+    for(uint32_t l = 0; l < k->nlab; l++) if(par[l] == l && !SK_ISWHIM(k, l) && (u < 0 || area[l] < area[u])) u = l;
     if(left <= count && area[u] >= tiny) break;
     for(uint32_t e = 0; e < ue; e++) {
       uint32_t a = sk_find(par, ea[e]), b = sk_find(par, eb[e]);
@@ -449,7 +480,7 @@ static int sk_merge(Sk * k, uint32_t count, float tiny) {
     float vs = -1;
     for(uint32_t e = 0; e < ue; e++) {
       uint32_t a = sk_find(par, ea[e]), b = sk_find(par, eb[e]), o = a == u ? b : b == u ? a : u;
-      if(o == u || acc[o] <= 0) continue;
+      if(o == u || acc[o] <= 0 || SK_ISWHIM(k, o)) continue;
       float sc = acc[o] / sqrtf((float)area[o]) * (k->sent[o] ? 0.5f : 1);
       if(sc > vs) { vs = sc; v = o; }
     }
@@ -463,14 +494,15 @@ static int sk_merge(Sk * k, uint32_t count, float tiny) {
 #ifdef SNAKECUT_DEBUG
   if(!err) {
     uint32_t mn = 0xFFFFFFFFu;
-    for(uint32_t l = 0; l < k->nlab; l++) if(par[l] == l && area[l] < mn) mn = area[l];
-    fprintf(stderr, "snakecut: merged to %u, smallest %.2f of a piece\n", left, mn / (tiny / k->st->tiny));
+    for(uint32_t l = 0; l < k->nlab; l++) if(par[l] == l && !SK_ISWHIM(k, l) && area[l] < mn) mn = area[l];
+    fprintf(stderr, "snakecut: merged to %u, smallest %u squares\n", left, mn);
   }
 #endif
   if(!err && left < count) err = 1;
   if(!err) {
     uint32_t m = 0;
-    for(uint32_t l = 0; l < k->nlab; l++) if(par[l] == l) area[l] = m++;
+    for(uint32_t l = 0; l < k->nlab; l++) if(par[l] == l && !SK_ISWHIM(k, l)) area[l] = m++;
+    for(uint32_t l = 0; l < k->nlab; l++) if(SK_ISWHIM(k, l)) area[l] = m++;
     for(int i = 0; i < n; i++) k->lab[i] = area[sk_find(par, k->lab[i])];
     k->nlab = m;
   }
@@ -647,11 +679,166 @@ static int sk_geobase(Sk * k, uint32_t base) {
   return err;
 }
 
+// ---- T-junction snakes (stroke base) ----
+
+// Edge e's line from vertex v to its other end (cells, both ends included); returns points
+static int sk_edgeline(const CutGraph * g, uint32_t e, uint32_t v, float * out, int max) {
+  const CutEdge * E = g->e + e;
+  int n = 0, fwd = E->a == v;
+  uint32_t m = E->npts + 2;
+  for(uint32_t i = 0; i < m && n < max; i++) {
+    uint32_t j = fwd ? i : m - 1 - i;
+    const float * p = j == 0 ? &g->v[E->a].x : j == m - 1 ? &g->v[E->b].x : g->pts + 2 * (E->p0 + j - 1);
+    out[2 * n] = p[0];
+    out[2 * n + 1] = p[1];
+    n++;
+  }
+  return n;
+}
+
+// Unit direction leaving v along e, judged over about len cells
+static void sk_edgedir(const CutGraph * g, uint32_t e, uint32_t v, float len, float * buf, int max, float * dx, float * dy) {
+  int n = sk_edgeline(g, e, v, buf, max), i = 1;
+  float acc = 0;
+  for(; i < n - 1; i++) {
+    acc += hypotf(buf[2 * i] - buf[2 * i - 2], buf[2 * i + 1] - buf[2 * i - 1]);
+    if(acc >= len) break;
+  }
+  if(i >= n) i = n - 1;
+  float x = buf[2 * i] - buf[0], y = buf[2 * i + 1] - buf[1], l = hypotf(x, y);
+  *dx = l > 0 ? x / l : 1;
+  *dy = l > 0 ? y / l : 0;
+}
+
+static int sk_plainedge(const CutEdge * e, uint32_t pieces) {
+  return e->left >= 0 && e->right >= 0 && (uint32_t)e->left < pieces && (uint32_t)e->right < pieces &&
+      !(e->flags & (CUTEDGE_WHIMSY | CUTEDGE_SNAKE));
+}
+
+// Paint a T snake for piece a along path (squares, np points 0.5 apart; the bar is crossed
+// at index jb). 1 if placed.
+static int sk_tpaint(Sk * k, int32_t a, const float * path, int np, int jb, float w) {
+  const SnakeStyle * st = k->st;
+  float gap = st->gap * k->res;
+  const float ds = 0.5f;
+  k->attempt++;
+  k->nbody = 0;
+  int j = 0;
+  float sout = -1;
+  for(; j < np; j++) {
+    float x = path[2 * j], y = path[2 * j + 1], s = j * ds, rad = w / 2 * (1 - st->taper * j / np);
+    // Clear of its own piece once well away from the bar (curling back would close a hole)
+    int avoid = sout >= 0 && s - sout > rad + gap + 2;
+    if(!sk_clear(k, x, y, rad + gap, s, 2 * (w + gap), avoid ? a : -1)) break;
+    sk_markdisc(k, x, y, rad, s);
+    if(sout < 0 && j > jb && k->lab[(int)y * k->w + (int)x] != a) sout = s;
+  }
+  if((j - jb) * ds < st->tlen0 * 0.6f * k->res) return 0;
+  sk_commit(k, a, a, NULL);
+  k->sent[a]++;
+  return 1;
+}
+
+// T-junction snakes from the stroke cut's graph (pieces = its non-whimsy pieces). Returns
+// how many, or -1 out of memory.
+static int sk_tsnakes(Sk * k, const CutGraph * g, uint32_t pieces) {
+  const SnakeStyle * st = k->st;
+  const int maxl = 8192;
+  float * buf = malloc(sizeof(float) * 2 * maxl), * line = malloc(sizeof(float) * 2 * maxl);
+  float * path = malloc(sizeof(float) * 2 * SK_PATHMAX);
+  uint32_t * order = malloc(sizeof(uint32_t) * (g->nv ? g->nv : 1));
+  if(!buf || !line || !path || !order) { free(buf); free(line); free(path); free(order); return -1; }
+  for(uint32_t v = 0; v < g->nv; v++) order[v] = v;
+  for(uint32_t v = g->nv; v > 1; v--) { uint32_t j = rng_below(&k->r, v), t = order[v - 1]; order[v - 1] = order[j]; order[j] = t; }
+  int placed = 0;
+  float res = k->res, ctt = cosf(st->tturn);
+  for(uint32_t oi = 0; oi < g->nv; oi++) {
+    uint32_t v = order[oi], es[4];
+    int deg = 0;
+    for(uint32_t e = 0; e < g->ne && deg < 4; e++) if(g->e[e].a == v || g->e[e].b == v) es[deg++] = e;
+    if(deg != 3) continue;
+    int plain = 1;
+    for(int i = 0; i < 3; i++) plain &= sk_plainedge(g->e + es[i], pieces);
+    if(!plain) continue;
+    float dx[3], dy[3];
+    for(int i = 0; i < 3; i++) sk_edgedir(g, es[i], v, 0.15f, buf, maxl, dx + i, dy + i);
+    // The bar: two nearly opposite lines; the stem: the third, well off both
+    int stem = -1;
+    for(int i = 0; i < 3 && stem < 0; i++) {
+      int p = (i + 1) % 3, q = (i + 2) % 3;
+      if(dx[p] * dx[q] + dy[p] * dy[q] < -ctt && fabsf(dx[i] * dx[p] + dy[i] * dy[p]) < 0.85f) stem = i;
+    }
+    if(stem < 0 || rng_range(&k->r, 0, 1) >= st->tshare) continue;
+    const CutEdge * S = g->e + es[stem], * B1 = g->e + es[(stem + 1) % 3];
+    int32_t a = B1->left != S->left && B1->left != S->right ? B1->left : B1->right;
+    if(a < 0 || a == S->left || a == S->right) continue;
+    // Middle line: from inside a, across the bar, down the stem and on along the straightest lines
+    float w = rng_range(&k->r, st->wmin, st->wmax) * res, want = rng_range(&k->r, st->tlen0, st->tlen1) * res;
+    float jx = g->v[v].x * res, jy = g->v[v].y * res, back = w / 2 + 0.1f * res;
+    int nl = 0;
+    line[2 * nl] = jx - dx[stem] * back; line[2 * nl + 1] = jy - dy[stem] * back; nl++;
+    uint32_t cur = es[stem], at = v;
+    float len = 0;
+    for(;;) {
+      int m = sk_edgeline(g, cur, at, buf, maxl);
+      for(int i = 0; i < m && nl < maxl; i++) {
+        float x = buf[2 * i] * res, y = buf[2 * i + 1] * res;
+        if(nl > 1) len += hypotf(x - line[2 * nl - 2], y - line[2 * nl - 1]);
+        line[2 * nl] = x; line[2 * nl + 1] = y; nl++;
+      }
+      if(len >= want || nl >= maxl) break;
+      // On through the far end along the straightest line
+      at = g->e[cur].a == at ? g->e[cur].b : g->e[cur].a;
+      float ix = line[2 * nl - 2] - line[2 * nl - 4], iy = line[2 * nl - 1] - line[2 * nl - 3], il = hypotf(ix, iy);
+      if(nl < 3 || il <= 0) break;
+      ix /= il; iy /= il;
+      int64_t next = -1;
+      float bestd = ctt;
+      for(uint32_t e = 0; e < g->ne; e++) {
+        if(e == cur || (g->e[e].a != at && g->e[e].b != at) || !sk_plainedge(g->e + e, pieces)) continue;
+        float ex, ey;
+        sk_edgedir(g, e, at, 0.15f, buf, maxl, &ex, &ey);
+        if(ex * ix + ey * iy > bestd) { bestd = ex * ix + ey * iy; next = e; }
+      }
+      if(next < 0) break;
+      cur = next;
+    }
+    // Resample every 0.5 squares up to the wanted length past the bar, then swing it (an S)
+    int np = 0, jb = 0;
+    float s = 0, wave = rng_range(&k->r, st->twave0, st->twave1) * res, amp = st->tamp * res * (rng_below(&k->r, 2) ? 1 : -1);
+    float sbar = back;
+    path[0] = line[0]; path[1] = line[1]; np = 1;
+    for(int i = 1; i < nl && np < SK_PATHMAX; i++) {
+      float x0 = line[2 * i - 2], y0 = line[2 * i - 1], x1 = line[2 * i], y1 = line[2 * i + 1], l = hypotf(x1 - x0, y1 - y0);
+      for(float u = 0.5f - fmodf(s, 0.5f); u <= l && np < SK_PATHMAX; u += 0.5f) {
+        float t = u / l;
+        path[2 * np] = x0 + (x1 - x0) * t; path[2 * np + 1] = y0 + (y1 - y0) * t; np++;
+      }
+      s += l;
+      if(s - sbar > want) break;
+    }
+    jb = (int)(sbar / 0.5f);
+    float * sw = buf;   // Swung copy
+    for(int i = 0; i < np; i++) {
+      int i0 = i > 0 ? i - 1 : i, i1 = i + 1 < np ? i + 1 : i;
+      float tx = path[2 * i1] - path[2 * i0], ty = path[2 * i1 + 1] - path[2 * i0 + 1], tl = hypotf(tx, ty);
+      float sa = i * 0.5f - sbar, ramp = sa <= 0 ? 0 : sa < 0.3f * res ? sa / (0.3f * res) : 1;
+      float o = tl > 0 ? amp * sinf(2 * SK_PI * fmaxf(sa, 0) / wave) * ramp : 0;
+      sw[2 * i] = path[2 * i] + (tl > 0 ? -ty / tl * o : 0);
+      sw[2 * i + 1] = path[2 * i + 1] + (tl > 0 ? tx / tl * o : 0);
+    }
+    if(np > 2) placed += sk_tpaint(k, a, sw, np, jb, w);
+  }
+  free(buf); free(line); free(path); free(order);
+  return placed;
+}
+
 // One attempt with base stroke pieces: 0 done, 1 failed, -1 out of memory, or 2 + shortfall
-static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t base, uint32_t seed, const SnakeStyle * st) {
+static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t base, uint8_t whimsy, uint8_t set,
+    uint32_t seed, const SnakeStyle * st) {
   CutGraph sg;
   memset(&sg, 0, sizeof(CutGraph));
-  if(!st->geo && strokecut_graphx(&sg, W, H, base, 0, 0, seed, 0)) return 1;
+  if(!st->geo && strokecut_graphx(&sg, W, H, base, whimsy, set, seed, st->keepsnakes)) return 1;
   Sk k;
   memset(&k, 0, sizeof(Sk));
   k.st = st;
@@ -667,9 +854,11 @@ static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t bas
   k.body = malloc(sizeof(int32_t) * n);
   k.edge = malloc(sizeof(int32_t) * n);
   k.nlab = st->geo ? base : sg.count;
+  k.nwhim = k.nlab - base;
   k.sent = calloc(k.nlab, 1);
+  uint8_t * smask = calloc(n, 1);   // Along snakes: their edges get no tabs
   float * xy = st->geo ? NULL : malloc(sizeof(float) * 2 * cutgraph_maxpoints(&sg));
-  if(!k.lab || !k.snk || !k.mark || !k.marks || !k.body || !k.edge || !k.sent || (!st->geo && !xy)) err = -1;
+  if(!k.lab || !k.snk || !k.mark || !k.marks || !k.body || !k.edge || !k.sent || !smask || (!st->geo && !xy)) err = -1;
   if(!err && st->geo) err = sk_geobase(&k, base);
   // Raster the stroke cut (square centres inside each outline)
   for(int i = 0; i < n && !err && !st->geo; i++) k.lab[i] = -2;
@@ -686,12 +875,37 @@ static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t bas
       for(int x = ix0; x <= ix1; x++)
         if(geom_inside(xy, m, x + 0.5f, y + 0.5f)) k.lab[y * k.w + x] = p;
   }
-  cutgraph_free(&sg);
   if(!err) {
     sk_absorb(&k);
+    for(int i = 0; i < n; i++) if(k.lab[i] >= 0 && SK_ISWHIM(&k, k.lab[i])) k.snk[i] = -1;
     for(int i = 0; i < n; i++) if(sk_other4(&k, i, NULL)) k.edge[k.nedge++] = i;
     if(!k.nedge) err = 1;
   }
+  // The stroke cut's own snakes (their lines, a square either side)
+  for(uint32_t e = 0; e < sg.ne && !err; e++) {
+    if(!(sg.e[e].flags & CUTEDGE_SNAKE)) continue;
+    float * buf = malloc(sizeof(float) * 2 * (sg.e[e].npts + 2));
+    if(!buf) { err = -1; break; }
+    int m = sk_edgeline(&sg, e, sg.e[e].a, buf, sg.e[e].npts + 2);
+    for(int i = 1; i < m; i++) {
+      float x0 = buf[2 * i - 2] * k.res, y0 = buf[2 * i - 1] * k.res, x1 = buf[2 * i] * k.res, y1 = buf[2 * i + 1] * k.res;
+      int steps = (int)(hypotf(x1 - x0, y1 - y0) * 2) + 1;
+      for(int q = 0; q <= steps; q++) {
+        int x = (int)(x0 + (x1 - x0) * q / steps), y = (int)(y0 + (y1 - y0) * q / steps);
+        for(int dy = -1; dy <= 1; dy++)
+          for(int dx = -1; dx <= 1; dx++)
+            if(x + dx >= 0 && y + dy >= 0 && x + dx < k.w && y + dy < k.h) smask[(y + dy) * k.w + x + dx] = 1;
+      }
+    }
+    free(buf);
+  }
+  SK_DUMP(k, "1raster");
+  int tplaced = 0;
+  if(!err && !st->geo && st->tshare > 0) {
+    tplaced = sk_tsnakes(&k, &sg, base);
+    if(tplaced < 0) err = -1;
+  }
+  cutgraph_free(&sg);
   // Snakes
   int want = (int)(count * st->snakes + 0.5f), placed = 0, pairs = 0;
   float * path = malloc(sizeof(float) * 2 * SK_PATHMAX);
@@ -705,10 +919,13 @@ static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t bas
   }
   free(path);
   float a0 = (float)n / count;
+  SK_DUMP(k, "2snakes");
   if(!err) err = sk_thin(&k);
+  SK_DUMP(k, "3thin");
   if(!err) err = sk_parts(&k, a0);
 #ifdef SNAKECUT_DEBUG
-  if(!err) fprintf(stderr, "snakecut: base %u, snakes %d of %d, pieces after %u (want %u)\n", base, placed, want, k.nlab, count);
+  if(!err) fprintf(stderr, "snakecut: base %u, snakes %d of %d, T snakes %d, pieces after %u (want %u)\n", base, placed, want,
+      tplaced, k.nlab - k.nwhim, count);
 #endif
   if(!err) err = sk_merge(&k, count, st->tiny * a0);
   if(err == 1) err = 2 + (int)(count / 20);   // Short of pieces: start from more
@@ -726,22 +943,61 @@ static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t bas
             if(x + dx >= 0 && y + dy >= 0 && x + dx < k.w && y + dy < k.h) curvy[(y + dy) * k.w + x + dx] = 1;
       }
     }
-    if(!err) err = pottscut_fromlabelsx(g, k.lab, k.w, k.h, count, k.res, st->smooth, NULL, seed, curvy, st->simplify) ? 1 : 0;
+    if(!err) err = pottscut_fromlabelsx(g, k.lab, k.w, k.h, count, k.nwhim, k.res, st->smooth, NULL, seed, curvy, st->simplify) ? 1 : 0;
     free(curvy);
   }
-  free(k.lab); free(k.snk); free(k.mark); free(k.marks); free(k.body); free(k.edge); free(k.sent); free(xy);
+  if(!err && st->check > 0) {
+    // Knobs can't fix a piece that's too thin already
+    float * q = malloc(sizeof(float) * 2 * cutgraph_maxpoints(g));
+    if(!q) err = -1;
+    for(uint32_t p = 0; p < count && q; p++) {
+      if(!cutgraph_thick_ok(q, cutgraph_outline(g, p, 1, 0, 0, q), st->check)) {
+#ifdef SNAKECUT_DEBUG
+        fprintf(stderr, "snakecut: piece %u too thin after tracing\n", p);
+#endif
+        err = 1;
+        break;
+      }
+    }
+    free(q);
+    if(err) cutgraph_free(g);
+  }
+  if(!err) {
+    // Edges mostly along a snake (painted, grown by a square; or one of the stroke cut's) are snakes
+    for(int i = 0; i < n; i++) {
+      if(k.snk[i] <= 0) continue;
+      int x = i % k.w, y = i / k.w;
+      for(int dy = -1; dy <= 1; dy++)
+        for(int dx = -1; dx <= 1; dx++)
+          if(x + dx >= 0 && y + dy >= 0 && x + dx < k.w && y + dy < k.h) smask[(y + dy) * k.w + x + dx] |= 2;
+    }
+    for(uint32_t e = 0; e < g->ne; e++) {
+      CutEdge * E = g->e + e;
+      if(E->left < 0 || E->right < 0 || (E->flags & CUTEDGE_WHIMSY) || E->npts < 2) continue;
+      uint32_t in = 0;
+      for(uint32_t i = 0; i < E->npts; i++) {
+        int x = (int)(g->pts[2 * (E->p0 + i)] * k.res), y = (int)(g->pts[2 * (E->p0 + i) + 1] * k.res);
+        int hit = 0;
+        for(int dy = -1; dy <= 0 && !hit; dy++)
+          for(int dx = -1; dx <= 0 && !hit; dx++)
+            if(x + dx >= 0 && y + dy >= 0 && x + dx < k.w && y + dy < k.h) hit = smask[(y + dy) * k.w + x + dx] != 0;
+        in += hit;
+      }
+      if(in * 10 >= E->npts * 6) E->flags |= CUTEDGE_SNAKE;
+    }
+  }
+  free(k.lab); free(k.snk); free(k.mark); free(k.marks); free(k.body); free(k.edge); free(k.sent); free(xy); free(smask);
   return err;
 }
 
 int snakecut_graph(CutGraph * g, float width, float height, uint32_t count, uint8_t whimsy, uint8_t set,
     uint32_t seed, const SnakeStyle * st) {
   memset(g, 0, sizeof(CutGraph));
-  (void)whimsy; (void)set;
   if(count < 2 || count > 0xFFF0 || !(width > 0) || !(height > 0)) return 1;
   uint32_t base = (uint32_t)(count * st->base + 0.5f);
   if(base < 2) base = 2;
   for(uint32_t t = 0; t < SNAKECUT_TRIES; t++) {
-    int res = sk_build(g, width, height, count, base, seed ^ (t * 0x9E3779B1u), st);
+    int res = sk_build(g, width, height, count, base, whimsy, set, seed ^ (t * 0x9E3779B1u), st);
     if(res == 0) {
       g->tries = t + 1;
       return 0;

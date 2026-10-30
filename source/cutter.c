@@ -25,7 +25,8 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
     return 0;
   }
   c->usegraph = 1;
-  if(c->style == CUT_STYLE_WOODEN2 || c->style == CUT_STYLE_WOODEN3 || c->style == CUT_STYLE_WOODEN4) {
+  if(c->style == CUT_STYLE_WOODEN2 || c->style == CUT_STYLE_WOODEN3 || c->style == CUT_STYLE_WOODEN4 ||
+      c->style == CUT_STYLE_WOODEN5) {
     // Stroke / Potts cut: whimsies are part of them (placed first). Wooden2's tab rules for both.
     CutTabStyle ts;
     randcut_tabstyle(randcut_style(RANDCUT_STYLE_WOOD2), &ts);
@@ -35,6 +36,7 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
       uint32_t s = randcut_tryseed(seed, t);
       int gerr = c->style == CUT_STYLE_WOODEN2 ? strokecut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s)
           : c->style == CUT_STYLE_WOODEN4 ? snakecut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s, snakecut_style(SNAKECUT_STYLE_DEFAULT))
+          : c->style == CUT_STYLE_WOODEN5 ? snakecut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s, snakecut_style(SNAKECUT_STYLE_TJUNCTION))
           : pottscut_graph(&c->g, cols, rows, c->count, c->whimsy, c->set, s, pottscut_style(POTTSCUT_STYLE_DEFAULT));
       if(gerr) continue;
       if(c->style == CUT_STYLE_WOODEN3 || c->style == CUT_STYLE_WOODEN4) {
