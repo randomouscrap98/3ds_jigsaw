@@ -55,7 +55,7 @@ void cutsample_crop(uint16_t w, uint16_t h, uint32_t target, uint16_t * x, uint1
 int cutsample_draw(uint8_t style, uint8_t whimsy, uint8_t set, uint16_t w, uint16_t h, uint32_t * px) {
   if(!w || !h) return 1;
   uint16_t cols, rows;
-  layout_grid(w, h, CUTSAMPLE_PIECES, &cols, &rows);
+  layout_grid(w, h, style == CUT_STYLE_MAZE ? CUTSAMPLE_MAZEPIECES : CUTSAMPLE_PIECES, &cols, &rows);
   Cutter c;
   if(cutter_init(&c, style, whimsy, set, cols, rows, CUTSAMPLE_SEED)) return 1;
   float * dist = malloc(sizeof(float) * w * h);

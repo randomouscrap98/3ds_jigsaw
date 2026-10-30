@@ -3,6 +3,7 @@
 #include "savefile.h"
 #include "rng.h"
 #include "whimsy.h"
+#include "cutter.h"
 #include "render.h"
 
 #include <stdio.h>
@@ -71,8 +72,18 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   }
   // Only one game per picture, so its caches for other counts/styles are dead weight
   storage_cleancaches(name, cpath);
+  // Maze pieces are one thin cell wide: grabbed by a loose hull too, and they need more room
+  int maze = style == CUT_STYLE_MAZE;
+  if(maze && piecegeo_hulls(&g->geo)) {
+    GAME_ERR("Out of memory (piece hulls)");
+    piecegeo_free(&g->geo);
+    puzzlegfx_free(&g->gfx);
+    free(save);
+    return 1;
+  }
   Layout * l = &g->gfx.layout;
-  float tw = l->width * GAME_TABLESCALE, th = l->height * GAME_TABLESCALE;
+  float scale = maze ? GAME_TABLESCALE_MAZE : GAME_TABLESCALE;
+  float tw = l->width * scale, th = l->height * scale;
   if(board_init(&g->board, &g->geo, tw, th)) {
     GAME_ERR("Out of memory (board)");
     piecegeo_free(&g->geo);
@@ -106,7 +117,9 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     }
   } else {
     float sw = tw * GAME_SCATTER, sh = th * GAME_SCATTER;
-    board_scatter(&g->board, (uint32_t)osGetTime() ^ rng_hashstr(name), (tw - sw) / 2, (th - sh) / 2, sw, sh);
+    uint32_t sseed = (uint32_t)osGetTime() ^ rng_hashstr(name);
+    if(maze) board_scatterpack(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
+    else board_scatter(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
     g->dirty = 1;
   }
   camera_init(&g->cam, GAME_SCREENW, GAME_SCREENH, tw, th, GAME_MAXZOOM);

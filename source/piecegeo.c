@@ -18,6 +18,8 @@ void piecegeo_free(PieceGeo * g) {
   free(g->hb);
   free(g->lstart);
   free(g->lpiece);
+  free(g->hullstart);
+  free(g->hull);
   memset(g, 0, sizeof(PieceGeo));
 }
 
@@ -210,4 +212,63 @@ int piecegeo_read(PieceGeo * g, const uint8_t * buf, size_t len) {
   if(!err && piecegeo_index(g)) err = 6;
   if(err) piecegeo_free(g);
   return err;
+}
+
+static float piecegeo_cross(const float * o, const float * a, const float * b) {
+  return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+}
+
+static int piecegeo_ptcmp(const void * a, const void * b) {
+  const float * p = a, * q = b;
+  if(p[0] != q[0]) return p[0] < q[0] ? -1 : 1;
+  return p[1] < q[1] ? -1 : p[1] > q[1];
+}
+
+int piecegeo_hulls(PieceGeo * g) {
+  uint32_t total = g->hbstart[g->count], maxn = 0;
+  for(uint32_t p = 0; p < g->count; p++) {
+    uint32_t n = g->hbstart[p + 1] - g->hbstart[p];
+    if(n > maxn) maxn = n;
+  }
+  free(g->hullstart);
+  free(g->hull);
+  g->hullstart = malloc(sizeof(uint32_t) * (g->count + 1));
+  g->hull = malloc(sizeof(float) * 2 * (total + g->count));
+  float * pts = malloc(sizeof(float) * 2 * (maxn ? maxn : 1));
+  if(!g->hullstart || !g->hull || !pts) {
+    free(pts);
+    free(g->hullstart);
+    free(g->hull);
+    g->hullstart = NULL;
+    g->hull = NULL;
+    return 1;
+  }
+  // Andrew's monotone chain per piece
+  uint32_t nh = 0;
+  for(uint32_t p = 0; p < g->count; p++) {
+    uint32_t n = g->hbstart[p + 1] - g->hbstart[p];
+    memcpy(pts, g->hb + 2 * g->hbstart[p], sizeof(float) * 2 * n);
+    qsort(pts, n, sizeof(float) * 2, piecegeo_ptcmp);
+    float * h = g->hull + 2 * nh;
+    uint32_t k = 0;
+    for(uint32_t i = 0; i < n; i++) {
+      while(k >= 2 && piecegeo_cross(h + 2 * (k - 2), h + 2 * (k - 1), pts + 2 * i) <= 0) k--;
+      h[2 * k] = pts[2 * i]; h[2 * k + 1] = pts[2 * i + 1]; k++;
+    }
+    for(uint32_t i = n - 1, lo = k + 1; i-- > 0;) {
+      while(k >= lo && piecegeo_cross(h + 2 * (k - 2), h + 2 * (k - 1), pts + 2 * i) <= 0) k--;
+      h[2 * k] = pts[2 * i]; h[2 * k + 1] = pts[2 * i + 1]; k++;
+    }
+    if(k > 1) k--;   // Last point = first
+    g->hullstart[p] = nh;
+    nh += k;
+  }
+  g->hullstart[g->count] = nh;
+  free(pts);
+  return 0;
+}
+
+int piecegeo_inhull(const PieceGeo * g, uint32_t p, float x, float y) {
+  if(!g->hull) return 0;
+  return geom_inside(g->hull + 2 * g->hullstart[p], g->hullstart[p + 1] - g->hullstart[p], x, y);
 }

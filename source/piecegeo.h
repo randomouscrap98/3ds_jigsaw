@@ -26,6 +26,10 @@ typedef struct {
   uint16_t lw, lh;
   uint32_t * lstart;
   uint16_t * lpiece;
+  // Optional loose grab shapes (piecegeo_hulls; NULL = none): convex hull of each hitbox,
+  // hull[hullstart[p]..hullstart[p+1]). Not in the cache bytes.
+  uint32_t * hullstart;
+  float * hull;
 } PieceGeo;
 
 // Grid of cells (edgegen's layout). Piece index = row * cols + col, home center = the
@@ -55,5 +59,10 @@ int piecegeo_read(PieceGeo * g, const uint8_t * buf, size_t len);
 // Piece whose hitbox contains puzzle-frame point (x, y), or -1. Hitboxes are half-open
 // (a point on a shared edge belongs to one piece only).
 int32_t piecegeo_at(const PieceGeo * g, float x, float y);
+// Build the loose grab shapes (for pieces too thin to grab by their hitbox: maze pieces).
+// Returns 0 on success.
+int piecegeo_hulls(PieceGeo * g);
+// 1 if piece p's loose grab shape contains (x, y) (0 when there are none)
+int piecegeo_inhull(const PieceGeo * g, uint32_t p, float x, float y);
 
 #endif

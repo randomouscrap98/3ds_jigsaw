@@ -260,6 +260,153 @@ static uint32_t mp_cut(MazePieces * m, const MpTrees * t, uint32_t thr, uint32_t
   return count;
 }
 
+// Piece sizes (count entries)
+static void mp_sizes(const MazePieces * m, uint32_t * size) {
+  memset(size, 0, sizeof(uint32_t) * m->count);
+  for(uint32_t i = 0; i < (uint32_t)m->w * m->h; i++) size[m->label[i]]++;
+}
+
+// Split piece p in two along its tree, as evenly as possible (BFS from one cell, subtree
+// sizes; the new piece gets label m->count). Returns 0 on success.
+static int mp_split(MazePieces * m, int32_t p, uint32_t * order, int32_t * parent, uint32_t * sub) {
+  uint32_t n = (uint32_t)m->w * m->h, no = 0, head = 0;
+  for(uint32_t i = 0; i < n && !no; i++) if(m->label[i] == p) { order[no++] = i; parent[i] = -1; m->label[i] = -4; }
+  while(head < no) {
+    uint32_t v = order[head++];
+    int x = v % m->w, y = v / m->w;
+    for(int d = 0; d < 4; d++) {
+      int nx = x + mp_dx[d], ny = y + mp_dy[d];
+      if(nx < 0 || ny < 0 || nx >= m->w || ny >= m->h) continue;
+      uint32_t u = ny * m->w + nx;
+      if(m->label[u] != p) continue;
+      parent[u] = v;
+      order[no++] = u;
+      m->label[u] = -4;   // Seen (restored below)
+    }
+  }
+  for(uint32_t i = 0; i < no; i++) sub[order[i]] = 1;
+  for(uint32_t i = no; i-- > 1;) sub[parent[order[i]]] += sub[order[i]];
+  uint32_t best = 0, bestd = UINT32_MAX;
+  for(uint32_t i = 1; i < no; i++) {
+    uint32_t d = sub[order[i]] * 2 > no ? sub[order[i]] * 2 - no : no - sub[order[i]] * 2;
+    if(d < bestd) { bestd = d; best = i; }
+  }
+  if(!best) { for(uint32_t i = 0; i < no; i++) m->label[order[i]] = p; return 1; }
+  // Preorder: a cell is in the cut subtree if its parent is (or it is the cut cell)
+  for(uint32_t i = 0; i < no; i++) {
+    uint32_t v = order[i];
+    m->label[v] = i == best || (i > 0 && parent[v] >= 0 && m->label[parent[v]] == (int32_t)m->count) ? (int32_t)m->count : -4;
+  }
+  for(uint32_t i = 0; i < no; i++) if(m->label[order[i]] == -4) m->label[order[i]] = p;
+  m->count++;
+  return 0;
+}
+
+// Merge piece p into its smallest neighbour of the same kind (any kind if none), then
+// move the last label into p's place. Returns 0 on success.
+static int mp_merge(MazePieces * m, int32_t p, const uint32_t * size) {
+  uint32_t n = (uint32_t)m->w * m->h;
+  int32_t best = -1, bestany = -1;
+  for(uint32_t i = 0; i < n; i++) {
+    if(m->label[i] != p) continue;
+    int x = i % m->w, y = i / m->w;
+    for(int d = 0; d < 4; d++) {
+      int nx = x + mp_dx[d], ny = y + mp_dy[d];
+      if(nx < 0 || ny < 0 || nx >= m->w || ny >= m->h) continue;
+      uint32_t u = ny * m->w + nx;
+      int32_t q = m->label[u];
+      if(q == p) continue;
+      if(bestany < 0 || size[q] < size[bestany]) bestany = q;
+      if(m->wall[u] == m->wall[i] && (best < 0 || size[q] < size[best])) best = q;
+    }
+  }
+  if(best < 0) best = bestany;
+  if(best < 0) return 1;
+  int32_t last = m->count - 1;
+  for(uint32_t i = 0; i < n; i++) if(m->label[i] == p) m->label[i] = best;
+  if(p != last) for(uint32_t i = 0; i < n; i++) if(m->label[i] == last) m->label[i] = p;
+  m->count--;
+  return 0;
+}
+
+// Exactly target pieces: split the biggest or merge the smallest until it fits
+static int mp_exact(MazePieces * m, uint32_t target) {
+  uint32_t n = (uint32_t)m->w * m->h;
+  for(uint32_t i = 0; i < n; i++) if(m->label[i] < 0) return 1;
+  uint32_t * size = malloc(sizeof(uint32_t) * (target + m->count + 1));
+  uint32_t * order = malloc(sizeof(uint32_t) * n), * sub = malloc(sizeof(uint32_t) * n);
+  int32_t * parent = malloc(sizeof(int32_t) * n);
+  int err = !size || !order || !sub || !parent;
+  for(int guard = 0; !err && m->count != target && guard < 1000; guard++) {
+    mp_sizes(m, size);
+    int32_t p = 0;
+    for(uint32_t q = 1; q < m->count; q++) {
+      if(m->count < target ? size[q] > size[p] : size[q] < size[p]) p = q;
+    }
+    err = m->count < target ? mp_split(m, p, order, parent, sub) : mp_merge(m, p, size);
+  }
+  if(m->count != target) err = 1;
+  free(size); free(order); free(sub); free(parent);
+  return err;
+}
+
+typedef struct {
+  uint8_t * key;
+  uint32_t len;
+} MpShape;
+
+static int mp_shapecmp(const void * a, const void * b) {
+  const MpShape * x = a, * y = b;
+  if(x->len != y->len) return x->len < y->len ? -1 : 1;
+  return memcmp(x->key, y->key, x->len);
+}
+
+// Pieces whose shape repeats another's (turned in 90 degree steps; mirror images differ).
+// Key = smallest of the 4 turns as (w, h, one byte per box cell).
+static int mp_dups(const MazePieces * m, uint32_t * dups) {
+  uint32_t n = m->count, cells = (uint32_t)m->w * m->h;
+  int * box = malloc(sizeof(int) * 4 * n);
+  MpShape * sh = calloc(n, sizeof(MpShape));
+  if(!box || !sh) { free(box); free(sh); return 1; }
+  for(uint32_t p = 0; p < n; p++) { box[p * 4] = box[p * 4 + 1] = 1 << 30; box[p * 4 + 2] = box[p * 4 + 3] = -1; }
+  for(uint32_t i = 0; i < cells; i++) {
+    int * b = box + 4 * m->label[i], x = i % m->w, y = i / m->w;
+    if(x < b[0]) b[0] = x;
+    if(y < b[1]) b[1] = y;
+    if(x > b[2]) b[2] = x;
+    if(y > b[3]) b[3] = y;
+  }
+  int err = 0;
+  for(uint32_t p = 0; p < n && !err; p++) {
+    int bx = box[p * 4], by = box[p * 4 + 1], w = box[p * 4 + 2] - bx + 1, h = box[p * 4 + 3] - by + 1;
+    uint32_t len = 2 + (uint32_t)w * h;
+    uint8_t * cur = malloc(len);
+    sh[p].key = malloc(len);
+    sh[p].len = len;
+    if(!cur || !sh[p].key || w > 255 || h > 255) { free(cur); err = 1; break; }
+    for(int rot = 0; rot < 4; rot++) {
+      int rw = rot & 1 ? h : w, rh = rot & 1 ? w : h;
+      cur[0] = rw; cur[1] = rh;
+      for(int y = 0; y < rh; y++) for(int x = 0; x < rw; x++) {
+        int sx = rot == 0 ? x : rot == 1 ? y : rot == 2 ? w - 1 - x : w - 1 - y;
+        int sy = rot == 0 ? y : rot == 1 ? h - 1 - x : rot == 2 ? h - 1 - y : x;
+        cur[2 + y * rw + x] = m->label[(by + sy) * m->w + bx + sx] == (int32_t)p;
+      }
+      if(rot == 0 || memcmp(cur, sh[p].key, len) < 0) memcpy(sh[p].key, cur, len);
+    }
+    free(cur);
+  }
+  *dups = 0;
+  if(!err) {
+    qsort(sh, n, sizeof(MpShape), mp_shapecmp);
+    for(uint32_t p = 1; p < n; p++) *dups += !mp_shapecmp(sh + p - 1, sh + p);
+  }
+  for(uint32_t p = 0; p < n; p++) free(sh[p].key);
+  free(sh);
+  free(box);
+  return err;
+}
+
 int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, uint32_t seed) {
   memset(m, 0, sizeof(MazePieces));
   float wf = sqrtf((float)count * avg * cols / rows);
@@ -292,6 +439,8 @@ int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count,
     }
     m->thr = best;
     m->count = mp_cut(m, &t, best, res, cut);
+    m->cut = m->count;
+    err = mp_exact(m, count) || mp_dups(m, &m->dups);
   }
   mp_treesfree(&t);
   free(res);
@@ -304,4 +453,85 @@ void mazepiece_free(MazePieces * m) {
   free(m->wall);
   free(m->label);
   memset(m, 0, sizeof(MazePieces));
+}
+
+static int32_t mp_at(const MazePieces * m, int x, int y) {
+  return x < 0 || y < 0 || x >= m->w || y >= m->h ? -1 : m->label[y * m->w + x];
+}
+
+// Unit border segments: horizontal one from lattice point (x, y) to (x + 1, y), vertical
+// one from (x, y) to (x, y + 1)
+static int mp_hseg(const MazePieces * m, int x, int y) {
+  return x >= 0 && x < m->w && mp_at(m, x, y - 1) != mp_at(m, x, y);
+}
+
+static int mp_vseg(const MazePieces * m, int x, int y) {
+  return y >= 0 && y < m->h && mp_at(m, x - 1, y) != mp_at(m, x, y);
+}
+
+// A lattice point is a graph vertex unless it's inside one straight line
+static int mp_vertex(const MazePieces * m, int x, int y) {
+  int hl = mp_hseg(m, x - 1, y), hr = mp_hseg(m, x, y), vu = mp_vseg(m, x, y - 1), vd = mp_vseg(m, x, y);
+  int deg = hl + hr + vu + vd;
+  return deg > 0 && !(deg == 2 && ((hl && hr) || (vu && vd)));
+}
+
+int mazepiece_graph(const MazePieces * m, uint16_t cols, uint16_t rows, CutGraph * g) {
+  memset(g, 0, sizeof(CutGraph));
+  int W = m->w, H = m->h;
+  uint32_t nl = (uint32_t)(W + 1) * (H + 1), maxe = 0;
+  int32_t * vid = malloc(sizeof(int32_t) * nl);
+  if(!vid) return 1;
+  for(int y = 0; y <= H; y++) for(int x = 0; x <= W; x++) {
+    vid[y * (W + 1) + x] = mp_vertex(m, x, y) ? (int32_t)g->nv++ : -1;
+    maxe += mp_hseg(m, x, y) + mp_vseg(m, x, y);
+  }
+  g->count = m->count;
+  g->width = cols;
+  g->height = rows;
+  g->v = malloc(sizeof(CutVert) * (g->nv ? g->nv : 1));
+  g->e = calloc(maxe ? maxe : 1, sizeof(CutEdge));
+  g->pts = malloc(sizeof(float) * 2);
+  if(!g->v || !g->e || !g->pts) {
+    free(vid);
+    cutgraph_free(g);
+    return 1;
+  }
+  float sx = (float)cols / W, sy = (float)rows / H;
+  for(int y = 0; y <= H; y++) for(int x = 0; x <= W; x++) {
+    int32_t v = vid[y * (W + 1) + x];
+    if(v >= 0) g->v[v] = (CutVert) { x * sx, y * sy };
+  }
+  // Straight runs between vertices. Horizontal: the cell below walks it left to right
+  // (left side), the one above is on the right. Vertical: the cell on the left walks it down.
+  for(int y = 0; y <= H; y++) {
+    for(int x = 0; x < W;) {
+      if(!mp_hseg(m, x, y)) { x++; continue; }
+      int x0 = x;
+      do x++; while(x < W && mp_hseg(m, x, y) && vid[y * (W + 1) + x] < 0);
+      CutEdge * e = g->e + g->ne++;
+      e->a = vid[y * (W + 1) + x0];
+      e->b = vid[y * (W + 1) + x];
+      e->left = mp_at(m, x0, y);
+      e->right = mp_at(m, x0, y - 1);
+    }
+  }
+  for(int x = 0; x <= W; x++) {
+    for(int y = 0; y < H;) {
+      if(!mp_vseg(m, x, y)) { y++; continue; }
+      int y0 = y;
+      do y++; while(y < H && mp_vseg(m, x, y) && vid[y * (W + 1) + x] < 0);
+      CutEdge * e = g->e + g->ne++;
+      e->a = vid[y0 * (W + 1) + x];
+      e->b = vid[y * (W + 1) + x];
+      e->left = mp_at(m, x - 1, y0);
+      e->right = mp_at(m, x, y0);
+    }
+  }
+  free(vid);
+  if(cutgraph_rewalk(g)) {
+    cutgraph_free(g);
+    return 1;
+  }
+  return 0;
 }

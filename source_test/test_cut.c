@@ -16,9 +16,11 @@
 #define PINNED_WILD 0x6CE7D16Fu
 #define PINNED_RANDOM 0xB45D299Bu      // 1.2
 #define PINNED_RANDRECT 0x16C37493u    // 1.3
+#define PINNED_MAZE 0xAED061F1u        // 1.3
 #define PINNED_WHIMSY { { 0x8C3BD049u, 0x881A00CEu }, { 0xFFEF07BBu, 0xBEC93799u }, \
     { 0x33ED2971u, 0xB5F9C31Fu }, { 0x987CDF7Bu, 0xBEC67F6Cu }, \
-    { 0x33BEE477u, 0x0450611Bu } }   // 1.2 (Random Rect 1.3), style x Few/Many
+    { 0x33BEE477u, 0x0450611Bu }, \
+    { PINNED_MAZE, PINNED_MAZE } }   // 1.2 (Random Rect, Maze 1.3; Maze ignores whimsies), style x Few/Many
 
 void test_layout(void) {
   uint16_t c, r;
@@ -33,7 +35,7 @@ void test_layout(void) {
   // Every cut style packs into 3 pages at every count, with no overlaps, never upscaling
   uint32_t targets[4] = { 50, 100, 250, 500 };
   uint32_t sizes[4][2] = { { 4000, 3000 }, { 1024, 1024 }, { 600, 1400 }, { 1024, 768 } };
-  const char * names[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect" };
+  const char * names[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "maze" };
   for(int s = 0; s < 4; s++) {
     for(int t = 0; t < 4; t++) {
       printf("  %4ux%-4u %3u:", sizes[s][0], sizes[s][1], targets[t]);
@@ -103,7 +105,7 @@ static uint32_t cut_hash(uint8_t style, uint8_t whimsy, uint16_t cols, uint16_t 
 }
 
 void test_cut_pinned(void) {
-  const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT };
+  const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT, PINNED_MAZE };
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
     uint32_t h = cut_hash(st, WHIMSY_NONE, 13, 9, 4242);
     if(h != want[st]) printf("  style %u hash %08lX\n", st, (unsigned long)h);
@@ -397,6 +399,7 @@ void test_cutsample(void) {
       clear += a[i] == 0;
     }
     // Lines everywhere but mostly see-through (48 pieces: 18% line, 66% clear)
+    if(st == CUT_STYLE_MAZE) printf("  maze sample: %u%% line, %u%% clear\n", (unsigned)(100 * lines / (w * h)), (unsigned)(100 * clear / (w * h)));
     CHECK(lines > (uint32_t)(w * h) / 20 && clear > (uint32_t)(w * h) / 2);
   }
   CHECK(cutsample_draw(CUT_STYLE_CLASSIC, WHIMSY_NONE, 0, 200, 320, a) == 0);  // Portrait

@@ -60,16 +60,29 @@ static void board_place_single(Board * b, uint16_t piece, float cx, float cy, ui
   g->y = cy - ry;
 }
 
-void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h) {
-  Rng rng;
-  rng_init(&rng, seed);
-  // Reset to one group per piece
+// One group per piece
+static void board_reset(Board * b) {
   for(uint32_t i = 0; i < b->count; i++) {
     b->pieces[i].group = i;
     b->pieces[i].next = BOARD_NONE;
     b->groups[i] = (BoardGroup) { .x = 0, .y = 0, .first = i, .count = 1, .rot = 0 };
   }
   b->ngroups = b->count;
+}
+
+// Random draw order too, so it doesn't look like a scan pattern when things overlap
+static void board_shuffle(Board * b, Rng * rng) {
+  for(uint32_t i = 0; i < b->count; i++) b->order[i] = i;
+  for(uint32_t i = b->count - 1; i > 0; i--) {
+    uint32_t j = rng_below(rng, i + 1);
+    uint16_t t = b->order[i]; b->order[i] = b->order[j]; b->order[j] = t;
+  }
+}
+
+void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h) {
+  Rng rng;
+  rng_init(&rng, seed);
+  board_reset(b);
   // Lay a grid of slots over the table with at least one slot per piece
   float slot = sqrtf(w * h / b->count);
   uint32_t scols, srows;
@@ -106,12 +119,7 @@ void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h)
     }
     free(slots);
   }
-  // Random draw order too, so it doesn't look like a scan pattern when things overlap
-  for(uint32_t i = 0; i < b->count; i++) b->order[i] = i;
-  for(uint32_t i = b->count - 1; i > 0; i--) {
-    uint32_t j = rng_below(&rng, i + 1);
-    uint16_t t = b->order[i]; b->order[i] = b->order[j]; b->order[j] = t;
-  }
+  board_shuffle(b, &rng);
 }
 
 int32_t board_pick(Board * b, float x, float y) {
@@ -123,6 +131,18 @@ int32_t board_pick(Board * b, float x, float y) {
     board_rotvec((4 - g->rot) & 3, x - g->x, y - g->y, &lx, &ly);
     int32_t p = piecegeo_at(b->geo, lx, ly);
     if(p >= 0 && b->pieces[p].group == gid) return gid;
+  }
+  // Nothing under the stylus exactly: pieces with loose grab shapes (thin maze pieces) can
+  // be picked up by those, topmost first
+  if(!b->geo->hull) return -1;
+  for(int32_t i = (int32_t)b->ngroups - 1; i >= 0; i--) {
+    uint16_t gid = b->order[i];
+    BoardGroup * g = b->groups + gid;
+    float lx, ly;
+    board_rotvec((4 - g->rot) & 3, x - g->x, y - g->y, &lx, &ly);
+    for(uint16_t p = g->first; p != BOARD_NONE; p = b->pieces[p].next) {
+      if(piecegeo_inhull(b->geo, p, lx, ly)) return gid;
+    }
   }
   return -1;
 }
@@ -360,4 +380,96 @@ int board_condense_marked(Board * b, const uint8_t * mark, float slot) {
   free(at);
   free(box);
   return 0;
+}
+
+int board_scatterpack(Board * b, uint32_t seed, float x, float y, float w, float h) {
+  Rng rng;
+  rng_init(&rng, seed);
+  board_reset(b);
+  uint32_t n = b->count;
+  uint16_t * pick = malloc(sizeof(uint16_t) * n);
+  float * box = malloc(sizeof(float) * 4 * n);   // Rotated bounds around the home center
+  uint32_t * rowstart = malloc(sizeof(uint32_t) * (n + 1));
+  float * rowh = malloc(sizeof(float) * n), * roww = malloc(sizeof(float) * n);
+  if(!pick || !box || !rowstart || !rowh || !roww) {
+    free(pick); free(box); free(rowstart); free(rowh); free(roww);
+    board_scatter(b, seed, x, y, w, h);
+    return 1;
+  }
+  const PieceGeo * geo = b->geo;
+  float gap = geo->cell * 0.1f;
+  for(uint32_t i = 0; i < n; i++) pick[i] = i;
+  for(uint32_t i = n - 1; i > 0; i--) {
+    uint32_t j = rng_below(&rng, i + 1);
+    uint16_t t = pick[i]; pick[i] = pick[j]; pick[j] = t;
+  }
+  for(uint32_t i = 0; i < n; i++) {
+    // Lying flat packs tighter: random turn, then a quarter more if that leaves it standing
+    uint8_t rot = rng_below(&rng, 4);
+    for(int pass = 0; pass < 2; pass++) {
+      const float * hb = geo->hb + 2 * geo->hbstart[i];
+      float * bx = box + 4 * i;
+      for(uint32_t k = 0; k < geo->hbstart[i + 1] - geo->hbstart[i]; k++) {
+        float rx, ry;
+        board_rotvec(rot, hb[2 * k] - geo->center[2 * i], hb[2 * k + 1] - geo->center[2 * i + 1], &rx, &ry);
+        if(!k || rx < bx[0]) bx[0] = rx;
+        if(!k || ry < bx[1]) bx[1] = ry;
+        if(!k || rx > bx[2]) bx[2] = rx;
+        if(!k || ry > bx[3]) bx[3] = ry;
+      }
+      if(bx[3] - bx[1] <= bx[2] - bx[0]) break;
+      rot = (rot + 1) & 3;
+    }
+    b->groups[i].rot = rot;
+  }
+  // Tallest first (stable over the shuffle: insertion sort, n is small), so rows are even
+  for(uint32_t i = 1; i < n; i++) {
+    uint16_t p = pick[i];
+    float ph = box[4 * p + 3] - box[4 * p + 1];
+    uint32_t j = i;
+    for(; j > 0 && box[4 * pick[j - 1] + 3] - box[4 * pick[j - 1] + 1] < ph; j--) pick[j] = pick[j - 1];
+    pick[j] = p;
+  }
+  // Shelves: fill a row left to right, then start the next
+  uint32_t nrows = 0;
+  float used = 0;
+  for(uint32_t i = 0; i < n;) {
+    rowstart[nrows] = i;
+    rowh[nrows] = 0;
+    roww[nrows] = 0;
+    for(; i < n; i++) {
+      const float * bx = box + 4 * pick[i];
+      float bw = bx[2] - bx[0], bh = bx[3] - bx[1];
+      if(i > rowstart[nrows] && roww[nrows] + gap + bw > w) break;
+      roww[nrows] += (i > rowstart[nrows] ? gap : 0) + bw;
+      if(bh > rowh[nrows]) rowh[nrows] = bh;
+    }
+    used += rowh[nrows];
+    nrows++;
+  }
+  rowstart[nrows] = n;
+  int fits = used + gap * (nrows - 1) <= h;
+  // Spread the slack: between rows, and between the pieces of a row (plus a little jitter
+  // so it doesn't look like a grid)
+  float rgap = fits ? (h - used) / (nrows + 1) : gap;
+  float py = fits ? y + rgap : y + (h - used - gap * (nrows - 1)) / 2;
+  for(uint32_t r = 0; r < nrows; r++) {
+    uint32_t cnt = rowstart[r + 1] - rowstart[r];
+    float sgap = (w - roww[r] + gap * (cnt - 1)) / (cnt + 1);
+    if(sgap < gap) sgap = gap;
+    float px = x + sgap;
+    for(uint32_t k = rowstart[r]; k < rowstart[r + 1]; k++) {
+      uint16_t p = pick[k];
+      const float * bx = box + 4 * p;
+      float bw = bx[2] - bx[0], bh = bx[3] - bx[1];
+      float jx = rng_range(&rng, -0.3f, 0.3f) * (sgap - gap) / 2, jy = rng_range(&rng, 0, 1) * (rowh[r] - bh);
+      jy += rng_range(&rng, -0.3f, 0.3f) * (rgap - gap) / 2;
+      board_place_single(b, p, px + jx - bx[0], py + jy - bx[1], b->groups[p].rot);
+      px += bw + sgap;
+    }
+    py += rowh[r] + rgap;
+  }
+  board_shuffle(b, &rng);
+  free(pick); free(box); free(rowstart); free(rowh); free(roww);
+  return !fits;
 }

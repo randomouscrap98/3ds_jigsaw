@@ -64,6 +64,7 @@ typedef struct {
   int nentries;
   uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
   u8 optcut[PMENU_MAXOPTS];              // Options item shows the cut sample over the picture
+  int optwhimsy;                         // Options item index of Whimsies (-1 = none)
   u8 showcut;                            // Cursor is on such an item (or on Continue)
   u8 cutsrc;                             // Cut sample last asked for: 1 = the save's, 2 = the settings'
   tui_menu_number_t pieces;              // Piece count picked in options: index into the counts

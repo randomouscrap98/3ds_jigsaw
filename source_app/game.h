@@ -16,6 +16,7 @@
 #define GAME_SCREENW 320          // Bottom screen, where the table is
 #define GAME_SCREENH 240
 #define GAME_TABLESCALE 3.0f      // Table is this many times the puzzle size each way
+#define GAME_TABLESCALE_MAZE 3.5f // ... for maze pieces (packed scatter needs ~2x the puzzle each way: 2.35x at 0.67)
 #define GAME_SCATTER 0.67f        // Pieces start spread over this fraction of the table (centered)
 #define GAME_SNAP 0.3f            // Snap distance, in cells
 #define GAME_CONDENSE 1.7f        // Condensed pieces sit this many cells apart (tabs make a piece ~1.7)

@@ -25,6 +25,7 @@ int main(int argc, char ** argv) {
     if(argc > 3 && !strcmp(argv[3], "wild")) style = EDGEGEN_STYLE_WILD;
     if(argc > 3 && !strcmp(argv[3], "random")) style = CUT_STYLE_RANDOM;
     if(argc > 3 && !strcmp(argv[3], "randrect")) style = CUT_STYLE_RANDRECT;
+    if(argc > 3 && !strcmp(argv[3], "maze")) style = CUT_STYLE_MAZE;
     if(argc > 3 && !strcmp(argv[3], "wooden")) style = CUT_STYLE_WOODEN;
     if(argc > 3 && !strcmp(argv[3], "wooden2")) style = CUT_STYLE_WOODEN2;
     if(argc > 3 && !strcmp(argv[3], "wooden3")) style = CUT_STYLE_WOODEN3;
@@ -39,6 +40,8 @@ int main(int argc, char ** argv) {
     return test_failures ? 1 : 0;
   }
   RUN(test_board);
+  RUN(test_pick_same);
+  RUN(test_pick_maze);
   RUN(test_piecegeo);
   RUN(test_randcut);
   RUN(test_cutgraph_grid);

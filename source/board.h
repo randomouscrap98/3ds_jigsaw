@@ -45,7 +45,13 @@ void board_free(Board * b);
 // Throw all pieces into their own groups at random spots/rotations, spread evenly over
 // the region (x, y, w, h) of the table
 void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h);
-// Topmost group under world point, or -1 if none. Does not change draw order.
+// The same for pieces of very different sizes (maze pieces): each piece's hitbox bounds,
+// at a random rotation, shelf-packed into rows over the region with the slack spread
+// out, so pieces don't overlap when they fit. When they don't, the rows are centered on
+// the region and stick out of it. Returns 0 if they fit, 1 if not.
+int board_scatterpack(Board * b, uint32_t seed, float x, float y, float w, float h);
+// Topmost group under world point, or -1 if none (exact hitboxes first, then loose grab
+// shapes if the geometry has them). Does not change draw order.
 int32_t board_pick(Board * b, float x, float y);
 // Move group to the top of the draw order
 void board_raise(Board * b, uint16_t group);

@@ -8,6 +8,7 @@
 // seen. Not the puzzle's real cut: same style, whimsies and shape set, fixed seed.
 
 #define CUTSAMPLE_PIECES 100
+#define CUTSAMPLE_MAZEPIECES 24      // Maze pieces have ~6x the line length: fewer, or the lines cover the picture
 #define CUTSAMPLE_SEED 0x5A3D1E      // Same sample every time for the same settings
 #define CUTSAMPLE_LINE 0.7f          // Dark line half width (pixels)
 #define CUTSAMPLE_HALO 1.8f          // Light halo out to this distance (pixels)

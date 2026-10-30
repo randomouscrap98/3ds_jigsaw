@@ -19,6 +19,8 @@ int test_board_grid(Board * b, uint16_t cols, uint16_t rows, float cell, float w
 void test_board_free(Board * b);
 
 void test_board(void);
+void test_pick_same(void);
+void test_pick_maze(void);
 void test_piecegeo(void);
 void test_randcut(void);
 void test_cutgraph_grid(void);

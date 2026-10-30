@@ -10,16 +10,21 @@
 #include <stdint.h>
 
 // Cut styles as stored in saves, cache names and the menu. 0-2 are grid cuts (edgegen
-// styles), 3-4 are random (Voronoi) cuts: scattered points or points on a jittered grid.
-// (The shelved wooden experiments live in woodcut, numbered from CUT_STYLES.)
+// styles), 3-4 are random (Voronoi) cuts: scattered points or points on a jittered grid,
+// 5 is maze pieces (mazepiece; no whimsies). (The shelved wooden experiments live in
+// woodcut, numbered from CUT_STYLES.)
 #define CUT_STYLE_CLASSIC 0
 #define CUT_STYLE_IRREGULAR 1
 #define CUT_STYLE_WILD 2
 #define CUT_STYLE_RANDOM 3
 #define CUT_STYLE_RANDRECT 4
-#define CUT_STYLES 5
+#define CUT_STYLE_MAZE 5
+#define CUT_STYLES 6
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
+#define CUTTER_MAZEAVG 30   // Maze pieces: cells per piece (complexity vs arm width)
+#define CUTTER_MAZENEWEST 0.5f  // Maze branchiness (mazepiece_init newest)
+#define CUTTER_MAZETRIES 32 // Maze attempts (new seeds) for one with no repeated shapes
 
 // One puzzle's cut, whatever the style: piece outlines and geometry for a cols x rows
 // puzzle (in cells; the solved puzzle spans (0,0) to (cols,rows)). Grid styles without

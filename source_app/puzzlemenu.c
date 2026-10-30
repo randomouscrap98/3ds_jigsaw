@@ -13,7 +13,7 @@
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
 
 static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
-static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random", "Random Rect" };  // CUT_STYLE_*
+static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random", "Random Rect", "Maze" };  // CUT_STYLE_*
 static const char * const pmenu_whimsies[WHIMSY_LEVELS] = { "", ", few whimsies", ", many whimsies" };  // WHIMSY_*
 static const char * const pmenu_overlays[OVERLAYS] = { "", ", hologram", ", rainbow" };  // OVERLAY_*
 
@@ -84,6 +84,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   PuzzleEntry * e = pm->entries + pos;
   tui_menu_clear(&pm->options);
   memset(pm->optcut, 0, sizeof(pm->optcut));
+  pm->optwhimsy = -1;
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
   char path[STORAGE_MAXPATH];
@@ -106,12 +107,13 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild\nRandom\nRandom Rect");
+    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild\nRandom\nRandom Rect\nMaze");
     pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Whimsies", &pm->whimsy, "None\nFew\nMany");
+    pm->optwhimsy = n;
     pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
@@ -292,6 +294,12 @@ static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
   return 1;
 }
 
+// Options item that's grayed out and can't be changed: Whimsies while the style is Maze
+// (maze cuts have none)
+static int puzzlemenu_optoff(PuzzleMenu * pm, int item) {
+  return item >= 0 && item == pm->optwhimsy && (unsigned)pm->style % CUT_STYLES == CUT_STYLE_MAZE;
+}
+
 PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   PuzzleChoice choice = { .name = NULL, .target = 0, .quit = 0 };
   tui_menu_action act = { .action = TUIMENU_ACTION_NONE, .offset = 0 };
@@ -315,6 +323,9 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   if(down & KEY_START) {
     choice.quit = 1;
     return choice;
+  }
+  if(act.action == TUIMENU_ACTION_VALUE && puzzlemenu_active(pm) == &pm->options && puzzlemenu_optoff(pm, pm->options.current)) {
+    act.action = TUIMENU_ACTION_NONE;
   }
   if(act.action == TUIMENU_ACTION_NONE) return choice;
   if(act.action == TUIMENU_ACTION_ACCEPT || act.action == TUIMENU_ACTION_CANCEL) pm->status[0] = 0;
@@ -374,6 +385,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
 void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   const u32 white = C2D_Color32(230, 230, 230, 255), sel = C2D_Color32(20, 20, 20, 255);
   const u32 selbg = C2D_Color32(240, 200, 90, 255), title = C2D_Color32(240, 200, 90, 255);
+  const u32 off = C2D_Color32(110, 110, 110, 255), offsel = C2D_Color32(130, 100, 40, 255);  // Grayed out item
   tui_menu * active = puzzlemenu_active(pm);
   const char * heading = active == &pm->root ? "Pick a puzzle" :
       active == &pm->confirm ? "Erase the saved game?" : pm->entries[pm->root.current - PMENU_FIRST].name;
@@ -393,14 +405,16 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
     float y = 32 + i * 16;
     int cur = tui_menu_iscurrent(&pm->root, i) && active->numitems > 0 && active->top + i < active->numitems;
     if(cur) C2D_DrawRectSolid(6, y, 0.5f, 388, 16, selbg);
+    u32 fg = cur ? sel : white;
+    if(active == &pm->options && puzzlemenu_optoff(pm, active->top + i)) fg = cur ? offsel : off;
     // littlemenu pads to character columns, but the system font is proportional, so the
     // value column gets its own fixed x or values drift with the label widths
     int split = PMENU_WIDTH - active->valuewidth;
     if(active->valuewidth > 0 && split > 0) {
-      textdraw_print(td, 10, y + 1, 0.5f, cur ? sel : white, "%.*s", split, line);
-      textdraw_print(td, PMENU_VALUEX, y + 1, 0.5f, cur ? sel : white, "%s", line + split);
+      textdraw_print(td, 10, y + 1, 0.5f, fg, "%.*s", split, line);
+      textdraw_print(td, PMENU_VALUEX, y + 1, 0.5f, fg, "%s", line + split);
     } else {
-      textdraw_print(td, 10, y + 1, 0.5f, cur ? sel : white, "%s", line);
+      textdraw_print(td, 10, y + 1, 0.5f, fg, "%s", line);
     }
   }
 }

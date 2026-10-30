@@ -1,8 +1,26 @@
 #include "cutter.h"
+#include "mazepiece.h"
 
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+
+// Maze pieces: no whimsies; a cut with a repeated piece shape is retried with a new seed
+static int cutter_maze(Cutter * c, uint32_t seed) {
+  c->whimsy = WHIMSY_NONE;
+  c->usegraph = 1;
+  for(uint32_t t = 0; t < CUTTER_MAZETRIES; t++) {
+    MazePieces m;
+    if(mazepiece_init(&m, c->cols, c->rows, c->count, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, randcut_tryseed(seed, t))) continue;
+    int err = m.dups || mazepiece_graph(&m, c->cols, c->rows, &c->g);
+    mazepiece_free(&m);
+    if(err) continue;
+    c->g.tries = t + 1;
+    c->maxpoints = cutgraph_maxpoints(&c->g);
+    return 0;
+  }
+  return 1;
+}
 
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed) {
   memset(c, 0, sizeof(Cutter));
@@ -12,6 +30,7 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
   c->cols = cols;
   c->rows = rows;
   c->count = (uint32_t)cols * rows;
+  if(c->style == CUT_STYLE_MAZE) return cutter_maze(c, seed);
   if(c->style < CUT_STYLE_RANDOM && c->whimsy == WHIMSY_NONE) {
     if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;

@@ -217,13 +217,13 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "can't load %s\n", imgpath);
     return 1;
   }
-  const char * stylenames[WOODCUT_STYLES_END] = { "classic", "irregular", "wild", "random", "randrect", "wooden", "wooden2", "wooden3", "wooden4", "wooden5" };
+  const char * stylenames[WOODCUT_STYLES_END] = { "classic", "irregular", "wild", "random", "randrect", "maze", "wooden", "wooden2", "wooden3", "wooden4", "wooden5" };
   // Only these styles (comma separated names), and then no shape sheet or crop samples
   const char * only = argc > 4 ? argv[4] : NULL;
 #define WANT(st) wanted(only, stylenames[st])
   if(!only) shapes(argv[1]);
   const char * whimnames[WHIMSY_LEVELS] = { "none", "few", "many" };
-  const uint8_t styles[] = { CUT_STYLE_CLASSIC, CUT_STYLE_WILD, CUT_STYLE_RANDOM, CUT_STYLE_RANDRECT, CUT_STYLE_WOODEN, CUT_STYLE_WOODEN2, CUT_STYLE_WOODEN3, CUT_STYLE_WOODEN4, CUT_STYLE_WOODEN5 };
+  const uint8_t styles[] = { CUT_STYLE_CLASSIC, CUT_STYLE_WILD, CUT_STYLE_RANDOM, CUT_STYLE_RANDRECT, CUT_STYLE_MAZE, CUT_STYLE_WOODEN, CUT_STYLE_WOODEN2, CUT_STYLE_WOODEN3, CUT_STYLE_WOODEN4, CUT_STYLE_WOODEN5 };
   const uint32_t targets[] = { 100, 500 };
   for(int si = 0; si < (int)sizeof styles; si++) {
     if(!WANT(styles[si])) continue;
