@@ -25,10 +25,15 @@ typedef struct {
                       // grows lobes into neighbours so pieces curl into each other
   float pottsperim;   // ... target perimeter (pottscut's perim)
   float pottstemp;    // ... temperature
+  float spirals;      // Double spirals stamped in, per piece (each is two pieces wound round
+                      // each other, yin-yang style; the maze fills around them)
+  float spiralw;      // Arm width (cells)
+  float spiralarea;   // Arm area, times the average piece's
 } MazeStyle;
 
 #define MAZECUT_STYLE_DEFAULT 0
-#define MAZECUT_STYLES 1
+#define MAZECUT_STYLE_CURLY 1     // User marked important: ignore/maze/spiral/curl0.85_flip0.25.png
+#define MAZECUT_STYLES 2
 const MazeStyle * mazecut_style(uint8_t style);
 
 #define MAZECUT_TRIES 8

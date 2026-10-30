@@ -5,10 +5,25 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#ifdef POTTSCUT_DEBUG
+#include <stdio.h>
+static void mz_missing(const char * stage, const int32_t * l, int n, uint32_t count) {
+  uint8_t * has = calloc(count, 1);
+  for(int i = 0; i < n; i++) if(l[i] >= 0 && (uint32_t)l[i] < count) has[l[i]] = 1;
+  int miss = 0, neg = 0;
+  for(uint32_t k = 0; k < count; k++) { if(!has[k] && miss < 6) fprintf(stderr, " missing %u", k); miss += !has[k]; }
+  for(int i = 0; i < n; i++) neg += l[i] < 0;
+  fprintf(stderr, "%s: %d pieces missing, %d unlabelled\n", stage, miss, neg);
+  free(has);
+}
+#endif
 
 static const MazeStyle mazecut_styles[MAZECUT_STYLES] = {
   // Hexagonal, no warp (user: blur 0.2, straight 0.35 looked right; warps looked random)
   { .corridor = 0.45f, .straight = 0.35f, .res = 12, .blur = 0.2f, .smooth = 8, .warp = 0, .hex = 1 },
+  { .corridor = 0.28f, .straight = 0.1f, .res = 12, .blur = 0.12f, .smooth = 8, .warp = 0, .hex = 1,
+    .curl = 0.85f, .flip = 0.25f },
+
 };
 
 const MazeStyle * mazecut_style(uint8_t style) {
@@ -37,13 +52,62 @@ static int mz_build(CutGraph * g, float width, float height, uint32_t count, uin
   int err = !order || !stack || !cameby || !turned || !seen || !mlab || !lab || !out;
   const int dx[4] = { 1, 0, -1, 0 }, dy[4] = { 0, 1, 0, -1 };
   const int hq[6] = { 1, 1, 0, -1, -1, 0 }, hr[6] = { 0, -1, -1, 0, 1, 1 };
+  // Double spirals: centres spaced apart and away from the border; arm area sets the radius
+  float sx[64], sy[64], sang[64], shand[64];
+  int ns = 0;
+  float rad = sqrtf(2 * st->spiralarea * width * height / count / (float)M_PI);
+  for(int k = 0, want = (int)(count * st->spirals); k < want && ns < 64 && !err; k++) {
+    for(int tr = 0; tr < 60; tr++) {
+      float x = rng_range(&r, rad + 0.2f, width - rad - 0.2f), y = rng_range(&r, rad + 0.2f, height - rad - 0.2f);
+      int close = 0;
+      for(int j = 0; j < ns; j++) close |= hypotf(x - sx[j], y - sy[j]) < 2 * rad + 0.4f;
+      if(close || x < 0 || y < 0) continue;
+      sx[ns] = x; sy[ns] = y;
+      sang[ns] = rng_range(&r, 0, 2 * (float)M_PI);
+      shand[ns] = rng_range(&r, 0, 1) < 0.5f ? -1.0f : 1.0f;
+      ns++;
+      break;
+    }
+  }
+  uint32_t mcount = count - 2 * ns;   // Pieces the maze makes
+  if((uint32_t)ns * 2 >= count) err = 1;
   if(!err) {
-    int no = 0, sp = 0, s0 = rng_below(&r, mn);
+    // The maze digs around the spirals
+    for(int i = 0; i < mn; i++) {
+      int cx = i % mw, cy = i / mw;
+      float px = st->hex ? hs * sqrtf(3) * (cx - (cy >> 1) + cy * 0.5f) : (cx + 0.5f) * width / mw;
+      float py = st->hex ? hs * 1.5f * cy : (cy + 0.5f) * height / mh;
+      // Whole maze squares clear of the spirals (a square reaches hs from its centre)
+      float reach = st->hex ? hs : 0.71f * width / mw;
+      for(int j = 0; j < ns; j++) if(hypotf(px - sx[j], py - sy[j]) < rad + reach) seen[i] = 1;
+    }
+    for(int i = 0; i < mn; i++) mlab[i] = seen[i] ? -2 : 0;
+  }
+  if(!err) {
+    int no = 0, sp = 0, s0 = rng_below(&r, mn), next = 0, regstart = 0;
+    int small = mn / (int)count;   // Cut-off regions smaller than a piece go to their neighbours
+    while(seen[s0] && next < mn) s0 = next++;
     stack[sp++] = s0;
     seen[s0] = 1;
     cameby[s0] = -1;
     order[no++] = s0;
-    while(sp) {
+    while(sp || next < mn) {
+      if(!sp) {
+        // Cut off by the spirals: start again in what's left (a small region isn't a piece:
+        // its squares are handed to neighbours later)
+        if(regstart > 0 && no - regstart < small) {
+          for(int i = regstart; i < no; i++) mlab[order[i]] = -2;
+          no = regstart;
+        }
+        regstart = no;
+        while(next < mn && seen[next]) next++;
+        if(next >= mn) break;
+        stack[sp++] = next;
+        seen[next] = 1;
+        cameby[next] = -1;
+        order[no++] = next;
+        continue;
+      }
       int c = stack[sp - 1], cx = c % mw, cy = c / mw;
       int open[6], to[6], nopen = 0, straight = -1, sto = 0;
       for(int d = 0; d < ndir; d++) {
@@ -75,7 +139,8 @@ static int mz_build(CutGraph * g, float width, float height, uint32_t count, uin
     }
     // Pieces: equal runs of the digging order (a run that jumps back after a dead end comes
     // apart; pottscut keeps each piece's largest part and hands the rest to neighbours)
-    for(int i = 0; i < mn; i++) mlab[order[i]] = (int32_t)((int64_t)i * count / mn);
+    if((uint32_t)no < mcount) { err = 1; no = 0; }
+    for(int i = 0; i < no; i++) mlab[order[i]] = (int32_t)((int64_t)i * mcount / no);
     // Displacement: a few long waves each way (wavelengths 2-5 cells)
     float wf[2][4][3];
     for(int a = 0; a < 2; a++) {
@@ -120,6 +185,22 @@ static int mz_build(CutGraph * g, float width, float height, uint32_t count, uin
         lab[y * gw + x] = mlab[my * mw + mx];
       }
     }
+#ifdef POTTSCUT_DEBUG
+    mz_missing("maze", mlab, mn, mcount);
+    mz_missing("painted", lab, gn, mcount);
+#endif
+    // Squares under the spirals (blocked in the maze) take a neighbour's piece for now; the
+    // spirals are stamped over them after the vote
+    for(int left = 1, pass = 0; left && pass < 4 * gw; pass++) {
+      left = 0;
+      for(int i = 0; i < gn; i++) {
+        if(lab[i] != -2) continue;
+        int x = i % gw, y = i / gw;
+        int32_t nb[4] = { x > 0 ? lab[i - 1] : -2, x < gw - 1 ? lab[i + 1] : -2, y > 0 ? lab[i - gw] : -2, y < gh - 1 ? lab[i + gw] : -2 };
+        for(int k = 0; k < 4 && lab[i] == -2; k++) if(nb[k] >= 0) lab[i] = nb[k];
+        left |= lab[i] == -2;
+      }
+    }
     int rad = (int)ceilf(st->blur * st->res);
     float sig2 = st->blur * st->res * st->blur * st->res / 2 + 1e-6f;
     int32_t cand[64];
@@ -148,12 +229,40 @@ static int mz_build(CutGraph * g, float width, float height, uint32_t count, uin
         out[y * gw + x] = cand[best];
       }
     }
+#ifdef POTTSCUT_DEBUG
+    mz_missing("voted", out, gn, mcount);
+#endif
+    // Stamp the double spirals: two interleaved Archimedean bands of width spiralw (a band
+    // per half of each turn), each a piece; straight split at the very centre (no needle tips)
+    float b = st->spiralw / (float)M_PI;
+    for(int j = 0; j < ns; j++) {
+      int x0 = (int)((sx[j] - rad) * st->res), x1 = (int)((sx[j] + rad) * st->res) + 1;
+      int y0 = (int)((sy[j] - rad) * st->res), y1 = (int)((sy[j] + rad) * st->res) + 1;
+      for(int y = y0 < 0 ? 0 : y0; y <= y1 && y < gh; y++) {
+        for(int x = x0 < 0 ? 0 : x0; x <= x1 && x < gw; x++) {
+          float px = (x + 0.5f) / st->res - sx[j], py = (y + 0.5f) / st->res - sy[j], rho = hypotf(px, py);
+          if(rho >= rad) continue;
+          float th = atan2f(py, px) * shand[j] - sang[j];
+          int arm;
+          if(rho < st->spiralw * 0.5f) arm = cosf(th) * rho > 0 ? 0 : 1;
+          else {
+            float f = (rho / b - th) / (2 * (float)M_PI);
+            f -= floorf(f);
+            arm = f < 0.5f ? 0 : 1;
+          }
+          out[y * gw + x] = mcount + 2 * j + arm;
+        }
+      }
+    }
     PottsStyle ps = *pottscut_style(POTTSCUT_STYLE_DEFAULT);
     ps.res = st->res;
     ps.sweeps = st->potts;
     ps.perim = st->pottsperim;
     ps.temp = st->pottstemp;
-    err = pottscut_fromlabels(g, out, gw, gh, count, st->res, st->smooth, st->potts > 0 ? &ps : NULL, seed ^ 0x9077u);
+#ifdef POTTSCUT_DEBUG
+    mz_missing("stamped", out, gn, count);
+#endif
+    if(!err) err = pottscut_fromlabels(g, out, gw, gh, count, st->res, st->smooth, st->potts > 0 ? &ps : NULL, seed ^ 0x9077u);
   }
   free(order); free(stack); free(cameby); free(turned); free(seen); free(mlab); free(lab); free(out);
   return err;

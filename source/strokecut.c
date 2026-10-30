@@ -1186,7 +1186,7 @@ static void sc_free(Sc * s) {
   free(s->buf);
 }
 
-static int sc_build(CutGraph * g, float w, float h, uint32_t count, uint8_t whimsy, uint8_t set, uint32_t seed) {
+static int sc_build(CutGraph * g, float w, float h, uint32_t count, uint8_t whimsy, uint8_t set, uint32_t seed, int snakes) {
   Sc s = {0};
   s.w = w;
   s.h = h;
@@ -1240,7 +1240,7 @@ static int sc_build(CutGraph * g, float w, float h, uint32_t count, uint8_t whim
     if(pieces >= count) break;
     // Snakes go in part way, while pieces are still big enough for them: the cuts after
     // that end on them, so the snaking lines stay
-    if(!snaked && pieces >= (uint32_t)(count * STROKECUT_SNAKEAT)) {
+    if(snakes && !snaked && pieces >= (uint32_t)(count * STROKECUT_SNAKEAT)) {
       snaked = 1;
       if(sc_snakes(&s, sqrtf(w * h / pieces))) { err = -1; break; }
       continue;
@@ -1263,10 +1263,15 @@ static int sc_build(CutGraph * g, float w, float h, uint32_t count, uint8_t whim
 
 int strokecut_graph(CutGraph * g, float width, float height, uint32_t count, uint8_t whimsy, uint8_t set,
     uint32_t seed) {
+  return strokecut_graphx(g, width, height, count, whimsy, set, seed, 1);
+}
+
+int strokecut_graphx(CutGraph * g, float width, float height, uint32_t count, uint8_t whimsy, uint8_t set,
+    uint32_t seed, int snakes) {
   memset(g, 0, sizeof(CutGraph));
   if(count < 2 || count > 0xFFF0 || !(width > 0) || !(height > 0)) return 1;
   for(uint32_t t = 0; t < 8; t++) {
-    int res = sc_build(g, width, height, count, whimsy, set, seed ^ (t * 0x85EBCA6Bu));
+    int res = sc_build(g, width, height, count, whimsy, set, seed ^ (t * 0x85EBCA6Bu), snakes);
     if(res == 0) {
       g->tries = t + 1;
       return 0;

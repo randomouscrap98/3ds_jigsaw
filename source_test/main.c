@@ -28,6 +28,7 @@ int main(int argc, char ** argv) {
     if(argc > 3 && !strcmp(argv[3], "wooden")) style = CUT_STYLE_WOODEN;
     if(argc > 3 && !strcmp(argv[3], "wooden2")) style = CUT_STYLE_WOODEN2;
     if(argc > 3 && !strcmp(argv[3], "wooden3")) style = CUT_STYLE_WOODEN3;
+    if(argc > 3 && !strcmp(argv[3], "wooden4")) style = CUT_STYLE_WOODEN4;
     test_dump_cut(argv[2], style);
     return 0;
   }

@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#ifdef POTTSCUT_DEBUG
+#include <stdio.h>
+#endif
 
 static const PottsStyle pottscut_styles[POTTSCUT_STYLES] = {
   // Picked by the user from sweeps (ignore/potts/noise_t8/e_cool_smooth12.png): very snaky,
@@ -153,7 +156,12 @@ static int pt_keeplargest(Pt * t, int * queue, int32_t * comp) {
       if(size > bestsize[l]) { bestsize[l] = size; best[l] = ncomp; }
       ncomp++;
     }
-    for(uint32_t l = 0; l < count && !err; l++) if(!bestsize[l]) err = 1;   // A piece got nothing
+    for(uint32_t l = 0; l < count && !err; l++) if(!bestsize[l]) {
+#ifdef POTTSCUT_DEBUG
+      fprintf(stderr, "keeplargest: piece %u of %u has nothing\n", l, count);
+#endif
+      err = 1;   // A piece got nothing
+    }
     // Squares in a piece's other parts go to a neighbouring piece's main part, repeatedly
     for(int i = 0; i < n && !err; i++) if(!t->frozen[i] && comp[i] != best[t->lab[i]]) t->lab[i] = -2;
     int left = 1;
@@ -169,7 +177,12 @@ static int pt_keeplargest(Pt * t, int * queue, int32_t * comp) {
         if(take >= 0) { t->lab[i] = take; changed = 1; }
         else left = 1;
       }
-      if(left && !changed) err = 1;
+      if(left && !changed) {
+#ifdef POTTSCUT_DEBUG
+        fprintf(stderr, "keeplargest: squares can't be handed on\n");
+#endif
+        err = 1;
+      }
     }
     free(best);
     free(bestsize);
@@ -588,8 +601,19 @@ int pottscut_fromlabels(CutGraph * g, int32_t * lab, int w, int h, uint32_t coun
       pt_run(&t, run);
     }
   }
-  if(!err && pt_unchecker(&t)) err = 1;
+#ifdef POTTSCUT_DEBUG
+  if(err) fprintf(stderr, "fromlabels: keeplargest/run failed\n");
+#endif
+  if(!err && pt_unchecker(&t)) {
+#ifdef POTTSCUT_DEBUG
+    fprintf(stderr, "fromlabels: checkerboards left\n");
+#endif
+    err = 1;
+  }
   if(!err) err = pt_tograph(&t, g, res, smooth);
+#ifdef POTTSCUT_DEBUG
+  if(err) fprintf(stderr, "fromlabels: err %d\n", err);
+#endif
   free(t.area);
   free(t.perim);
   free(t.frozen);

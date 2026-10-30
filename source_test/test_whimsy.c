@@ -36,6 +36,7 @@ void test_cutgraph_grid(void) {
 // Whimsy cuts: same checks as random cuts, for every style and level
 void test_whimsy(void) {
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
+    if(st == CUT_STYLE_WOODEN4) continue;   // No whimsies yet
     for(uint8_t wh = WHIMSY_FEW; wh <= WHIMSY_MANY; wh++) {
       Cutter c, d;
       CHECK(cutter_init(&c, st, wh, WHIMSY_SET_CUTE, 16, 11, 300 + st) == 0);

@@ -68,5 +68,8 @@
 // them, flagged CUTEDGE_WHIMSY. Returns 0 on success (on failure g is empty).
 int strokecut_graph(CutGraph * g, float width, float height, uint32_t count, uint8_t whimsy, uint8_t set,
     uint32_t seed);
+// The same, snakes optional (snakecut paints its own)
+int strokecut_graphx(CutGraph * g, float width, float height, uint32_t count, uint8_t whimsy, uint8_t set,
+    uint32_t seed, int snakes);
 
 #endif
