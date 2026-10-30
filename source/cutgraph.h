@@ -96,6 +96,9 @@ typedef struct {
 #define CUTGRAPH_WAVEBODY 4       // ... in hitboxes (cutgraph_body): only roughly the shape
 #define CUTGRAPH_BENDMIN 0.6f     // Stroke edges bend at least this much of the style's bend
 #define CUTGRAPH_KNOBVARY 0.1f    // knoblen / knobsize vary by this share
+#ifndef CUTGRAPH_KNOBSIZEVARY
+#define CUTGRAPH_KNOBSIZEVARY CUTGRAPH_KNOBVARY  // knobsize alone (overridable for experiments)
+#endif
 #define CUTGRAPH_WAVEMIN 0.5f     // Shorter edges stay straight (a wave on them is a tight wiggle)
 #define CUTGRAPH_WAVEKNOB 0.25f   // An edge with one knob bumps (wave[0]) only this much of the style's wave
 #define CUTGRAPH_WAVETWO 0.3f     // An edge with two knobs waves only this much

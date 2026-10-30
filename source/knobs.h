@@ -26,7 +26,9 @@
 // Circle: radius KNOB_CIRCLE_R times the tab size (0.13 tab size: 0.3 of the span), centre
 // KNOB_CIRCLE_SINK radii above the line, fillets reaching KNOB_CIRCLE_FILLET along it
 #define KNOB_CIRCLE_R 2.3f
+#ifndef KNOB_CIRCLE_SINK
 #define KNOB_CIRCLE_SINK 0.6f
+#endif
 #define KNOB_CIRCLE_FILLET 0.06f
 
 // Curl: centerline rises straight for KNOB_CURL_STEM, then rolls over (like a wave crest),

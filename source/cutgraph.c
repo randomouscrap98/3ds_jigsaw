@@ -189,7 +189,7 @@ static void cutgraph_rolltabs(const CutGraph * g, const CutTabStyle * st, CutEdg
         t->pos = pos;
       }
       if(st->knobsize > 0) {
-        t->tab.size = st->knobsize * rng_range(r, 1 - CUTGRAPH_KNOBVARY, 1 + CUTGRAPH_KNOBVARY);
+        t->tab.size = st->knobsize * rng_range(r, 1 - CUTGRAPH_KNOBSIZEVARY, 1 + CUTGRAPH_KNOBSIZEVARY);
         t->tab.a *= 0.5f; t->tab.b *= 0.5f; t->tab.c *= 0.5f; t->tab.d *= 0.5f; t->tab.e *= 0.5f;
       }
     }
