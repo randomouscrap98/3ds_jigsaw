@@ -5,8 +5,9 @@
 
 #include <stdint.h>
 
-// Snake cut (experimental, Wooden4 previews): a stroke cut (strokecut, no snakes of its own)
-// drawn onto a fine label grid, then snakes painted over it: thick bands leaving a piece
+// Snake cut (experimental, Wooden4 previews): a base cut on a fine label grid (geometric:
+// straight-edged random cells, some edges sawn, crenellated, chevroned or stepped; or a
+// stroke cut from strokecut without its own snakes), then snakes painted over it: thick bands leaving a piece
 // straight, then hooking along an ellipse arc through whatever lies beyond (some bend into
 // an S: two arcs turning opposite ways; some get a twin from the piece's far side, turned
 // half round or mirrored), and now and then a yin-yang (two interleaved spiral arms from
@@ -17,9 +18,16 @@
 
 typedef struct {
   uint8_t res;          // Grid squares per cell side
+  uint8_t geo;          // Base: 1 geometric cells, 0 stroke cut
+  float relax;          // Geometric: Lloyd passes on the cell sites (whole number)
+  float pstraight, psaw, psquare, pchevron; // Geometric edge mix (the rest: step)
+  float depth;          // Tooth depth (cells; chevron twice, step 1.5x)
+  float period;         // Tooth length along the edge (cells)
+  float margin;         // Decorations keep this far from an edge's ends (cells)
+  float simplify;       // Geometric: lines away from snakes kept straight to this (squares)
   float base;           // Stroke cut pieces, times the count (merges, smallest first, bring it back)
   float snakes;         // Snakes wanted, per piece of the count
-  float pairs;          // Share of them tried as yin-yangs
+  float pairs;          // Share of them that are yin-yangs (at most)
   float wmin, wmax;     // Snake width (cells)
   float lmin;           // Shortest snake kept (along its middle, cells)
   float lead0, lead1;   // Straight start (cells)

@@ -355,7 +355,22 @@ typedef struct {
   uint32_t start, len;  // Interior points: cpts[start .. start + len) (x, y in cells)
 } PtChain;
 
-static int pt_tograph(Pt * t, CutGraph * g, float res, uint8_t smooth) {
+// Douglas-Peucker: keep[] marks points of p[0 .. n) to keep (ends always), tolerance tol
+static void pt_dp(const float * p, uint32_t i0, uint32_t i1, float tol, uint8_t * keep) {
+  if(i1 <= i0 + 1) return;
+  float best = -1;
+  uint32_t bi = i0;
+  for(uint32_t i = i0 + 1; i < i1; i++) {
+    float d = geom_pointseg(p[2 * i], p[2 * i + 1], p[2 * i0], p[2 * i0 + 1], p[2 * i1], p[2 * i1 + 1]);
+    if(d > best) { best = d; bi = i; }
+  }
+  if(best <= tol) return;
+  keep[bi] = 1;
+  pt_dp(p, i0, bi, tol, keep);
+  pt_dp(p, bi, i1, tol, keep);
+}
+
+static int pt_tograph(Pt * t, CutGraph * g, float res, uint8_t smooth, const uint8_t * curvy, float simplify) {
   int W = t->w, H = t->h, lw = W + 1, nlat = lw * (H + 1);
   // Boundary sides: h[y * W + x] between squares (x, y - 1) and (x, y); v[y * lw + x] between (x - 1, y) and (x, y)
   uint8_t * hs = calloc((size_t)W * (H + 1), 1), * vs = calloc((size_t)lw * H, 1);
@@ -449,9 +464,18 @@ static int pt_tograph(Pt * t, CutGraph * g, float res, uint8_t smooth) {
     int x = i % lw, y = i / lw;
     if(pt_lab(t, x - 1, y) != pt_lab(t, x, y) && !vs[i]) err = 1;
   }
-  // Smooth the inner lines (ends pinned): Laplacian passes
+  // Smooth the inner lines (ends pinned): Laplacian passes. With curvy, only points touching
+  // a curvy square move, and the straight runs between are simplified afterwards
   float * tmp = err ? NULL : malloc(sizeof(float) * 2 * (ncp ? ncp : 1));
-  if(!err && !tmp) err = 1;
+  uint8_t * cv = err || !curvy ? NULL : malloc(ncp ? ncp : 1);
+  if(!err && (!tmp || (curvy && !cv))) err = 1;
+  for(uint32_t i = 0; i < ncp && cv; i++) {
+    int x = (int)(cp[2 * i] * res + 0.5f), y = (int)(cp[2 * i + 1] * res + 0.5f);
+    cv[i] = 0;
+    for(int dy = -1; dy <= 0; dy++)
+      for(int dx = -1; dx <= 0; dx++)
+        if(x + dx >= 0 && y + dy >= 0 && x + dx < W && y + dy < H) cv[i] |= curvy[(y + dy) * W + x + dx] != 0;
+  }
   for(uint32_t k = 0; k < nch && !err; k++) {
     PtChain * c = ch + k;
     if(c->left < 0 || c->right < 0 || c->len == 0) continue;
@@ -461,13 +485,51 @@ static int pt_tograph(Pt * t, CutGraph * g, float res, uint8_t smooth) {
       for(uint32_t i = 0; i < c->len; i++) {
         float px = i ? p[2 * i - 2] : ax, py = i ? p[2 * i - 1] : ay;
         float qx = i + 1 < c->len ? p[2 * i + 2] : bx, qy = i + 1 < c->len ? p[2 * i + 3] : by;
-        tmp[2 * i] = 0.5f * p[2 * i] + 0.25f * (px + qx);
-        tmp[2 * i + 1] = 0.5f * p[2 * i + 1] + 0.25f * (py + qy);
+        int move = !cv || cv[c->start + i];
+        tmp[2 * i] = move ? 0.5f * p[2 * i] + 0.25f * (px + qx) : p[2 * i];
+        tmp[2 * i + 1] = move ? 0.5f * p[2 * i + 1] + 0.25f * (py + qy) : p[2 * i + 1];
       }
       memcpy(p, tmp, sizeof(float) * 2 * c->len);
     }
   }
   free(tmp);
+  if(cv && !err) {
+    // Straight runs (with the points at either end: junction or curvy) -> Douglas-Peucker
+    float * q = malloc(sizeof(float) * 2 * (ncp + 2));
+    uint8_t * keep = malloc(ncp + 2), * cq = malloc(ncp + 2);
+    if(!q || !keep || !cq) err = 1;
+    uint32_t out = 0;
+    for(uint32_t k = 0; k < nch && !err; k++) {
+      PtChain * c = ch + k;
+      uint32_t n = c->len + 2;
+      q[0] = (c->from % lw) / res; q[1] = (c->from / lw) / res;
+      memcpy(q + 2, cp + 2 * c->start, sizeof(float) * 2 * c->len);
+      q[2 * n - 2] = (c->to % lw) / res; q[2 * n - 1] = (c->to / lw) / res;
+      cq[0] = cq[n - 1] = 1;
+      memcpy(cq + 1, cv + c->start, c->len);
+      for(uint32_t i = 0; i < n; i++) keep[i] = cq[i];
+      if(c->left >= 0 && c->right >= 0) {
+        uint32_t i0 = 0;
+        for(uint32_t i = 1; i < n; i++) {
+          if(!cq[i]) continue;
+          if(i > i0 + 1) {
+            // Anchors: the curvy end points (a straight run starts/ends at the last/first curvy point)
+            pt_dp(q, i0, i, simplify / res, keep);
+          }
+          i0 = i;
+        }
+      } else {
+        for(uint32_t i = 0; i < n; i++) keep[i] = 1;   // Border: straight already
+      }
+      uint32_t st = out;
+      for(uint32_t i = 1; i + 1 < n; i++) if(keep[i]) { cp[2 * out] = q[2 * i]; cp[2 * out + 1] = q[2 * i + 1]; out++; }
+      c->start = st;
+      c->len = out - st;
+    }
+    ncp = out;
+    free(q); free(keep); free(cq);
+  }
+  free(cv);
   // The cut graph
   if(!err) {
     memset(g, 0, sizeof(CutGraph));
@@ -553,7 +615,7 @@ static int pt_build(CutGraph * g, float width, float height, uint32_t count, uin
     pt_run(&t, st);
     if(pt_unchecker(&t)) err = 1;
   }
-  if(!err) err = pt_tograph(&t, g, res, st->smooth);
+  if(!err) err = pt_tograph(&t, g, res, st->smooth, NULL, 0);
   free(t.lab);
   free(t.frozen);
   free(t.area);
@@ -576,6 +638,11 @@ int pottscut_graph(CutGraph * g, float width, float height, uint32_t count, uint
 
 int pottscut_fromlabels(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
     const PottsStyle * run, uint32_t seed) {
+  return pottscut_fromlabelsx(g, lab, w, h, count, res, smooth, run, seed, NULL, 0);
+}
+
+int pottscut_fromlabelsx(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
+    const PottsStyle * run, uint32_t seed, const uint8_t * curvy, float simplify) {
   memset(g, 0, sizeof(CutGraph));
   Pt t;
   memset(&t, 0, sizeof(Pt));
@@ -610,7 +677,7 @@ int pottscut_fromlabels(CutGraph * g, int32_t * lab, int w, int h, uint32_t coun
 #endif
     err = 1;
   }
-  if(!err) err = pt_tograph(&t, g, res, smooth);
+  if(!err) err = pt_tograph(&t, g, res, smooth, curvy, simplify);
 #ifdef POTTSCUT_DEBUG
   if(err) fprintf(stderr, "fromlabels: err %d\n", err);
 #endif

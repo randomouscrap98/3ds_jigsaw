@@ -12,7 +12,9 @@
 #endif
 
 static const SnakeStyle snakecut_styles[SNAKECUT_STYLES] = {
-  { .res = 14, .base = 1.25f, .snakes = 0.5f, .pairs = 0.1f, .wmin = 0.25f, .wmax = 0.35f, .lmin = 1.2f,
+  { .res = 20, .geo = 1, .relax = 3, .pstraight = 0.45f, .psaw = 0.2f, .psquare = 0.15f, .pchevron = 0.15f,
+    .depth = 0.12f, .period = 0.25f, .margin = 0.12f, .simplify = 0.75f,
+    .base = 1.25f, .snakes = 0.5f, .pairs = 0.1f, .wmin = 0.25f, .wmax = 0.35f, .lmin = 1.2f,
     .lead0 = 0.3f, .lead1 = 0.8f, .emin = 0.3f, .emax = 0.7f, .ecc = 1.8f, .sweep0 = 3.5f, .sweep1 = 5.6f,
     .sbend = 0.3f, .s1sweep0 = 1.6f, .s1sweep1 = 2.6f, .twin = 0.35f, .mirror = 0.5f, .taper = 0.08f, .gap = 0.22f, .thin = 0.08f, .minpart = 0.35f, .tiny = 0.35f,
     .ywmin = 0.32f, .ywmax = 0.42f, .yturns0 = 1.0f, .yturns1 = 1.5f, .smooth = 12 },
@@ -476,10 +478,180 @@ static int sk_merge(Sk * k, uint32_t count, float tiny) {
   return err;
 }
 
+// ---- Geometric base ----
+
+// Nearest two sites to (x, y) through a bucket grid (bs squares per bucket)
+typedef struct {
+  const float * s;
+  uint32_t n;
+  int bw, bh;
+  float bs;
+  int32_t * head, * next;
+} SkSites;
+
+static int sk_sitesinit(SkSites * ss, const float * s, uint32_t n, int w, int h, float bs) {
+  ss->s = s; ss->n = n; ss->bs = bs;
+  ss->bw = (int)ceilf(w / bs); ss->bh = (int)ceilf(h / bs);
+  ss->head = malloc(sizeof(int32_t) * ss->bw * ss->bh);
+  ss->next = malloc(sizeof(int32_t) * n);
+  if(!ss->head || !ss->next) return -1;
+  for(int i = 0; i < ss->bw * ss->bh; i++) ss->head[i] = -1;
+  for(uint32_t i = 0; i < n; i++) {
+    int bx = (int)(s[2 * i] / bs), by = (int)(s[2 * i + 1] / bs);
+    bx = bx < 0 ? 0 : bx >= ss->bw ? ss->bw - 1 : bx;
+    by = by < 0 ? 0 : by >= ss->bh ? ss->bh - 1 : by;
+    ss->next[i] = ss->head[by * ss->bw + bx];
+    ss->head[by * ss->bw + bx] = i;
+  }
+  return 0;
+}
+
+static void sk_sitesfree(SkSites * ss) { free(ss->head); free(ss->next); }
+
+static void sk_near2(const SkSites * ss, float x, float y, int32_t * i1, int32_t * i2) {
+  int bx = (int)(x / ss->bs), by = (int)(y / ss->bs);
+  float d1 = 1e30f, d2 = 1e30f;
+  *i1 = *i2 = -1;
+  for(int r = 2; r < 64; r++) {
+    for(int yy = by - r; yy <= by + r; yy++) {
+      for(int xx = bx - r; xx <= bx + r; xx++) {
+        if(xx < 0 || yy < 0 || xx >= ss->bw || yy >= ss->bh) continue;
+        if(r > 2 && xx > bx - r && xx < bx + r && yy > by - r && yy < by + r) continue;   // Ring only
+        for(int32_t i = ss->head[yy * ss->bw + xx]; i >= 0; i = ss->next[i]) {
+          float dx = ss->s[2 * i] - x, dy = ss->s[2 * i + 1] - y, d = dx * dx + dy * dy;
+          if(d < d1) { d2 = d1; *i2 = *i1; d1 = d; *i1 = i; }
+          else if(d < d2) { d2 = d; *i2 = i; }
+        }
+      }
+    }
+    // Everything nearer than the searched ring's inner edge has been seen
+    float reach = (r - 1) * ss->bs;
+    if(*i2 >= 0 && d2 <= reach * reach) break;
+  }
+}
+
+typedef struct {
+  uint64_t key;
+  float tmin, tmax;
+  uint8_t kind;   // 0 straight, 1 saw, 2 square, 3 chevron, 4 step
+  float sgn;
+} SkPair;
+
+static int sk_cmppair(const void * a, const void * b) {
+  uint64_t x = ((const SkPair *)a)->key, y = ((const SkPair *)b)->key;
+  return x < y ? -1 : x > y;
+}
+
+// Position of (x, y) relative to the bisector of sites a < b: t along it, d across (+ toward a)
+static void sk_bis(const float * s, uint32_t a, uint32_t b, float x, float y, float * t, float * d) {
+  float ax = s[2 * a], ay = s[2 * a + 1], bx = s[2 * b], by = s[2 * b + 1];
+  float nx = ax - bx, ny = ay - by, l = hypotf(nx, ny);
+  nx /= l; ny /= l;
+  float mx = (ax + bx) / 2, my = (ay + by) / 2;
+  *d = (x - mx) * nx + (y - my) * ny;
+  *t = -(x - mx) * ny + (y - my) * nx;
+}
+
+// Decoration offset (squares, toward a) at t along a pair's edge
+static float sk_decor(const Sk * k, const SkPair * p, float t) {
+  const SnakeStyle * st = k->st;
+  float m = st->margin * k->res, t0 = p->tmin + m, t1 = p->tmax - m, A = st->depth * k->res;
+  if(p->kind == 0 || t1 - t0 < 2 * st->period * k->res * 0.6f) return 0;
+  float u = (t - t0) / (t1 - t0);
+  if(p->kind == 4) {
+    float o = 0.75f * A;
+    if(t < p->tmin || t > p->tmax) return 0;
+    if(t < t0) return -o * (t - p->tmin) / m * p->sgn;
+    if(t > t1) return o * (p->tmax - t) / m * p->sgn;
+    return (u < 0.5f ? -o : o) * p->sgn;
+  }
+  if(u < 0 || u > 1) return 0;
+  if(p->kind == 3) return 2 * A * (1 - fabsf(2 * u - 1)) * p->sgn;
+  int n = (int)((t1 - t0) / (st->period * k->res) + 0.5f);
+  if(n < 1) n = 1;
+  float v = u * n - floorf(u * n);
+  if(p->kind == 1) return A * v * p->sgn;   // Saw: slow ramp, sharp drop
+  return (v > 0.25f && v < 0.75f ? A : 0) * p->sgn;
+}
+
+// Straight-edged cells around base relaxed random sites, some edges decorated. Returns 0, or -1.
+static int sk_geobase(Sk * k, uint32_t base) {
+  const SnakeStyle * st = k->st;
+  int n = k->w * k->h, err = 0;
+  float * s = malloc(sizeof(float) * 2 * base), * sum = malloc(sizeof(float) * 3 * base);
+  int32_t * i2 = malloc(sizeof(int32_t) * n);
+  if(!s || !sum || !i2) err = -1;
+  float bs = sqrtf((float)n / base);
+  for(uint32_t i = 0; i < base && !err; i++) {
+    s[2 * i] = rng_range(&k->r, 0, k->w);
+    s[2 * i + 1] = rng_range(&k->r, 0, k->h);
+  }
+  SkSites ss = {0};
+  int passes = (int)st->relax;
+  for(int pass = 0; pass <= passes && !err; pass++) {
+    if(sk_sitesinit(&ss, s, base, k->w, k->h, bs)) { err = -1; break; }
+    for(int i = 0; i < n; i++) sk_near2(&ss, i % k->w + 0.5f, i / k->w + 0.5f, &k->lab[i], &i2[i]);
+    sk_sitesfree(&ss);
+    if(pass == passes) break;
+    memset(sum, 0, sizeof(float) * 3 * base);
+    for(int i = 0; i < n; i++) { float * q = sum + 3 * k->lab[i]; q[0] += i % k->w + 0.5f; q[1] += i / k->w + 0.5f; q[2]++; }
+    for(uint32_t i = 0; i < base; i++) if(sum[3 * i + 2] > 0) { s[2 * i] = sum[3 * i] / sum[3 * i + 2]; s[2 * i + 1] = sum[3 * i + 1] / sum[3 * i + 2]; }
+  }
+  // Edges: the site pairs whose cells touch, with their extent along the bisector
+  SkPair * pr = err ? NULL : malloc(sizeof(SkPair) * 2 * n);
+  int np = 0;
+  if(!err && !pr) err = -1;
+  for(int i = 0; i < n && !err; i++) {
+    int x = i % k->w, y = i / k->w;
+    int nb[2] = { x < k->w - 1 ? i + 1 : -1, y < k->h - 1 ? i + k->w : -1 };
+    for(int j = 0; j < 2; j++) {
+      if(nb[j] < 0 || k->lab[nb[j]] == k->lab[i]) continue;
+      uint32_t a = k->lab[i], b = k->lab[nb[j]];
+      if(a > b) { uint32_t tt = a; a = b; b = tt; }
+      float t, d;
+      sk_bis(s, a, b, x + 0.5f + (j == 0) * 0.5f, y + 0.5f + (j == 1) * 0.5f, &t, &d);
+      pr[np++] = (SkPair) { (uint64_t)a << 32 | b, t, t, 0, 1 };
+    }
+  }
+  if(!err) {
+    qsort(pr, np, sizeof(SkPair), sk_cmppair);
+    int m = 0;
+    for(int i = 0; i < np; i++) {
+      if(m && pr[m - 1].key == pr[i].key) {
+        pr[m - 1].tmin = fminf(pr[m - 1].tmin, pr[i].tmin);
+        pr[m - 1].tmax = fmaxf(pr[m - 1].tmax, pr[i].tmax);
+      } else {
+        pr[m++] = pr[i];
+      }
+    }
+    np = m;
+    for(int i = 0; i < np; i++) {
+      float r = rng_range(&k->r, 0, 1);
+      pr[i].kind = r < st->pstraight ? 0 : (r -= st->pstraight) < st->psaw ? 1 : (r -= st->psaw) < st->psquare ? 2 :
+          (r -= st->psquare) < st->pchevron ? 3 : 4;
+      pr[i].sgn = rng_below(&k->r, 2) ? 1 : -1;
+    }
+    // Final cells: a square near a decorated edge goes to whichever side of the moved line it is
+    for(int i = 0; i < n; i++) {
+      uint32_t a = k->lab[i], b = i2[i];
+      if(a > b) { uint32_t tt = a; a = b; b = tt; }
+      SkPair key = { (uint64_t)a << 32 | b, 0, 0, 0, 0 };
+      const SkPair * p = bsearch(&key, pr, np, sizeof(SkPair), sk_cmppair);
+      if(!p || !p->kind) continue;
+      float t, d;
+      sk_bis(s, a, b, i % k->w + 0.5f, i / k->w + 0.5f, &t, &d);
+      k->lab[i] = d > sk_decor(k, p, t) ? (int32_t)a : (int32_t)b;
+    }
+  }
+  free(s); free(sum); free(i2); free(pr);
+  return err;
+}
+
 // One attempt with base stroke pieces: 0 done, 1 failed, -1 out of memory, or 2 + shortfall
 static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t base, uint32_t seed, const SnakeStyle * st) {
   CutGraph sg;
-  if(strokecut_graphx(&sg, W, H, base, 0, 0, seed, 0)) return 1;
+  memset(&sg, 0, sizeof(CutGraph));
+  if(!st->geo && strokecut_graphx(&sg, W, H, base, 0, 0, seed, 0)) return 1;
   Sk k;
   memset(&k, 0, sizeof(Sk));
   k.st = st;
@@ -494,12 +666,13 @@ static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t bas
   k.marks = malloc(sizeof(float) * n);
   k.body = malloc(sizeof(int32_t) * n);
   k.edge = malloc(sizeof(int32_t) * n);
-  k.nlab = sg.count;
-  k.sent = calloc(sg.count, 1);
-  float * xy = malloc(sizeof(float) * 2 * cutgraph_maxpoints(&sg));
-  if(!k.lab || !k.snk || !k.mark || !k.marks || !k.body || !k.edge || !k.sent || !xy) err = -1;
+  k.nlab = st->geo ? base : sg.count;
+  k.sent = calloc(k.nlab, 1);
+  float * xy = st->geo ? NULL : malloc(sizeof(float) * 2 * cutgraph_maxpoints(&sg));
+  if(!k.lab || !k.snk || !k.mark || !k.marks || !k.body || !k.edge || !k.sent || (!st->geo && !xy)) err = -1;
+  if(!err && st->geo) err = sk_geobase(&k, base);
   // Raster the stroke cut (square centres inside each outline)
-  for(int i = 0; i < n && !err; i++) k.lab[i] = -2;
+  for(int i = 0; i < n && !err && !st->geo; i++) k.lab[i] = -2;
   for(uint32_t p = 0; p < sg.count && !err; p++) {
     uint32_t m = cutgraph_outline(&sg, p, k.res, 0, 0, xy);
     float x0 = 1e30f, y0 = 1e30f, x1 = -1e30f, y1 = -1e30f;
@@ -520,13 +693,15 @@ static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t bas
     if(!k.nedge) err = 1;
   }
   // Snakes
-  int want = (int)(count * st->snakes + 0.5f), placed = 0;
+  int want = (int)(count * st->snakes + 0.5f), placed = 0, pairs = 0;
   float * path = malloc(sizeof(float) * 2 * SK_PATHMAX);
   if(!path) err = -1;
-  for(int t = 0; t < want * 40 && placed < want && !err; t++) {
-    int res = rng_range(&k.r, 0, 1) < st->pairs ? sk_pair(&k) : sk_snake(&k, path);
+  for(int t = 0; t < want * 150 && placed < want && !err; t++) {
+    // Yin-yangs fit more easily than snakes: capped at their share of what's placed
+    int pair = rng_range(&k.r, 0, 1) < st->pairs && pairs < st->pairs * want;
+    int res = pair ? sk_pair(&k) : sk_snake(&k, path);
     if(res < 0) err = -1;
-    else placed += res;
+    else { placed += res; pairs += pair && res; }
   }
   free(path);
   float a0 = (float)n / count;
@@ -537,7 +712,23 @@ static int sk_build(CutGraph * g, float W, float H, uint32_t count, uint32_t bas
 #endif
   if(!err) err = sk_merge(&k, count, st->tiny * a0);
   if(err == 1) err = 2 + (int)(count / 20);   // Short of pieces: start from more
-  if(!err) err = pottscut_fromlabels(g, k.lab, k.w, k.h, count, k.res, st->smooth, NULL, seed) ? 1 : 0;
+  if(!err) {
+    // Geometric: only lines touching snakes are smoothed (snake squares, grown by one)
+    uint8_t * curvy = NULL;
+    if(st->geo) {
+      curvy = calloc(n, 1);
+      if(!curvy) err = -1;
+      for(int i = 0; i < n && curvy; i++) {
+        if(!k.snk[i]) continue;
+        int x = i % k.w, y = i / k.w;
+        for(int dy = -1; dy <= 1; dy++)
+          for(int dx = -1; dx <= 1; dx++)
+            if(x + dx >= 0 && y + dy >= 0 && x + dx < k.w && y + dy < k.h) curvy[(y + dy) * k.w + x + dx] = 1;
+      }
+    }
+    if(!err) err = pottscut_fromlabelsx(g, k.lab, k.w, k.h, count, k.res, st->smooth, NULL, seed, curvy, st->simplify) ? 1 : 0;
+    free(curvy);
+  }
   free(k.lab); free(k.snk); free(k.mark); free(k.marks); free(k.body); free(k.edge); free(k.sent); free(xy);
   return err;
 }

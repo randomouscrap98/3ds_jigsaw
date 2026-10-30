@@ -44,5 +44,9 @@ int pottscut_graph(CutGraph * g, float width, float height, uint32_t count, uint
 // lines are traced and smoothed. lab is changed. Returns 0 on success. (mazecut)
 int pottscut_fromlabels(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
     const PottsStyle * run, uint32_t seed);
+// The same, but only line points touching a curvy square (w x h, nonzero) are smoothed; the
+// rest are kept straight: simplified (Douglas-Peucker, tolerance simplify squares). (snakecut)
+int pottscut_fromlabelsx(CutGraph * g, int32_t * lab, int w, int h, uint32_t count, float res, uint8_t smooth,
+    const PottsStyle * run, uint32_t seed, const uint8_t * curvy, float simplify);
 
 #endif
