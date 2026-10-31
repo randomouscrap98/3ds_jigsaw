@@ -42,6 +42,7 @@ int main(int argc, char ** argv) {
   RUN(test_board);
   RUN(test_pick_same);
   RUN(test_pick_maze);
+  RUN(test_maze_problems);
   RUN(test_piecegeo);
   RUN(test_randcut);
   RUN(test_cutgraph_grid);

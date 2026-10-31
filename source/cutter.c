@@ -5,14 +5,15 @@
 #include <string.h>
 #include <math.h>
 
-// Maze pieces: no whimsies; a cut with a repeated piece shape is retried with a new seed
+// Maze pieces: no whimsies; a cut with a repeated piece shape or a problematic piece is retried
+// with a new seed
 static int cutter_maze(Cutter * c, uint32_t seed) {
   c->whimsy = WHIMSY_NONE;
   c->usegraph = 1;
   for(uint32_t t = 0; t < CUTTER_MAZETRIES; t++) {
     MazePieces m;
     if(mazepiece_init(&m, c->cols, c->rows, c->count, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, randcut_tryseed(seed, t))) continue;
-    int err = m.dups || mazepiece_graph(&m, c->cols, c->rows, &c->g);
+    int err = m.dups || m.problems || mazepiece_graph(&m, c->cols, c->rows, &c->g);
     mazepiece_free(&m);
     if(err) continue;
     c->g.tries = t + 1;

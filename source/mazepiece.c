@@ -488,6 +488,54 @@ static int mp_dups(const MazePieces * m, uint32_t * dups) {
   return err;
 }
 
+// Remove problematic pieces (either hand): a cell with 4 neighbours in its piece, each arm straight to a
+// turn, all four turns the same way, each hook straight to an end, and nothing else in the piece
+static int mp_in(const MazePieces * m, int x, int y, int32_t l) {
+  return x >= 0 && y >= 0 && x < m->w && y < m->h && m->label[y * m->w + x] == l;
+}
+
+static int mp_deg(const MazePieces * m, int x, int y, int32_t l) {
+  return mp_in(m, x + 1, y, l) + mp_in(m, x - 1, y, l) + mp_in(m, x, y + 1, l) + mp_in(m, x, y - 1, l);
+}
+
+static uint32_t mp_problem(const MazePieces * m, int jx, int jy, int32_t l) {
+  static const int dx[4] = { 1, 0, -1, 0 }, dy[4] = { 0, 1, 0, -1 };
+  int hand = 0;
+  uint32_t cells = 1;
+  for(int d = 0; d < 4; d++) {
+    int x = jx, y = jy;
+    for(;;) {
+      x += dx[d]; y += dy[d]; cells++;
+      if(!mp_in(m, x + dx[d], y + dy[d], l)) break;
+      if(mp_deg(m, x, y, l) != 2) return 0;
+    }
+    if(mp_deg(m, x, y, l) != 2) return 0;
+    int t = mp_in(m, x + dx[(d + 1) % 4], y + dy[(d + 1) % 4], l) ? (d + 1) % 4 : (d + 3) % 4;
+    int h = t == (d + 1) % 4 ? 1 : -1;
+    if(hand && h != hand) return 0;
+    hand = h;
+    for(;;) {
+      x += dx[t]; y += dy[t]; cells++;
+      int g = mp_deg(m, x, y, l);
+      if(g == 1) break;
+      if(g != 2 || !mp_in(m, x + dx[t], y + dy[t], l)) return 0;
+    }
+  }
+  return cells;
+}
+
+uint32_t mazepiece_problems(const MazePieces * m) {
+  uint32_t * size = calloc(m->count, sizeof(uint32_t)), found = 0;
+  if(!size) return 1;
+  for(uint32_t i = 0; i < (uint32_t)m->w * m->h; i++) size[m->label[i]]++;
+  for(int y = 0; y < m->h; y++) for(int x = 0; x < m->w; x++) {
+    int32_t l = m->label[y * m->w + x];
+    if(mp_deg(m, x, y, l) == 4 && mp_problem(m, x, y, l) == size[l]) found++;
+  }
+  free(size);
+  return found;
+}
+
 int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, float cap, uint32_t seed) {
   memset(m, 0, sizeof(MazePieces));
   float wf = sqrtf((float)count * avg * cols / rows);
@@ -523,6 +571,7 @@ int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count,
     m->count = mp_cut(m, &t, best, capcells, res, cut);
     m->cut = m->count;
     err = mp_exact(m, count, capcells) || mp_dups(m, &m->dups);
+    if(!err) m->problems = mazepiece_problems(m);
   }
   mp_treesfree(&t);
   free(res);

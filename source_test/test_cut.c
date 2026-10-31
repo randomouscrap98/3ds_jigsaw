@@ -7,6 +7,7 @@
 #include "swizzle.h"
 #include "cutsample.h"
 #include "woodcut.h"
+#include "mazepiece.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -406,4 +407,50 @@ void test_cutsample(void) {
   CHECK(cutsample_draw(CUT_STYLE_CLASSIC, WHIMSY_NONE, 0, 0, 10, a) != 0);
   free(a);
   free(b);
+}
+
+// Problematic pieces are found in either hand, near misses are not, and the maze cutter avoids them
+static uint32_t problems_in(const char * rows[], int h) {
+  MazePieces m;
+  memset(&m, 0, sizeof m);
+  m.w = strlen(rows[0]);
+  m.h = h;
+  m.count = 2;
+  m.label = malloc(sizeof(int32_t) * m.w * m.h);
+  for(int y = 0; y < m.h; y++) for(int x = 0; x < m.w; x++) m.label[y * m.w + x] = rows[y][x] == '#';
+  uint32_t n = mazepiece_problems(&m);
+  free(m.label);
+  return n;
+}
+
+void test_maze_problems(void) {
+  const char * right[] = { "#.###", "#.#..", "#####", "..#.#", "###.#" };
+  const char * left[] = { "###.#", "..#.#", "#####", "#.#..", "#.###" };
+  const char * uneven[] = { "#.####", "#.#...", "######", "..#..#", "..#..#", "###..#" };
+  const char * mixed[] = { "#.#..", "#.#..", "#####", "..#.#", "###.#" };
+  const char * extra[] = { "#.###", "#.#.#", "#####", "..#.#", "###.#" };
+  const char * nohook[] = { "..#..", "..#..", "#####", "..#.#", "###.#" };
+  CHECK(problems_in(right, 5) == 1);
+  CHECK(problems_in(left, 5) == 1);
+  CHECK(problems_in(uneven, 6) == 1);
+  CHECK(problems_in(mixed, 5) == 0);
+  CHECK(problems_in(extra, 5) == 0);
+  CHECK(problems_in(nohook, 5) == 0);
+  // A real cut with one (found by a sweep), and the cutter skipping it
+  MazePieces m;
+  CHECK(!mazepiece_init(&m, 25, 20, 500, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, 612));
+  CHECK(m.problems == 1);
+  mazepiece_free(&m);
+  uint32_t found = 0;
+  for(uint32_t seed = 600; seed < 640; seed++) {
+    Cutter cut;
+    CHECK(!cutter_init(&cut, CUT_STYLE_MAZE, WHIMSY_NONE, WHIMSY_SET_CUTE, 25, 20, seed));
+    MazePieces again;
+    if(!mazepiece_init(&again, 25, 20, 500, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, randcut_tryseed(seed, cut.g.tries - 1))) {
+      found += again.problems;
+      mazepiece_free(&again);
+    }
+    cutter_free(&cut);
+  }
+  CHECK(found == 0);
 }
