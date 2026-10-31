@@ -300,9 +300,24 @@ uint8_t board_piece_rot(Board * b, uint16_t piece) {
   return b->groups[b->pieces[piece].group].rot;
 }
 
+#define BOARD_PACKGAP 0.1f   // Outline packing (scatterpack, condense outlines): gap in cells
+
+// Piece's hitbox bounds turned by rot, around its home center: x0, y0, x1, y1
+static void board_hbbounds(const PieceGeo * geo, uint16_t piece, uint8_t rot, float * bx) {
+  const float * hb = geo->hb + 2 * geo->hbstart[piece];
+  for(uint32_t k = 0; k < geo->hbstart[piece + 1] - geo->hbstart[piece]; k++) {
+    float rx, ry;
+    board_rotvec(rot, hb[2 * k] - geo->center[2 * piece], hb[2 * k + 1] - geo->center[2 * piece + 1], &rx, &ry);
+    if(!k || rx < bx[0]) bx[0] = rx;
+    if(!k || ry < bx[1]) bx[1] = ry;
+    if(!k || rx > bx[2]) bx[2] = rx;
+    if(!k || ry > bx[3]) bx[3] = ry;
+  }
+}
+
 typedef struct {
   uint16_t group;
-  float x0, y0, x1, y1;   // Bounds of its piece centers
+  float x0, y0, x1, y1;   // Its padded bounds (piece center slots, or outlines + half a gap)
   int32_t band;           // Order: row band (one slot tall), then x
   float x;
 } BoardBox;
@@ -313,7 +328,7 @@ static int board_boxcmp(const void * a, const void * b) {
   return p->x < q->x ? -1 : p->x > q->x;
 }
 
-int board_condense_marked(Board * b, const uint8_t * mark, float slot) {
+int board_condense_marked(Board * b, const uint8_t * mark, float slot, int outline) {
   float cx0, cy0, cx1, cy1;
   if(!board_marked_bounds(b, mark, &cx0, &cy0, &cx1, &cy1)) return 0;
   BoardBox * box = malloc(sizeof(BoardBox) * b->ngroups);
@@ -327,11 +342,13 @@ int board_condense_marked(Board * b, const uint8_t * mark, float slot) {
     bx->group = gid;
     bx->x0 = bx->y0 = 1e30f;
     bx->x1 = bx->y1 = -1e30f;
+    float pad = outline ? b->geo->cell * BOARD_PACKGAP / 2 : slot / 2;
     for(uint16_t p = b->groups[gid].first; p != BOARD_NONE; p = b->pieces[p].next) {
-      float x, y;
+      float x, y, hb[4] = { 0, 0, 0, 0 };
       board_piece_center(b, p, &x, &y);
-      bx->x0 = fminf(bx->x0, x); bx->x1 = fmaxf(bx->x1, x);
-      bx->y0 = fminf(bx->y0, y); bx->y1 = fmaxf(bx->y1, y);
+      if(outline) board_hbbounds(b->geo, p, b->groups[gid].rot, hb);
+      bx->x0 = fminf(bx->x0, x + hb[0] - pad); bx->x1 = fmaxf(bx->x1, x + hb[2] + pad);
+      bx->y0 = fminf(bx->y0, y + hb[1] - pad); bx->y1 = fmaxf(bx->y1, y + hb[3] + pad);
     }
     // Rough reading order: bands one slot tall, left to right within a band
     bx->band = (int32_t)floorf((bx->y0 + bx->y1) / 2 / slot);
@@ -339,10 +356,10 @@ int board_condense_marked(Board * b, const uint8_t * mark, float slot) {
   }
   qsort(box, n, sizeof(BoardBox), board_boxcmp);
   // Rows about as wide as the block is tall (in whole slots, so n loose pieces make a
-  // ceil(sqrt(n)) wide square): each piece center gets a slot around it
+  // ceil(sqrt(n)) wide square)
   float area = 0, widest = 0;
   for(uint32_t i = 0; i < n; i++) {
-    float w = box[i].x1 - box[i].x0 + slot, h = box[i].y1 - box[i].y0 + slot;
+    float w = box[i].x1 - box[i].x0, h = box[i].y1 - box[i].y0;
     area += w * h;
     widest = fmaxf(widest, w);
   }
@@ -355,7 +372,7 @@ int board_condense_marked(Board * b, const uint8_t * mark, float slot) {
   }
   float x = 0, y = 0, rowh = 0, blockw = 0;
   for(uint32_t i = 0; i < n; i++) {
-    float w = box[i].x1 - box[i].x0 + slot, h = box[i].y1 - box[i].y0 + slot;
+    float w = box[i].x1 - box[i].x0, h = box[i].y1 - box[i].y0;
     if(x > 0 && x + w > rowmax) {
       y += rowh;
       x = 0;
@@ -373,9 +390,7 @@ int board_condense_marked(Board * b, const uint8_t * mark, float slot) {
   if(blockw <= b->width) ox = fminf(fmaxf(ox, 0), b->width - blockw);
   if(blockh <= b->height) oy = fminf(fmaxf(oy, 0), b->height - blockh);
   for(uint32_t i = 0; i < n; i++) {
-    // The box's first piece center sits half a slot in from its corner
-    float tx = ox + at[2 * i] + slot / 2, ty = oy + at[2 * i + 1] + slot / 2;
-    board_move(b, box[i].group, tx - box[i].x0, ty - box[i].y0);
+    board_move(b, box[i].group, ox + at[2 * i] - box[i].x0, oy + at[2 * i + 1] - box[i].y0);
   }
   free(at);
   free(box);
@@ -397,7 +412,7 @@ int board_scatterpack(Board * b, uint32_t seed, float x, float y, float w, float
     return 1;
   }
   const PieceGeo * geo = b->geo;
-  float gap = geo->cell * 0.1f;
+  float gap = geo->cell * BOARD_PACKGAP;
   for(uint32_t i = 0; i < n; i++) pick[i] = i;
   for(uint32_t i = n - 1; i > 0; i--) {
     uint32_t j = rng_below(&rng, i + 1);
@@ -407,16 +422,8 @@ int board_scatterpack(Board * b, uint32_t seed, float x, float y, float w, float
     // Lying flat packs tighter: random turn, then a quarter more if that leaves it standing
     uint8_t rot = rng_below(&rng, 4);
     for(int pass = 0; pass < 2; pass++) {
-      const float * hb = geo->hb + 2 * geo->hbstart[i];
       float * bx = box + 4 * i;
-      for(uint32_t k = 0; k < geo->hbstart[i + 1] - geo->hbstart[i]; k++) {
-        float rx, ry;
-        board_rotvec(rot, hb[2 * k] - geo->center[2 * i], hb[2 * k + 1] - geo->center[2 * i + 1], &rx, &ry);
-        if(!k || rx < bx[0]) bx[0] = rx;
-        if(!k || ry < bx[1]) bx[1] = ry;
-        if(!k || rx > bx[2]) bx[2] = rx;
-        if(!k || ry > bx[3]) bx[3] = ry;
-      }
+      board_hbbounds(geo, i, rot, bx);
       if(bx[3] - bx[1] <= bx[2] - bx[0]) break;
       rot = (rot + 1) & 3;
     }

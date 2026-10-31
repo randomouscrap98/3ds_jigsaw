@@ -165,7 +165,7 @@ void test_board(void) {
     float sx0, sy0, sx1, sy1;
     board_marked_bounds(&b, cmark, &sx0, &sy0, &sx1, &sy1);
     const float slot = 20;
-    CHECK(board_condense_marked(&b, cmark, slot) == 0);
+    CHECK(board_condense_marked(&b, cmark, slot, 0) == 0);
     int still = 1, rotok = 1, ontable = 1, joined = b.pieces[0].group == b.pieces[1].group;
     for(uint32_t p = 0; p < b.count; p++) {
       float x, y;
@@ -191,13 +191,40 @@ void test_board(void) {
     CHECK(fabsf((nx0 + nx1) / 2 - (sx0 + sx1) / 2) < slot && fabsf((ny0 + ny1) / 2 - (sy0 + sy1) / 2) < slot);
     CHECK((nx1 - nx0) * (ny1 - ny0) < (sx1 - sx0) * (sy1 - sy0) / 2);
     test_board_free(&b);
+    // Outline mode: no two selected groups' hitbox bounds overlap
+    CHECK(test_board_grid(&b, 6, 5, 10, 600, 500) == 0);
+    board_scatter(&b, 3, 50, 50, 500, 400);
+    for(uint32_t p = 0; p < b.count; p++) cmark[b.pieces[p].group] = p < 20;
+    CHECK(board_condense_marked(&b, cmark, slot, 1) == 0);
+    float gb[20][4];
+    for(uint32_t p = 0; p < 20; p++) {
+      const PieceGeo * geo = b.geo;
+      BoardGroup * g = b.groups + b.pieces[p].group;
+      for(uint32_t k = geo->hbstart[p]; k < geo->hbstart[p + 1]; k++) {
+        float rx, ry;
+        board_rotvec(g->rot, geo->hb[2 * k], geo->hb[2 * k + 1], &rx, &ry);
+        rx += g->x; ry += g->y;
+        if(k == geo->hbstart[p] || rx < gb[p][0]) gb[p][0] = rx;
+        if(k == geo->hbstart[p] || ry < gb[p][1]) gb[p][1] = ry;
+        if(k == geo->hbstart[p] || rx > gb[p][2]) gb[p][2] = rx;
+        if(k == geo->hbstart[p] || ry > gb[p][3]) gb[p][3] = ry;
+      }
+    }
+    int hboverlap = 0;
+    for(uint32_t p = 0; p < 20; p++) for(uint32_t q = p + 1; q < 20; q++) {
+      hboverlap += gb[p][0] < gb[q][2] - 0.01f && gb[q][0] < gb[p][2] - 0.01f && gb[p][1] < gb[q][3] - 0.01f && gb[q][1] < gb[p][3] - 0.01f;
+    }
+    CHECK(hboverlap == 0);
+    board_marked_bounds(&b, cmark, &nx0, &ny0, &nx1, &ny1);
+    CHECK((nx1 - nx0) * (ny1 - ny0) < (sx1 - sx0) * (sy1 - sy0) / 2);
+    test_board_free(&b);
     // Rough order kept: three loose pieces left to right stay left to right
     CHECK(test_board_grid(&b, 3, 1, 10, 600, 500) == 0);
     place(&b, 0, 300, 100, 0);
     place(&b, 1, 100, 110, 0);
     place(&b, 2, 400, 105, 0);
     uint8_t omark[3] = { 1, 1, 1 };
-    CHECK(board_condense_marked(&b, omark, 20) == 0);
+    CHECK(board_condense_marked(&b, omark, 20, 0) == 0);
     // 2 per row: 1 and 0 on the first row (1 left), 2 starting the second
     float x0, x1, x2, y0, y1, y2;
     board_piece_center(&b, 0, &x0, &y0);

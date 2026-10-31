@@ -262,7 +262,7 @@ static int game_release(Game * g) {
 // keep them selected (on top) so the block can be dragged away
 static void game_condense(Game * g) {
   Board * b = &g->board;
-  if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE)) return;
+  if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE, g->style == CUT_STYLE_MAZE)) return;
   board_raise_marked(b, g->sel);
   g->dldirty = 1;
   g->dirty = 1;
