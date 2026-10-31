@@ -11,7 +11,7 @@ static int cutter_maze(Cutter * c, uint32_t seed) {
   c->usegraph = 1;
   for(uint32_t t = 0; t < CUTTER_MAZETRIES; t++) {
     MazePieces m;
-    if(mazepiece_init(&m, c->cols, c->rows, c->count, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, randcut_tryseed(seed, t))) continue;
+    if(mazepiece_init(&m, c->cols, c->rows, c->count, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, randcut_tryseed(seed, t))) continue;
     int err = m.dups || mazepiece_graph(&m, c->cols, c->rows, &c->g);
     mazepiece_free(&m);
     if(err) continue;

@@ -9,5 +9,5 @@ then
    exit 1
 fi
 
-make && $DEVKITPRO/tools/bin/3dslink -a $1 $CURRENTNAME.3dsx
+make -j && $DEVKITPRO/tools/bin/3dslink -a $1 $CURRENTNAME.3dsx
 

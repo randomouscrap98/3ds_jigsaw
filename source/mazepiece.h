@@ -19,12 +19,14 @@ typedef struct {
   uint32_t flips;       // Connectors flipped to join stubs to a bigger branch
   uint32_t cut;         // Pieces before splitting/merging to the exact count
   uint32_t dups;        // Pieces whose shape repeats another's (turns count, mirror images don't)
+  uint32_t capsplits;   // Splits done for the size cap
+  uint32_t minmerges;   // Small pieces merged (capped only)
 } MazePieces;
 
 // Cut a cols x rows puzzle (in pieces) into exactly count pieces of about avg cells each.
 // newest = maze branchiness: 1 = depth-first (long corridors), 0 = Prim-like (bushy).
-// Returns 0 on success.
-int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, uint32_t seed);
+// cap > 0: pieces over cap x the mean size are split (best effort). Returns 0 on success.
+int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, float cap, uint32_t seed);
 void mazepiece_free(MazePieces * m);
 // The pieces as a cut graph for a cols x rows puzzle: straight edges along the cell
 // borders (vertices where lines meet or turn), no tabs. Returns 0 on success.

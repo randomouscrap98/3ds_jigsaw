@@ -59,15 +59,15 @@ static void hsl(float hh, float s, float l, uint8_t * px) {
 
 int main(int argc, char ** argv) {
   if(argc < 6) {
-    fprintf(stderr, "usage: %s OUT.png PIECES AVGCELLS NEWEST SEED\n", argv[0]);
+    fprintf(stderr, "usage: %s OUT.png PIECES AVGCELLS NEWEST SEED [CAP]\n", argv[0]);
     return 1;
   }
   uint32_t target = atoi(argv[2]), avg = atoi(argv[3]), seed = atoi(argv[5]);
-  float newest = atof(argv[4]);
+  float newest = atof(argv[4]), cap = argc > 6 ? atof(argv[6]) : 0;
   uint16_t cols, rows;
   layout_grid(1024, 768, target, &cols, &rows);
   MazePieces m;
-  if(mazepiece_init(&m, cols, rows, cols * rows, avg, newest, seed)) { fprintf(stderr, "failed\n"); return 1; }
+  if(mazepiece_init(&m, cols, rows, cols * rows, avg, newest, cap, seed)) { fprintf(stderr, "failed\n"); return 1; }
   int W = m.w, H = m.h;
   uint32_t n = m.count;
   // Per piece: cells, bbox, ends / bends / branches (by same-piece neighbours)
@@ -121,8 +121,8 @@ int main(int argc, char ** argv) {
   qsort(shapes, n, sizeof(Shape), shape_cmp);
   uint32_t dups = 0;
   for(uint32_t p = 1; p < n; p++) dups += !shape_cmp(shapes + p - 1, shapes + p);
-  printf("%s: %ux%u pieces target %u -> %u, grid %dx%d, cell %.3f piece, thr %u, tiny %u, flips %u, unlabeled %u\n",
-      argv[1], cols, rows, cols * rows, n, W, H, (float)cols / W, m.thr, m.tiny, m.flips, unlabeled);
+  printf("%s: %ux%u pieces target %u -> %u, grid %dx%d, cell %.3f piece, thr %u, tiny %u, flips %u, capsplits %u, minmerges %u, unlabeled %u\n",
+      argv[1], cols, rows, cols * rows, n, W, H, (float)cols / W, m.thr, m.tiny, m.flips, m.capsplits, m.minmerges, unlabeled);
   printf("  cells min %u avg %.1f max %u | bends+branches min %u avg %.1f, <3: %u | min bbox side %u cells | duplicate shapes %u\n  bbox aspect avg %.2f, > 2: %u | bbox area avg %.2f pieces^2, long side avg %.2f max %.2f pieces\n",
       cmin, (float)(W * H) / n, cmax, turnmin, (float)sumturn / n, simple, boxmin, dups, aspsum / n, longp, areasum / n, longsum / n, sidemax);
 

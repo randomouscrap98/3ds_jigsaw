@@ -39,6 +39,6 @@ build_host/rainbow_preview: tools/rainbow_preview.c source/rainbow.c source/rain
 	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Isource/external -Itools tools/rainbow_preview.c source/rainbow.c -lm -o $@
 
 # Maze piece preview (tools/mazepiece_preview.c): mazepiece_preview OUT.png PIECES AVGCELLS NEWEST SEED
-build_host/mazepiece_preview: tools/mazepiece_preview.c source/mazepiece.c source/mazepiece.h source/layout.c source/rng.c
+build_host/mazepiece_preview: tools/mazepiece_preview.c source/mazepiece.c source/mazepiece.h source/layout.c source/rng.c source/cutgraph.c source/knobs.c source/edgegen.c source/piecegeo.c source/geom.c
 	@mkdir -p build_host
-	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Itools tools/mazepiece_preview.c source/mazepiece.c source/layout.c source/rng.c -lm -o $@
+	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Itools tools/mazepiece_preview.c source/mazepiece.c source/layout.c source/rng.c source/cutgraph.c source/knobs.c source/edgegen.c source/piecegeo.c source/geom.c -lm -o $@

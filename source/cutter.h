@@ -22,7 +22,7 @@
 #define CUT_STYLES 6
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
-#define CUTTER_MAZEAVG 30   // Maze pieces: cells per piece (complexity vs arm width)
+#define CUTTER_MAZEAVG 20   // Maze pieces: cells per piece (complexity vs arm width)
 #define CUTTER_MAZENEWEST 0.5f  // Maze branchiness (mazepiece_init newest)
 #define CUTTER_MAZETRIES 32 // Maze attempts (new seeds) for one with no repeated shapes
 

@@ -206,7 +206,8 @@ static void mp_treesfree(MpTrees * t) {
   free(t->order); free(t->parent); free(t->cstart);
 }
 
-static uint32_t mp_cut(MazePieces * m, const MpTrees * t, uint32_t thr, uint32_t * res, uint8_t * cut) {
+// cap > 0: when a cell's subtree goes over cap, its biggest child branches become pieces
+static uint32_t mp_cut(MazePieces * m, const MpTrees * t, uint32_t thr, uint32_t cap, uint32_t * res, uint8_t * cut) {
   uint32_t n = (uint32_t)m->w * m->h, count = 0;
   for(uint32_t i = 0; i < n; i++) m->label[i] = -1;
   m->tiny = 0;
@@ -218,23 +219,40 @@ static uint32_t mp_cut(MazePieces * m, const MpTrees * t, uint32_t thr, uint32_t
     for(uint32_t i = len; i-- > 0;) {
       uint32_t v = o[i];
       res[v] += 1;
+      while(cap && res[v] > cap) {
+        int x = v % m->w, y = v / m->w;
+        int32_t big = -1;
+        for(int d = 0; d < 4; d++) {
+          int nx = x + mp_dx[d], ny = y + mp_dy[d];
+          if(nx < 0 || ny < 0 || nx >= m->w || ny >= m->h) continue;
+          uint32_t u = ny * m->w + nx;
+          if(t->parent[u] == (int32_t)v && !cut[u] && (big < 0 || res[u] > res[big])) big = u;
+        }
+        if(big < 0) break;
+        cut[big] = 1;
+        res[v] -= res[big];
+      }
       if(res[v] >= thr) cut[v] = 1;
       else if(t->parent[v] >= 0) res[t->parent[v]] += res[v];
     }
     uint32_t root = o[0];
-    int32_t merge = -1;
+    int32_t merge = -1, nextto = 0;
     for(uint32_t i = 0; i < len; i++) {
       uint32_t v = o[i];
       if(cut[v]) {
         m->label[v] = count++;
-        if(t->parent[v] >= 0 && m->label[t->parent[v]] == -2 && merge < 0) merge = m->label[v];
+        if(t->parent[v] >= 0 && m->label[t->parent[v]] == -2) {
+          if(merge < 0 && (!cap || res[v] + res[root] <= cap)) merge = m->label[v];
+          nextto = 1;
+        }
       } else {
         m->label[v] = v == root ? -2 : m->label[t->parent[v]];
       }
     }
     if(cut[root]) continue;
     // Root leftover: own piece if big enough, else joins a piece cut next to it
-    int32_t l = res[root] * 2 >= thr ? (int32_t)count++ : merge >= 0 ? merge : -3;
+    // (own piece anyway if joining would break the cap)
+    int32_t l = res[root] * 2 >= thr || (merge < 0 && nextto) ? (int32_t)count++ : merge >= 0 ? merge : -3;
     if(l == -3) m->tiny++;
     for(uint32_t i = 0; i < len; i++) if(m->label[o[i]] == -2) m->label[o[i]] = l;
   }
@@ -303,8 +321,9 @@ static int mp_split(MazePieces * m, int32_t p, uint32_t * order, int32_t * paren
 }
 
 // Merge piece p into its smallest neighbour of the same kind (any kind if none), then
-// move the last label into p's place. Returns 0 on success.
-static int mp_merge(MazePieces * m, int32_t p, const uint32_t * size) {
+// move the last label into p's place. cap > 0: only neighbours that stay <= cap cells.
+// Returns 0 on success.
+static int mp_merge(MazePieces * m, int32_t p, const uint32_t * size, uint32_t cap) {
   uint32_t n = (uint32_t)m->w * m->h;
   int32_t best = -1, bestany = -1;
   for(uint32_t i = 0; i < n; i++) {
@@ -315,7 +334,7 @@ static int mp_merge(MazePieces * m, int32_t p, const uint32_t * size) {
       if(nx < 0 || ny < 0 || nx >= m->w || ny >= m->h) continue;
       uint32_t u = ny * m->w + nx;
       int32_t q = m->label[u];
-      if(q == p) continue;
+      if(q == p || (cap && size[p] + size[q] > cap)) continue;
       if(bestany < 0 || size[q] < size[bestany]) bestany = q;
       if(m->wall[u] == m->wall[i] && (best < 0 || size[q] < size[best])) best = q;
     }
@@ -329,24 +348,86 @@ static int mp_merge(MazePieces * m, int32_t p, const uint32_t * size) {
   return 0;
 }
 
-// Exactly target pieces: split the biggest or merge the smallest until it fits
-static int mp_exact(MazePieces * m, uint32_t target) {
+// Exactly target pieces: split the biggest or merge the smallest until it fits. With
+// cap > 0, pieces over cap cells are split too (the smallest merged to keep the count),
+// as long as that keeps working (best effort).
+static int mp_u32cmp(const void * a, const void * b) {
+  uint32_t x = *(const uint32_t *)a, y = *(const uint32_t *)b;
+  return x < y ? -1 : x > y;
+}
+
+// Merge the smallest piece that has a neighbour it can join within cap. Returns 0 on success.
+static int mp_mergecap(MazePieces * m, const uint32_t * size, uint32_t * bysize, uint32_t cap) {
+  for(uint32_t q = 0; q < m->count; q++) bysize[q] = size[q] << 16 | q;
+  qsort(bysize, m->count, sizeof(uint32_t), mp_u32cmp);
+  for(uint32_t i = 0; i < m->count; i++) if(!mp_merge(m, bysize[i] & 0xFFFF, size, cap)) return 0;
+  return 1;
+}
+
+static int mp_exact(MazePieces * m, uint32_t target, uint32_t cap) {
   uint32_t n = (uint32_t)m->w * m->h;
   for(uint32_t i = 0; i < n; i++) if(m->label[i] < 0) return 1;
-  uint32_t * size = malloc(sizeof(uint32_t) * (target + m->count + 1));
+  uint32_t * size = malloc(sizeof(uint32_t) * (target + m->count + 2));
+  uint32_t * bysize = malloc(sizeof(uint32_t) * (target + m->count + 2));
   uint32_t * order = malloc(sizeof(uint32_t) * n), * sub = malloc(sizeof(uint32_t) * n);
   int32_t * parent = malloc(sizeof(int32_t) * n);
-  int err = !size || !order || !sub || !parent;
-  for(int guard = 0; !err && m->count != target && guard < 1000; guard++) {
+  int err = !size || !bysize || !order || !sub || !parent;
+  uint32_t guard = 1000 + 4 * target, capmax = cap, capmin = cap ? n / target / 2 : 0;
+  int32_t split = -1;
+  for(uint32_t g = 0; !err && g < guard; g++) {
     mp_sizes(m, size);
-    int32_t p = 0;
+    int32_t big = 0, small = 0;
     for(uint32_t q = 1; q < m->count; q++) {
-      if(m->count < target ? size[q] > size[p] : size[q] < size[p]) p = q;
+      if(size[q] > size[big]) big = q;
+      if(size[q] < size[small]) small = q;
     }
-    err = m->count < target ? mp_split(m, p, order, parent, sub) : mp_merge(m, p, size);
+    int over = cap && size[big] > cap;
+    if(m->count == target && (!over || g + 1 >= guard)) break;
+    if(m->count <= target) {
+      m->capsplits += m->count == target;
+      split = big;
+      err = mp_split(m, big, order, parent, sub);
+    } else if(!cap || mp_mergecap(m, size, bysize, cap)) {
+      if(cap && m->capsplits) {
+        // No merge fits under the cap: undo the split and stop splitting for it
+        for(uint32_t i = 0; i < n; i++) if(m->label[i] == (int32_t)m->count - 1) m->label[i] = split;
+        m->count--;
+        m->capsplits--;
+        cap = 0;
+      } else {
+        err = mp_merge(m, small, size, 0);
+      }
+    }
   }
+  // Capped: a piece under half the mean joins its smallest neighbour and the result is split
+  // in two again (count unchanged); kept only if both halves are within [capmin, cap]
+  int32_t * keep = capmin ? malloc(sizeof(int32_t) * n) : NULL;
+  uint8_t * tried = capmin ? calloc(target + 2, 1) : NULL;
+  if(capmin && (!keep || !tried)) err = 1;
+  for(uint32_t g = 0; capmin && !err && m->count == target && g < 4 * target; g++) {
+    mp_sizes(m, size);
+    int32_t small = -1;
+    for(uint32_t q = 0; q < m->count; q++) if(!tried[q] && size[q] < capmin && (small < 0 || size[q] < size[small])) small = q;
+    if(small < 0) break;
+    memcpy(keep, m->label, sizeof(int32_t) * n);
+    // The neighbour mp_merge will pick: find it by a cell of small's that ends up relabelled
+    uint32_t cell = 0;
+    while(m->label[cell] != small) cell++;
+    int ok = !mp_merge(m, small, size, 0);
+    if(ok) {
+      int32_t joined = m->label[cell];
+      ok = !mp_split(m, joined, order, parent, sub);
+      if(ok) {
+        mp_sizes(m, size);
+        ok = size[joined] >= capmin && size[joined] <= capmax && size[m->count - 1] >= capmin && size[m->count - 1] <= capmax;
+      }
+    }
+    if(ok) { m->minmerges++; memset(tried, 0, target + 2); }
+    else { memcpy(m->label, keep, sizeof(int32_t) * n); m->count = target; tried[small] = 1; }
+  }
+  free(keep); free(tried);
   if(m->count != target) err = 1;
-  free(size); free(order); free(sub); free(parent);
+  free(size); free(bysize); free(order); free(sub); free(parent);
   return err;
 }
 
@@ -407,7 +488,7 @@ static int mp_dups(const MazePieces * m, uint32_t * dups) {
   return err;
 }
 
-int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, uint32_t seed) {
+int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, float cap, uint32_t seed) {
   memset(m, 0, sizeof(MazePieces));
   float wf = sqrtf((float)count * avg * cols / rows);
   uint16_t a = (uint16_t)lroundf((wf + 1) / 2), b = (uint16_t)lroundf((wf * rows / cols + 1) / 2);
@@ -430,17 +511,18 @@ int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count,
         mp_trees(&t, m->wall, m->w, m->h, &r);
   }
   if(!err) {
+    uint32_t capcells = cap > 0 ? (uint32_t)ceilf(cap * n / count) : 0;
     // Threshold giving the piece count closest to the target
     uint32_t best = 2, bestd = UINT32_MAX;
     for(uint32_t thr = 2; thr <= 3 * avg; thr++) {
-      uint32_t c = mp_cut(m, &t, thr, res, cut);
+      uint32_t c = mp_cut(m, &t, thr, capcells, res, cut);
       uint32_t d = c > count ? c - count : count - c;
       if(d < bestd) { bestd = d; best = thr; }
     }
     m->thr = best;
-    m->count = mp_cut(m, &t, best, res, cut);
+    m->count = mp_cut(m, &t, best, capcells, res, cut);
     m->cut = m->count;
-    err = mp_exact(m, count) || mp_dups(m, &m->dups);
+    err = mp_exact(m, count, capcells) || mp_dups(m, &m->dups);
   }
   mp_treesfree(&t);
   free(res);
