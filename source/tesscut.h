@@ -10,7 +10,7 @@
 // -120 degrees around the vertex they share (V1, V3, V5), so tiles come in three orientations
 // 120 degrees apart and fit together everywhere. Every edge then gets its own small change
 // (vertex jitter + a bump) so no two pieces are the same, rerolled where a piece gets too thin.
-// Border: none yet (whole tiles; the outline is ragged).
+// Border: tiles cut to the rectangle; bits that come out small or thin join a neighbour.
 
 // One free edge curve: points between the edge's ends, as (t along the edge, n out from the
 // hexagon), both in edge lengths
@@ -29,6 +29,7 @@ typedef struct {
   float jitter;   // Vertex moves, up to this x the hexagon's radius
   float bump;     // Per edge bend (sin(pi t) and sin(2 pi t) along the edge), up to this x its length
   float clear;    // Thinnest part of a piece (cells; cutgraph_thick_ok)
+  float minarea;  // Border bits smaller than this (cells) join a neighbour (thin ones up to 4 x it)
 } TessVary;
 
 typedef struct {
@@ -36,6 +37,9 @@ typedef struct {
   uint32_t thinbase;    // Pieces too thin before any change (the shape itself is too thin)
   uint32_t passes;      // Reroll passes
   uint32_t flattened;   // Edges left without a bump after the passes ran out
+  uint32_t merged;      // Border bits merged into a neighbour
+  uint32_t fits;        // Builds until the count fit
+  uint32_t failed;      // Builds that failed (retried at a slightly different size)
 } TessStats;
 
 const TessShape * tesscut_lizard(void);
@@ -43,7 +47,7 @@ const TessShape * tesscut_lizard(void);
 // pairs. Returns the point count.
 uint32_t tesscut_tilepoints(const TessShape * sh);
 uint32_t tesscut_tile(const TessShape * sh, float * xy);
-// About cols x rows pieces of one cell each (whole tiles over the cols x rows area). orient
+// About cols x rows pieces over (0,0)-(cols,rows) (tile size fitted to the count). orient
 // (malloc'd, count bytes; NULL = not wanted) gets each piece's orientation 0-2. Returns 0 on
 // success.
 int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const TessVary * v, uint32_t seed,

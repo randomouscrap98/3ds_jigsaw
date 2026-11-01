@@ -19,7 +19,7 @@ int main(int argc, char ** argv) {
   }
   int cols = atoi(argv[2]), rows = atoi(argv[3]);
   uint32_t seed = strtoul(argv[4], NULL, 0);
-  TessVary v = { 0.08f, 0.08f, 0.06f };
+  TessVary v = { 0.08f, 0.08f, 0.06f, 0.4f };
   if(argc > 7) {
     v.jitter = atof(argv[5]);
     v.bump = atof(argv[6]);
@@ -33,8 +33,8 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "cut failed\n");
     return 1;
   }
-  printf("%u pieces, mismatched edges %u, thin before changes %u, passes %u, flattened %u\n",
-      g.count, st.mismatched, st.thinbase, st.passes, st.flattened);
+  printf("%u pieces (target %d), mismatched edges %u, thin before changes %u, passes %u, flattened %u, merged %u, fits %u, failed %u\n",
+      g.count, cols * rows, st.mismatched, st.thinbase, st.passes, st.flattened, st.merged, st.fits, st.failed);
   uint32_t maxp = cutgraph_maxpoints(&g);
   float * xy = malloc(sizeof(float) * 2 * maxp);
   // Distinctness: every piece against its most similar same-orientation piece, outlines
@@ -105,10 +105,38 @@ int main(int argc, char ** argv) {
         best[0] * 39, best[ni / 10] * 39, best[ni / 2] * 39, best[0] * 85, best[ni / 10] * 85, best[ni / 2] * 85);
     free(best); free(sp); free(inner);
   }
+  // Final pieces: smallest, and how many fail the thinness check
+  {
+    float amin = 1e9f;
+    uint32_t thin = 0;
+    for(uint32_t p = 0; p < g.count; p++) {
+      uint32_t n = cutgraph_outline(&g, p, 1, 0, 0, xy);
+      float cx, cy, a = geom_area(xy, n, &cx, &cy);
+      amin = fminf(amin, a);
+      int ok = cutgraph_thick_ok(xy, n, v.clear);
+      thin += !ok;
+      if(!ok) {
+        int border = 0;
+        for(uint32_t q = g.pstart[p]; q < g.pstart[p + 1]; q++) { const CutEdge * e = g.e + g.pedge[q] / 2; border |= e->left < 0 || e->right < 0; }
+        printf("  thin piece %u: area %.2f, %s, centroid %.2f,%.2f\n", p, a, border ? "border" : "inner", cx, cy);
+      }
+    }
+    printf("smallest piece %.2f cells, %u pieces too thin\n", amin, thin);
+  }
+  // TESS_SPREAD=f: pieces pulled apart (each moved by f x its centroid's offset from the middle)
+  float spread = getenv("TESS_SPREAD") ? atof(getenv("TESS_SPREAD")) : 0;
+  float * off = calloc(2 * g.count, sizeof(float));
+  for(uint32_t p = 0; p < g.count && spread > 0; p++) {
+    uint32_t n = cutgraph_outline(&g, p, cell, 0, 0, xy);
+    float cx, cy;
+    geom_area(xy, n, &cx, &cy);
+    off[2 * p] = (cx - cols * cell / 2) * spread;
+    off[2 * p + 1] = (cy - rows * cell / 2) * spread;
+  }
   // Bounds of everything
   float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
   for(uint32_t p = 0; p < g.count; p++) {
-    uint32_t n = cutgraph_outline(&g, p, cell, 0, 0, xy);
+    uint32_t n = cutgraph_outline(&g, p, cell, off[2 * p], off[2 * p + 1], xy);
     for(uint32_t i = 0; i < n; i++) {
       x0 = fminf(x0, xy[2 * i]); x1 = fmaxf(x1, xy[2 * i]);
       y0 = fminf(y0, xy[2 * i + 1]); y1 = fmaxf(y1, xy[2 * i + 1]);
@@ -120,7 +148,7 @@ int main(int argc, char ** argv) {
   static const uint8_t base[3][3] = { { 220, 50, 40 }, { 240, 210, 40 }, { 140, 200, 40 } };
   uint32_t rs = seed * 2654435761u;
   for(uint32_t p = 0; p < g.count; p++) {
-    uint32_t n = cutgraph_outline(&g, p, cell, pad - x0, pad - y0, xy);
+    uint32_t n = cutgraph_outline(&g, p, cell, pad - x0 + off[2 * p], pad - y0 + off[2 * p + 1], xy);
     float bx0 = 1e9f, by0 = 1e9f, bx1 = -1e9f, by1 = -1e9f;
     for(uint32_t i = 0; i < n; i++) {
       bx0 = fminf(bx0, xy[2 * i]); bx1 = fmaxf(bx1, xy[2 * i]);
@@ -145,7 +173,7 @@ int main(int argc, char ** argv) {
     }
   }
   stbi_write_png(argv[1], W, H, 3, img, W * 3);
-  free(img); free(xy); free(ori);
+  free(img); free(xy); free(ori); free(off);
   cutgraph_free(&g);
   return 0;
 }
