@@ -42,3 +42,9 @@ build_host/rainbow_preview: tools/rainbow_preview.c source/rainbow.c source/rain
 build_host/mazepiece_preview: tools/mazepiece_preview.c source/mazepiece.c source/mazepiece.h source/layout.c source/rng.c source/cutgraph.c source/knobs.c source/edgegen.c source/piecegeo.c source/geom.c
 	@mkdir -p build_host
 	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Isource -Itools tools/mazepiece_preview.c source/mazepiece.c source/layout.c source/rng.c source/cutgraph.c source/knobs.c source/edgegen.c source/piecegeo.c source/geom.c -lm -o $@
+
+# Tessellation preview (tools/tess_preview.c): tess_preview OUT.png COLS ROWS SEED [JITTER BUMP CLEAR [CELLPX]]
+TESSSRCS := source/tesscut.c source/rng.c source/cutgraph.c source/knobs.c source/edgegen.c source/piecegeo.c source/geom.c
+build_host/tess_preview: tools/tess_preview.c $(TESSSRCS) source/tesscut.h
+	@mkdir -p build_host
+	$(CC) -O2 -g -Wall -Wextra -Wno-unused-parameter -Wshadow -Isource -Itools tools/tess_preview.c $(TESSSRCS) -lm -o $@
