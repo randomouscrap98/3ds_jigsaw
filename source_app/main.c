@@ -97,12 +97,12 @@ static void app_hook(APT_HookType type, void * param) {
 static void app_music(App * app) {
   uint8_t m = app->game.music;
   music_setmode(&app->music, m == SAVEFILE_MUSIC_OFF ? MUSIC_OFF : m == SAVEFILE_MUSIC_SHUFFLE ? MUSIC_SHUFFLE : MUSIC_ORDER);
-  static const float gain[] = {
+  static const float gain[SAVEFILE_VOLUMES] = {
     [SAVEFILE_VOLUME_LOW] = MAIN_VOLUME_LOW,
     [SAVEFILE_VOLUME_MEDIUM] = MAIN_VOLUME_MEDIUM,
     [SAVEFILE_VOLUME_HIGH] = 1.0f,
   };
-  music_setvolume(&app->music, gain[app->game.volume % 3]);
+  music_setvolume(&app->music, gain[app->game.volume % SAVEFILE_VOLUMES]);
 }
 
 static void app_start_game(App * app, PuzzleChoice choice) {

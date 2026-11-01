@@ -279,7 +279,7 @@ int game_update(Game * g, const GameInput * gin) {
     if(gin->down & GAME_MOD_SKIPSONG) ev |= GAME_EV_SKIPSONG;
     if(gin->down & GAME_MOD_MUSICMODE) {
       // Saved with the next autosave, like the table color
-      static const uint8_t next[] = {
+      static const uint8_t next[SAVEFILE_MUSIC_MODES] = {   // Sized: indexing stays in bounds
         [SAVEFILE_MUSIC_OFF] = SAVEFILE_MUSIC_ORDER,
         [SAVEFILE_MUSIC_ORDER] = SAVEFILE_MUSIC_SHUFFLE,
         [SAVEFILE_MUSIC_SHUFFLE] = SAVEFILE_MUSIC_OFF,
@@ -289,12 +289,12 @@ int game_update(Game * g, const GameInput * gin) {
       ev |= GAME_EV_MUSICMODE;
     }
     if(gin->down & GAME_MOD_VOLUME) {
-      static const uint8_t next[] = {
+      static const uint8_t next[SAVEFILE_VOLUMES] = {
         [SAVEFILE_VOLUME_LOW] = SAVEFILE_VOLUME_MEDIUM,
         [SAVEFILE_VOLUME_MEDIUM] = SAVEFILE_VOLUME_HIGH,
         [SAVEFILE_VOLUME_HIGH] = SAVEFILE_VOLUME_LOW,
       };
-      g->volume = next[g->volume % 3];
+      g->volume = next[g->volume % SAVEFILE_VOLUMES];
       g->dirty = 1;
       ev |= GAME_EV_VOLUME;
     }

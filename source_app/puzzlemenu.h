@@ -15,8 +15,8 @@
 #define PMENU_NUMCOUNTS 4
 #define PMENU_PIECES_DEFAULT 1                  // 100
 #define PMENU_FIRST 1        // List items before the puzzles ("Add files over Wi-Fi")
-#define PMENU_MAXOPTS 9      // Continue, Pieces, Piece style, Whimsies, Overlay, Music, Start new puzzle, Rename,
-                             // Delete
+#define PMENU_MAXOPTS 16     // Options rows (9 now: Continue, Pieces, Piece style, Whimsies, Overlay, Music,
+                             // Start new puzzle, Rename, Delete); puzzlemenu_opt refuses more
 #define PMENU_ACT_CONTINUE 0
 #define PMENU_ACT_NEW 0xFFFFFFFE
 #define PMENU_ACT_RENAME 0xFFFFFFFD

@@ -55,6 +55,16 @@ static int puzzlemenu_cmp(const void * a, const void * b) {
   return strcasecmp(((const PuzzleEntry *)a)->name, ((const PuzzleEntry *)b)->name);
 }
 
+// Record options row n's action and whether it shows the cut sample, then move n on. 1 when
+// the rows are full (raise PMENU_MAXOPTS): the options menu then doesn't open.
+static int puzzlemenu_opt(PuzzleMenu * pm, int * n, uint32_t act, u8 cut) {
+  if(*n >= PMENU_MAXOPTS) return 1;
+  pm->optact[*n] = act;
+  pm->optcut[*n] = cut;
+  (*n)++;
+  return 0;
+}
+
 // Confirm menu only appears when there's a save to throw away. Returning NULL makes
 // littlemenu treat the item as a plain click.
 static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
@@ -121,7 +131,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
       snprintf(name, sizeof(name), "Continue: %lu left, %s", (unsigned long)e->save.groups, time);
     }
     TUIMITEM_BASIC(&pm->options, err, name, 0);
-    pm->optact[n++] = PMENU_ACT_CONTINUE;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_CONTINUE, 0);
   }
   // Settings for a new puzzle (Continue uses the save's), then the button that starts it
   if(!err) {
@@ -132,46 +142,44 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
       names[i] = nums[i];
     }
     TUIMITEM_ENUM(&pm->options, err, "Pieces", &pm->pieces, pmenu_join(values, names, PMENU_NUMCOUNTS));
-    pm->optact[n++] = PMENU_ACT_NONE;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);
   }
   if(!err) {
     const char * names[CUT_STYLES];
     for(int i = 0; i < CUT_STYLES; i++) names[i] = cutter_info(i)->name;
     TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, pmenu_join(values, names, CUT_STYLES));
-    pm->optcut[n] = 1;
-    pm->optact[n++] = PMENU_ACT_NONE;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 1);
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Whimsies", &pm->whimsy, pmenu_join(values, pmenu_whimsynames, WHIMSY_LEVELS));
     pm->optwhimsy = n;
-    pm->optcut[n] = 1;
-    pm->optact[n++] = PMENU_ACT_NONE;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 1);
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Overlay", &pm->overlay, pmenu_join(values, pmenu_overlaynames, OVERLAYS));
-    pm->optact[n++] = PMENU_ACT_NONE;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Music", &pm->music, pmenu_join(values, pmenu_musicnames, SAVEFILE_MUSIC_MODES));
-    pm->optact[n++] = PMENU_ACT_NONE;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);
   }
   if(!err) {
     tui_menu_item_data * idata;
     TUIMITEM_SUBMENU(&pm->options, err, "Start new puzzle", puzzlemenu_create_confirm,
         tui_menu_submenu_destroy_existing_menu, idata, 0);
     if(!err) idata->ptr = pm;
-    pm->optact[n++] = PMENU_ACT_NEW;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NEW, 0);
   }
   if(!err) {
     TUIMITEM_BASIC(&pm->options, err, "Rename picture", 0);
-    pm->optact[n++] = PMENU_ACT_RENAME;
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_RENAME, 0);
   }
   if(!err) {
     tui_menu_item_data * idata;
     TUIMITEM_SUBMENU(&pm->options, err, "Delete puzzle", puzzlemenu_create_delconfirm,
         tui_menu_submenu_destroy_existing_menu, idata, 0);
     if(!err) idata->ptr = pm;
-    pm->optact[n++] = PMENU_ACT_NONE;   // Acted on from delconfirm
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);   // Acted on from delconfirm
   }
   return err ? NULL : &pm->options;
 }
