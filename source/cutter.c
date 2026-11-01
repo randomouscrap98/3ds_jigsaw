@@ -1,5 +1,6 @@
 #include "cutter.h"
 #include "mazepiece.h"
+#include "hexcut.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,17 @@ static int cutter_maze(Cutter * c, uint32_t seed) {
   return 1;
 }
 
+// Hexagons: no whimsies; the piece count is whatever hex grid fits closest
+static int cutter_hex(Cutter * c) {
+  c->whimsy = WHIMSY_NONE;
+  c->usegraph = 1;
+  if(hexcut_graph(c->cols, c->rows, &c->g)) return 1;
+  c->g.tries = 1;
+  c->count = c->g.count;
+  c->maxpoints = cutgraph_maxpoints(&c->g);
+  return 0;
+}
+
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed) {
   memset(c, 0, sizeof(Cutter));
   c->style = style < CUT_STYLES ? style : CUT_STYLE_CLASSIC;
@@ -32,6 +44,7 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
   c->rows = rows;
   c->count = (uint32_t)cols * rows;
   if(c->style == CUT_STYLE_MAZE) return cutter_maze(c, seed);
+  if(c->style == CUT_STYLE_HEX) return cutter_hex(c);
   if(c->style < CUT_STYLE_RANDOM && c->whimsy == WHIMSY_NONE) {
     if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;

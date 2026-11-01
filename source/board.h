@@ -36,13 +36,14 @@ typedef struct {
   uint32_t count;       // Total pieces
   const PieceGeo * geo; // Piece geometry (not owned; must outlive the board)
   float width, height;  // Table size; table spans (0,0) to (width,height)
+  uint8_t norotate;     // Pieces never turn: scatter keeps rotation 0, board_rotate does nothing
 } Board;
 
 // Create a solved-looking board: every piece is its own group, at its home position
 // with rotation 0. Call board_scatter afterwards to make it an actual puzzle.
 int board_init(Board * b, const PieceGeo * geo, float width, float height);
 void board_free(Board * b);
-// Throw all pieces into their own groups at random spots/rotations, spread evenly over
+// Throw all pieces into their own groups at random spots/rotations (unless norotate), spread evenly over
 // the region (x, y, w, h) of the table
 void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h);
 // The same for pieces of very different sizes (maze pieces): each piece's hitbox bounds,
@@ -57,6 +58,7 @@ int32_t board_pick(Board * b, float x, float y);
 void board_raise(Board * b, uint16_t group);
 void board_move(Board * b, uint16_t group, float dx, float dy);
 // Rotate group a quarter turn (dir +1 = clockwise, -1 = counterclockwise) around pivot
+// (nothing when norotate)
 void board_rotate(Board * b, uint16_t group, int dir, float px, float py);
 // Would board_drop merge anything? (Changes nothing)
 int board_can_merge(Board * b, uint16_t group, float snap);

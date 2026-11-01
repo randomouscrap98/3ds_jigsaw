@@ -13,7 +13,7 @@
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
 
 static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
-static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random", "Random Rect", "Maze" };  // CUT_STYLE_*
+static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random", "Random Rect", "Maze", "Hex" };  // CUT_STYLE_*
 static const char * const pmenu_whimsies[WHIMSY_LEVELS] = { "", ", few whimsies", ", many whimsies" };  // WHIMSY_*
 static const char * const pmenu_overlays[OVERLAYS] = { "", ", hologram", ", rainbow" };  // OVERLAY_*
 
@@ -294,10 +294,11 @@ static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
   return 1;
 }
 
-// Options item that's grayed out and can't be changed: Whimsies while the style is Maze
-// (maze cuts have none)
+// Options item that's grayed out and can't be changed: Whimsies while the style is Maze or
+// Hex (those cuts have none)
 static int puzzlemenu_optoff(PuzzleMenu * pm, int item) {
-  return item >= 0 && item == pm->optwhimsy && (unsigned)pm->style % CUT_STYLES == CUT_STYLE_MAZE;
+  unsigned st = (unsigned)pm->style % CUT_STYLES;
+  return item >= 0 && item == pm->optwhimsy && (st == CUT_STYLE_MAZE || st == CUT_STYLE_HEX);
 }
 
 PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {

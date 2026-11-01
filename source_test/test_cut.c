@@ -8,6 +8,7 @@
 #include "cutsample.h"
 #include "woodcut.h"
 #include "mazepiece.h"
+#include "hexcut.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -18,10 +19,12 @@
 #define PINNED_RANDOM 0xB45D299Bu      // 1.2
 #define PINNED_RANDRECT 0x16C37493u    // 1.3
 #define PINNED_MAZE 0x203B1CCBu        // 1.3
+#define PINNED_HEX 0x14F0A367u            // 1.4
 #define PINNED_WHIMSY { { 0x8C3BD049u, 0x881A00CEu }, { 0xFFEF07BBu, 0xBEC93799u }, \
     { 0x33ED2971u, 0xB5F9C31Fu }, { 0x987CDF7Bu, 0xBEC67F6Cu }, \
     { 0x33BEE477u, 0x0450611Bu }, \
-    { PINNED_MAZE, PINNED_MAZE } }   // 1.2 (Random Rect, Maze 1.3; Maze ignores whimsies), style x Few/Many
+    { PINNED_MAZE, PINNED_MAZE }, { PINNED_HEX, PINNED_HEX } }   // 1.2 (Random Rect, Maze 1.3, Hex 1.4;
+                                     // Maze and Hex ignore whimsies), style x Few/Many
 
 void test_layout(void) {
   uint16_t c, r;
@@ -36,7 +39,7 @@ void test_layout(void) {
   // Every cut style packs into 3 pages at every count, with no overlaps, never upscaling
   uint32_t targets[4] = { 50, 100, 250, 500 };
   uint32_t sizes[4][2] = { { 4000, 3000 }, { 1024, 1024 }, { 600, 1400 }, { 1024, 768 } };
-  const char * names[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "maze" };
+  const char * names[CUT_STYLES] = { "classic", "irregular", "wild", "random", "randrect", "maze", "hex" };
   for(int s = 0; s < 4; s++) {
     for(int t = 0; t < 4; t++) {
       printf("  %4ux%-4u %3u:", sizes[s][0], sizes[s][1], targets[t]);
@@ -106,7 +109,7 @@ static uint32_t cut_hash(uint8_t style, uint8_t whimsy, uint16_t cols, uint16_t 
 }
 
 void test_cut_pinned(void) {
-  const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT, PINNED_MAZE };
+  const uint32_t want[CUT_STYLES] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT, PINNED_MAZE, PINNED_HEX };
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
     uint32_t h = cut_hash(st, WHIMSY_NONE, 13, 9, 4242);
     if(h != want[st]) printf("  style %u hash %08lX\n", st, (unsigned long)h);
@@ -453,4 +456,42 @@ void test_maze_problems(void) {
     cutter_free(&cut);
   }
   CHECK(found == 0);
+}
+
+// Hex cut: count as promised, every interior piece the same hexagon, edge pieces halves and
+// corners quarters (by area), the whole puzzle covered exactly
+void test_hexcut(void) {
+  uint16_t sizes[4][2] = { { 8, 6 }, { 13, 9 }, { 25, 20 }, { 9, 16 } };
+  for(int s = 0; s < 4; s++) {
+    uint16_t cols = sizes[s][0], rows = sizes[s][1], nc, nr;
+    hexcut_size(cols, rows, &nc, &nr);
+    Cutter cut;
+    CHECK(cutter_init(&cut, CUT_STYLE_HEX, WHIMSY_MANY, WHIMSY_SET_CUTE, cols, rows, 1) == 0);
+    CHECK(cut.count == hexcut_count(nc, nr) && cut.whimsies == 0);
+    CHECK(abs((int)cut.count - cols * rows) <= cols * rows / 5);
+    float full = ((float)cols / (nc - 1)) * ((float)rows / nr), total = 0;
+    float * xy = malloc(sizeof(float) * 2 * cut.maxpoints);
+    int sizes_ok = 1;
+    uint32_t halves = 0, quarters = 0;
+    for(uint32_t p = 0; p < cut.count; p++) {
+      uint32_t n = cutter_outline(&cut, p, 1, 0, 0, xy);
+      float a = 0;
+      for(uint32_t i = 0; i < n; i++) {
+        uint32_t j = (i + 1) % n;
+        a += xy[2 * i] * xy[2 * j + 1] - xy[2 * j] * xy[2 * i + 1];
+      }
+      a = a / 2 / full;   // Clockwise with y down = positive
+      total += a;
+      int k = (int)lroundf(a * 4);
+      sizes_ok &= fabsf(a * 4 - k) < 0.01f && (k == 1 || k == 2 || k == 4) && (k != 4 || n == 6);
+      halves += k == 2;
+      quarters += k == 1;
+    }
+    CHECK(sizes_ok);
+    CHECK(fabsf(total * full - (float)cols * rows) < 0.01f);
+    CHECK(quarters == 2u + 2u * (nc % 2));   // Left corners always; right ones when the last column is even
+    printf("  hex %ux%u: %ux%u hexes, %u pieces (%u halves)\n", cols, rows, nc, nr, cut.count, halves);
+    free(xy);
+    cutter_free(&cut);
+  }
 }

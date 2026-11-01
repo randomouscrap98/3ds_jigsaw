@@ -11,7 +11,7 @@
 
 // Cut styles as stored in saves, cache names and the menu. 0-2 are grid cuts (edgegen
 // styles), 3-4 are random (Voronoi) cuts: scattered points or points on a jittered grid,
-// 5 is maze pieces (mazepiece; no whimsies). (The shelved wooden experiments live in
+// 5 is maze pieces (mazepiece; no whimsies), 6 is hexagons (hexcut; no whimsies, no turning). (The shelved wooden experiments live in
 // woodcut, numbered from CUT_STYLES.)
 #define CUT_STYLE_CLASSIC 0
 #define CUT_STYLE_IRREGULAR 1
@@ -19,7 +19,8 @@
 #define CUT_STYLE_RANDOM 3
 #define CUT_STYLE_RANDRECT 4
 #define CUT_STYLE_MAZE 5
-#define CUT_STYLES 6
+#define CUT_STYLE_HEX 6
+#define CUT_STYLES 7
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
 #define CUTTER_MAZEAVG 20   // Maze pieces: cells per piece (complexity vs arm width)
