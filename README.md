@@ -1,10 +1,10 @@
 # 3DS Jigsaw
 
 Jigsaw puzzles on the 3DS, made from your own pictures. Pick a picture, choose 50 to 500
-pieces and a cut style (classic, irregular, wild, or a random non-grid cut), optionally
-with whimsy pieces (hearts, stars, flowers and clouds cut into the puzzle), and put it
-together on the touch screen, with your own music playing if you like. A dozen paintings
-come with it to get you started.
+pieces and a cut style (classic, irregular, wild, random, random rect, maze, hex, or
+Escher-style lizards), optionally with whimsy pieces (hearts, stars, flowers and clouds
+cut into the puzzle), and put it together on the touch screen, with your own music
+playing if you like. A dozen paintings come with it to get you started.
 
 ## Installing
 
@@ -118,6 +118,8 @@ Tests for the platform independent code run on your PC with `make -f Makefile.ho
 - [QR Code generator](https://github.com/nayuki/QR-Code-generator) by Project Nayuki, MIT
 - [devkitPro](https://devkitpro.org/): libctru, citro2d, citro3d
 - Sounds are synthesized in code
+- The Lizard cut is traced from a teacher's Escher-inspired lizard tessellation shown in
+  [this Live Science article](https://www.livescience.com/50027-tessellation-tiling.html)
 
 ## License
 

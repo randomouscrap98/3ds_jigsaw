@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-// Tessellation cuts (experiment, previews only): Escher-style tiles on a hexagon grid. Each
+// Tessellation cuts (Lizard style): Escher-style tiles on a hexagon grid. Each
 // tile is a flat-top hexagon whose edges are curves; edges E1, E3, E5 are E0, E2, E4 turned
 // -120 degrees around the vertex they share (V1, V3, V5), so tiles come in three orientations
 // 120 degrees apart and fit together everywhere. Every edge then gets its own small change
@@ -46,6 +46,11 @@ typedef struct {
   uint32_t neckundo;    // Neck cuts undone (would have split or pinched a piece)
 } TessStats;
 
+#define TESSCUT_SHAPE_LIZARD 0
+#define TESSCUT_SHAPES 1
+
+// Shape by number (unknown -> lizard)
+const TessShape * tesscut_shape(uint8_t shape);
 const TessShape * tesscut_lizard(void);
 // The unit tile's outline (6 edges, closed, y down) for previews; xy holds tesscut_tilepoints
 // pairs. Returns the point count.

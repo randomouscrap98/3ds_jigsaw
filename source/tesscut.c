@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
-#include <stdio.h>
 
 #define TESS_SQRT3 1.7320508f
 #define TESS_SUBDIV 1       // Each shape segment split in this many (1: segments stay straight under bends)
@@ -34,6 +33,11 @@ static const TessShape tess_lizard = { {
 } };
 
 const TessShape * tesscut_lizard(void) {
+  return &tess_lizard;
+}
+
+const TessShape * tesscut_shape(uint8_t shape) {
+  (void)shape;   // The only one so far
   return &tess_lizard;
 }
 
@@ -506,18 +510,7 @@ static int tess_parts(CutGraph * g, uint8_t ** orient) {
             const CutEdge * f = g->e + (hj >> 1);
             if(((hj & 1) ? f->b : f->a) == end && (newid[s + j] < 0 || j == k0)) { next = j; break; }
           }
-          if(next < 0) {
-            if(getenv("TESS_DEBUG")) {
-              fprintf(stderr, "parts: piece %u no way on from vertex %u (%.3f,%.3f), %u half-edges\n", p, end, g->v[end].x, g->v[end].y, n);
-              for(uint32_t i = 0; i < g->ne; i++) {
-                const CutEdge * d = g->e + i;
-                if(d->a == end || d->b == end || d->left == (int32_t)p || d->right == (int32_t)p)
-                  fprintf(stderr, "  edge %u: %u (%.3f,%.3f) -> %u (%.3f,%.3f) left %d right %d npts %u\n", i, d->a, g->v[d->a].x, g->v[d->a].y,
-                      d->b, g->v[d->b].x, g->v[d->b].y, d->left, d->right, d->npts);
-              }
-            }
-            err = 1; break;
-          }
+          if(next < 0) { err = 1; break; }
           if((uint32_t)next == k0) break;
           cur = next;
         }
@@ -536,9 +529,7 @@ static int tess_parts(CutGraph * g, uint8_t ** orient) {
   free(old);
   *orient = ori;
   g->count = nn;
-  int r = cutgraph_rewalk(g);
-  if(r && getenv("TESS_DEBUG")) fprintf(stderr, "parts: rewalk %d\n", r);
-  return r != 0;
+  return cutgraph_rewalk(g) != 0;
 }
 
 // Border bits that are too small (area < minarea) or too thin (up to 4 x that) join the neighbour they share
@@ -923,7 +914,6 @@ int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const Tess
     cutgraph_free(&full);
     int e2 = err ? 0 : tess_parts(&c, &ori), e3 = err || e2 ? 0 : tess_merge(&c, ori, v->minarea, v->clear, &st);
     if(!err && !e2 && !e3 && v->neck > 0) e3 = tess_necks(&c, ori, v, &st);
-    if(getenv("TESS_DEBUG")) fprintf(stderr, "fit %d: clip %d parts %d merge %d\n", fit, err, e2, e3);
     if(err || e2 || e3) {
       if(!err) cutgraph_free(&c);
       free(ori);

@@ -1,6 +1,7 @@
 #include "cutter.h"
 #include "mazepiece.h"
 #include "hexcut.h"
+#include "tesscut.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -22,6 +23,10 @@ static const CutStyleInfo cutter_styles[] = {
       .whimsies = 0, .rotate = 1, .thin = 1, .samplepieces = 24 },
   [CUT_STYLE_HEX] = { "Hex", "hex", CUT_KIND_HEX, 0,
       .whimsies = 0, .rotate = 0, .samplepieces = 100 },
+  // Legs and tails: grabbed by loose hulls too, packed when scattered (three orientations
+  // 120 degrees apart: no quarter turns)
+  [CUT_STYLE_LIZARD] = { "Lizard", "lizard", CUT_KIND_TESS, TESSCUT_SHAPE_LIZARD,
+      .whimsies = 0, .rotate = 0, .thin = 1, .samplepieces = 50 },
 };
 // A gap in the list would be a zeroed entry: test_cut_styles checks every one is filled in
 _Static_assert(sizeof cutter_styles / sizeof cutter_styles[0] == CUT_STYLES, "one CutStyleInfo per CUT_STYLE_*");
@@ -64,6 +69,18 @@ static int cutter_hex(Cutter * c) {
   return 0;
 }
 
+// Tessellations: the piece count is whatever the border leaves near cols x rows
+static int cutter_tess(Cutter * c, uint8_t shape, uint32_t seed) {
+  c->usegraph = 1;
+  TessVary v = { CUTTER_TESSJITTER, CUTTER_TESSBUMP, CUTTER_TESSCLEAR, CUTTER_TESSMINAREA, CUTTER_TESSNECK };
+  TessStats st;
+  if(tesscut_graph(c->cols, c->rows, tesscut_shape(shape), &v, seed, &c->g, NULL, &st)) return 1;
+  c->g.tries = st.fits + st.failed;
+  c->count = c->g.count;
+  c->maxpoints = cutgraph_maxpoints(&c->g);
+  return 0;
+}
+
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed) {
   const CutStyleInfo * si = cutter_info(style);
   memset(c, 0, sizeof(Cutter));
@@ -76,6 +93,7 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
   switch(si->kind) {
   case CUT_KIND_MAZE: return cutter_maze(c, seed);
   case CUT_KIND_HEX: return cutter_hex(c);
+  case CUT_KIND_TESS: return cutter_tess(c, si->sub, seed);
   case CUT_KIND_RANDOM: return cutter_graph(c, randcut_style(si->sub), seed);
   default:
     if(c->whimsy != WHIMSY_NONE) return cutter_graph(c, NULL, seed);

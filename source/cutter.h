@@ -19,13 +19,15 @@
 #define CUT_STYLE_RANDRECT 4
 #define CUT_STYLE_MAZE 5
 #define CUT_STYLE_HEX 6
-#define CUT_STYLES 7
+#define CUT_STYLE_LIZARD 7
+#define CUT_STYLES 8
 
 // Which builder cuts a style (CutStyleInfo.kind)
 #define CUT_KIND_GRID 0     // edgegen grid, sub = EDGEGEN_STYLE_* (a CutGraph when it has whimsies)
 #define CUT_KIND_RANDOM 1   // randcut (Voronoi), sub = RANDCUT_STYLE_*
 #define CUT_KIND_MAZE 2     // mazepiece
 #define CUT_KIND_HEX 3      // hexcut
+#define CUT_KIND_TESS 4     // tesscut, sub = TESSCUT_SHAPE_*
 
 typedef struct {
   const char * name;      // Menu name
@@ -47,6 +49,13 @@ int cutter_byid(const char * id);
 #define CUTTER_MAZEAVG 20   // Maze pieces: cells per piece (complexity vs arm width)
 #define CUTTER_MAZENEWEST 0.5f  // Maze branchiness (mazepiece_init newest)
 #define CUTTER_MAZETRIES 32 // Maze attempts (new seeds) for one with no repeated shapes
+// Tessellation cuts (tesscut): per-edge change (user picked 0.08), thinnest part, border bits
+// that join a neighbour, necks cut at the border (lizard legs are ~0.13 cells wide)
+#define CUTTER_TESSJITTER 0.08f
+#define CUTTER_TESSBUMP 0.08f
+#define CUTTER_TESSCLEAR 0.06f
+#define CUTTER_TESSMINAREA 0.4f
+#define CUTTER_TESSNECK 0.2f
 
 // One puzzle's cut, whatever the style: piece outlines and geometry for a cols x rows
 // puzzle (in cells; the solved puzzle spans (0,0) to (cols,rows)). Grid styles without

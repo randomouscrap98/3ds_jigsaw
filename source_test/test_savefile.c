@@ -155,5 +155,5 @@ void test_savefile_layout(void) {
   CHECK(savefile_readheader(buf, SAVEFILE_HEADER, &r) == SAVEFILE_OK);
   CHECK(r.whimsyset == 1 && r.cuthash == 0 && r.seed == 0 && r.overlay == 0 && r.volume == 0);
   free(buf);
-  board_free(&b);
+  test_board_free(&b);
 }
