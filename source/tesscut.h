@@ -30,6 +30,8 @@ typedef struct {
   float bump;     // Per edge bend (sin(pi t) and sin(2 pi t) along the edge), up to this x its length
   float clear;    // Thinnest part of a piece (cells; cutgraph_thick_ok)
   float minarea;  // Border bits smaller than this (cells) join a neighbour (thin ones up to 4 x it)
+  float neck;     // Border pieces narrower than this (cells) where the smaller side touches the
+                  // border are cut there, the smaller side going to a neighbour (0 = off)
 } TessVary;
 
 typedef struct {
@@ -39,7 +41,9 @@ typedef struct {
   uint32_t flattened;   // Edges left without a bump after the passes ran out
   uint32_t merged;      // Border bits merged into a neighbour
   uint32_t fits;        // Builds until the count fit
-  uint32_t failed;      // Builds that failed (retried at a slightly different size)
+  uint32_t failed;      // Builds that failed (retried with the lattice moved)
+  uint32_t necks;       // Neck cuts made
+  uint32_t neckundo;    // Neck cuts undone (would have split or pinched a piece)
 } TessStats;
 
 const TessShape * tesscut_lizard(void);

@@ -630,6 +630,271 @@ static int tess_merge(CutGraph * g, uint8_t * ori, float minarea, float clear, T
   return err;
 }
 
+// Necks: a border piece whose outline comes closer than neck to itself (across the inside),
+// where the smaller side of that gap touches the border (a clipped leg ending in a lump, a
+// waist the border left), is cut straight across there and the smaller side joins the
+// neighbour it shares the most edge with (not the piece it came from).
+
+// Outline point i of piece p's walk: half-edge and position along it (0 = its start vertex)
+typedef struct {
+  uint32_t h, k;
+} TessOutPt;
+
+static int tess_grow(CutGraph * g, uint32_t nv, uint32_t ne, uint32_t npts) {
+  CutVert * v = realloc(g->v, sizeof(CutVert) * (g->nv + nv));
+  if(!v) return 1;
+  g->v = v;
+  CutEdge * e = realloc(g->e, sizeof(CutEdge) * (g->ne + ne));
+  if(!e) return 1;
+  g->e = e;
+  float * p = realloc(g->pts, sizeof(float) * 2 * (g->npts + npts + 1));
+  if(!p) return 1;
+  g->pts = p;
+  return 0;
+}
+
+// Edge ei's point m (0 = a, npts + 1 = b)
+static void tess_edgept(const CutGraph * g, const CutEdge * e, uint32_t m, float * x, float * y) {
+  if(m == 0) { *x = g->v[e->a].x; *y = g->v[e->a].y; }
+  else if(m > e->npts) { *x = g->v[e->b].x; *y = g->v[e->b].y; }
+  else { *x = g->pts[2 * (e->p0 + m - 1)]; *y = g->pts[2 * (e->p0 + m - 1) + 1]; }
+}
+
+// A vertex on edge ei at its segment m (edge order) and t along it: an end vertex if it falls on
+// one, else the edge is split there (the second half becomes a new edge, b -> new vertex).
+// Returns the vertex, or -1 out of memory.
+static int32_t tess_splitat(CutGraph * g, uint32_t ei, uint32_t m, float t) {
+  CutEdge * e = g->e + ei;
+  uint32_t n = e->npts + 2;
+  if(t >= 1 - 1e-4f) { m++; t = 0; }
+  if(t <= 1e-4f) {
+    t = 0;
+    if(m == 0) return (int32_t)e->a;
+    if(m == n - 1) return (int32_t)e->b;
+  }
+  if(tess_grow(g, 1, 1, n)) return -1;
+  e = g->e + ei;
+  float x0, y0, x1, y1;
+  tess_edgept(g, e, m, &x0, &y0);
+  tess_edgept(g, e, m + 1 < n ? m + 1 : m, &x1, &y1);
+  uint32_t vi = g->nv++;
+  g->v[vi] = (CutVert) { x0 + (x1 - x0) * t, y0 + (y1 - y0) * t };
+  // Second half: edge points after the split (m + 1 .. n - 2 interior; on a point: m + 1 ..),
+  // stored reversed (it runs b -> new vertex, b being the smaller index)
+  uint32_t from = m + 1, cnt = n - 2 >= from ? n - 1 - from : 0;
+  CutEdge * f = g->e + g->ne++;
+  *f = (CutEdge) { .a = e->b, .b = vi, .left = e->right, .right = e->left, .p0 = g->npts, .npts = cnt };
+  for(uint32_t q = 0; q < cnt; q++) tess_edgept(g, e, n - 2 - q, g->pts + 2 * (g->npts + q), g->pts + 2 * (g->npts + q) + 1);
+  g->npts += cnt;
+  // First half: a -> new vertex, interior points 1 .. m (on a point: 1 .. m - 1)
+  e->b = vi;
+  e->npts = t == 0 ? (m > 0 ? m - 1 : 0) : m;
+  return (int32_t)vi;
+}
+
+static int tess_isborder(const CutGraph * g, uint32_t p) {
+  for(uint32_t q = g->pstart[p]; q < g->pstart[p + 1]; q++) {
+    const CutEdge * e = g->e + g->pedge[q] / 2;
+    if(e->left < 0 || e->right < 0) return 1;
+  }
+  return 0;
+}
+
+// The vertex at (x, y) on one of piece p's edges: an existing vertex, or one made by splitting
+// the edge there. -1 = not found / out of memory.
+static int32_t tess_vertexat(CutGraph * g, int32_t p, float x, float y) {
+  for(uint32_t i = 0; i < g->nv; i++) {
+    if(fabsf(g->v[i].x - x) < 1e-5f && fabsf(g->v[i].y - y) < 1e-5f) return (int32_t)i;
+  }
+  int32_t bi = -1;
+  uint32_t bm = 0;
+  float bd = 1e-4f, bt = 0;
+  for(uint32_t i = 0; i < g->ne; i++) {
+    const CutEdge * e = g->e + i;
+    if(e->left != p && e->right != p) continue;
+    for(uint32_t m = 0; m <= e->npts; m++) {
+      float x0, y0, x1, y1;
+      tess_edgept(g, e, m, &x0, &y0);
+      tess_edgept(g, e, m + 1, &x1, &y1);
+      float dx = x1 - x0, dy = y1 - y0, L2 = dx * dx + dy * dy;
+      float t = L2 > 0 ? ((x - x0) * dx + (y - y0) * dy) / L2 : 0;
+      t = fminf(fmaxf(t, 0), 1);
+      float d = hypotf(x0 + dx * t - x, y0 + dy * t - y);
+      if(d < bd) { bd = d; bi = (int32_t)i; bm = m; bt = t; }
+    }
+  }
+  return bi < 0 ? -1 : tess_splitat(g, bi, bm, bt);
+}
+
+// Try one neck cut on piece p (a border piece; walks valid). backup gets a copy of g just
+// before g is changed. 1 = cut (walks need rebuilding), 0 = none, -1 = error.
+static int tess_neckone(CutGraph * g, int32_t p, float neck, CutGraph * backup) {
+  uint32_t maxn = cutgraph_maxpoints(g) + 8, n = 0;
+  float * xy = malloc(sizeof(float) * 2 * maxn), * arc = malloc(sizeof(float) * (maxn + 1));
+  TessOutPt * op = malloc(sizeof(TessOutPt) * maxn);
+  float (*cand)[4] = malloc(sizeof(float) * 4 * maxn);   // d, i, j, t
+  int result = 0;
+  if(!xy || !arc || !op || !cand) { result = -1; goto done; }
+  // Outline points with where they come from
+  for(uint32_t q = g->pstart[p]; q < g->pstart[p + 1]; q++) {
+    uint32_t h = g->pedge[q];
+    const CutEdge * e = g->e + h / 2;
+    for(uint32_t k = 0; k <= e->npts; k++) {
+      uint32_t m = (h & 1) ? e->npts + 1 - k : k;
+      tess_edgept(g, e, m, xy + 2 * n, xy + 2 * n + 1);
+      op[n++] = (TessOutPt) { h, k };
+    }
+  }
+  arc[0] = 0;
+  for(uint32_t i = 0; i < n; i++) {
+    uint32_t j = (i + 1) % n;
+    arc[i + 1] = arc[i] + hypotf(xy[2 * j] - xy[2 * i], xy[2 * j + 1] - xy[2 * i + 1]);
+  }
+  float total = arc[n];
+  // For each point: the closest spot on the outline across the inside, if closer than neck
+  // and far enough along the outline (not just its own corner)
+  uint32_t nc = 0;
+  for(uint32_t i = 0; i < n; i++) {
+    float bd = neck, bj = -1, bt = 0;
+    for(uint32_t j = 0; j < n; j++) {
+      uint32_t j1 = (j + 1) % n;
+      if(j == i || j1 == i) continue;
+      float x0 = xy[2 * j], y0 = xy[2 * j + 1], dx = xy[2 * j1] - x0, dy = xy[2 * j1 + 1] - y0, L2 = dx * dx + dy * dy;
+      float t = L2 > 0 ? ((xy[2 * i] - x0) * dx + (xy[2 * i + 1] - y0) * dy) / L2 : 0;
+      t = fminf(fmaxf(t, 0), 1);
+      float d = hypotf(x0 + dx * t - xy[2 * i], y0 + dy * t - xy[2 * i + 1]);
+      if(d >= bd) continue;
+      float along = fabsf(arc[j] + t * (arc[j + 1] - arc[j]) - arc[i]);
+      if(fminf(along, total - along) < CUTGRAPH_PINCH * neck) continue;
+      bd = d; bj = (float)j; bt = t;
+    }
+    if(bj >= 0) { cand[nc][0] = bd; cand[nc][1] = (float)i; cand[nc][2] = bj; cand[nc][3] = bt; nc++; }
+  }
+  // Narrowest first
+  for(uint32_t a = 1; a < nc; a++) {
+    float t[4];
+    memcpy(t, cand[a], sizeof t);
+    uint32_t b = a;
+    for(; b > 0 && cand[b - 1][0] > t[0]; b--) memcpy(cand[b], cand[b - 1], sizeof t);
+    memcpy(cand[b], t, sizeof t);
+  }
+  for(uint32_t c = 0; c < nc && !result; c++) {
+    uint32_t i = (uint32_t)cand[c][1], j = (uint32_t)cand[c][2];
+    float t = cand[c][3];
+    uint32_t j1 = (j + 1) % n;
+    float px = xy[2 * i], py = xy[2 * i + 1];
+    float qx = xy[2 * j] + (xy[2 * j1] - xy[2 * j]) * t, qy = xy[2 * j + 1] + (xy[2 * j1 + 1] - xy[2 * j + 1]) * t;
+    // The cut has to run through the inside
+    int inside = 1;
+    for(int k = 1; k < 4 && inside; k++) inside = geom_inside(xy, n, px + (qx - px) * k / 4, py + (qy - py) * k / 4);
+    if(!inside) continue;
+    // Side A: outline from point i to the spot (segments i .. j), side B: the rest
+    double areaA = 0, areaB = 0;
+    float lx = px, ly = py;
+    int borderA = 0, borderB = 0;
+    for(uint32_t k = i; ; k = (k + 1) % n) {
+      uint32_t k1 = (k + 1) % n;
+      const CutEdge * e = g->e + op[k].h / 2;
+      int onb = e->left < 0 || e->right < 0;
+      float nx = k == j ? qx : xy[2 * k1], ny = k == j ? qy : xy[2 * k1 + 1];
+      areaA += lx * ny - nx * ly;
+      borderA |= onb;
+      lx = nx; ly = ny;
+      if(k == j) break;
+    }
+    areaA += lx * py - px * ly;
+    lx = qx; ly = qy;
+    for(uint32_t k = j; ; k = (k + 1) % n) {
+      uint32_t k1 = (k + 1) % n;
+      const CutEdge * e = g->e + op[k].h / 2;
+      if(k != j || t < 1) borderB |= e->left < 0 || e->right < 0;
+      areaB += lx * xy[2 * k1 + 1] - xy[2 * k1] * ly;
+      lx = xy[2 * k1]; ly = xy[2 * k1 + 1];
+      if(k1 == i) break;
+    }
+    areaB += lx * qy - qx * ly;
+    areaA = fabs(areaA) / 2;
+    areaB = fabs(areaB) / 2;
+    int offA = areaA < areaB;   // The smaller side goes
+    if(!(offA ? borderA : borderB)) continue;
+    // Its neighbour with the most shared edge (not p)
+    uint32_t from = offA ? i : j, to = offA ? j : (i + n - 1) % n;
+    int32_t best = -1;
+    float bl = 0;
+    for(uint32_t k = from; ; k = (k + 1) % n) {
+      const CutEdge * e = g->e + op[k].h / 2;
+      int32_t o = e->left == p ? e->right : e->left;
+      if(o >= 0 && o != p) {
+        float L = 0;
+        for(uint32_t r = from; ; r = (r + 1) % n) {
+          const CutEdge * e2 = g->e + op[r].h / 2;
+          if((e2->left == p ? e2->right : e2->left) == o) L += arc[r + 1] - arc[r];
+          if(r == to) break;
+        }
+        if(L > bl) { bl = L; best = o; }
+      }
+      if(k == to) break;
+    }
+    if(best < 0) continue;
+    // Cut: vertices at both ends (splitting edges), the cut-off side to best, then the cut
+    if(cutgraph_copy(backup, g)) { result = -1; break; }
+    int32_t X = tess_vertexat(g, p, px, py), Y = X < 0 ? -1 : tess_vertexat(g, p, qx, qy);
+    if(X < 0 || Y < 0 || X == Y) { result = -1; break; }
+    int32_t U = offA ? X : Y, W = offA ? Y : X;
+    // Walk p's half-edges from U to W (the cut-off side), handing them to best
+    uint32_t cur = (uint32_t)U, guard = 0;
+    while(cur != (uint32_t)W && guard++ < g->ne + 1) {
+      int found = 0;
+      for(uint32_t ei = 0; ei < g->ne && !found; ei++) {
+        CutEdge * e = g->e + ei;
+        if(e->left == p && e->a == cur) { e->left = best; cur = e->b; found = 1; }
+        else if(e->right == p && e->b == cur) { e->right = best; cur = e->a; found = 1; }
+      }
+      if(!found) break;
+    }
+    if(cur != (uint32_t)W || tess_grow(g, 0, 1, 0)) { result = -1; break; }
+    // Edges now inside best go; then the cut (p walks U -> W along it, best W -> U)
+    uint32_t ne = 0;
+    for(uint32_t ei = 0; ei < g->ne; ei++) if(g->e[ei].left != g->e[ei].right) g->e[ne++] = g->e[ei];
+    g->ne = ne;
+    CutEdge * ce = g->e + g->ne++;
+    int fwd = U < W;
+    *ce = (CutEdge) { .a = (uint32_t)(fwd ? U : W), .b = (uint32_t)(fwd ? W : U), .left = fwd ? p : best, .right = fwd ? best : p };
+    result = 1;
+  }
+done:
+  free(xy); free(arc); free(op); free(cand);
+  return result;
+}
+
+// Neck cuts on every border piece until none are left (or rounds run out); small bits left
+// behind join a neighbour as usual
+static int tess_necks(CutGraph * g, uint8_t * ori, const TessVary * v, TessStats * stats) {
+  for(int round = 0; round < TESS_MAXMERGE; round++) {
+    uint32_t cuts = 0;
+    for(uint32_t p = 0; p < g->count; p++) {
+      if(!tess_isborder(g, p)) continue;
+      CutGraph backup = { 0 };
+      int r = tess_neckone(g, (int32_t)p, v->neck, &backup);
+      if(r == 1 && cutgraph_rewalk(g)) {
+        // Left something in two parts or pinched: undo
+        cutgraph_free(g);
+        *g = backup;
+        backup = (CutGraph) { 0 };
+        r = cutgraph_rewalk(g) ? -1 : 0;
+        stats->neckundo++;
+      }
+      cutgraph_free(&backup);
+      if(r < 0) return 1;
+      cuts += r;
+    }
+    stats->necks += cuts;
+    if(!cuts) return 0;
+    if(tess_merge(g, ori, v->minarea, v->clear, stats)) return 1;
+  }
+  return 0;
+}
+
 int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const TessVary * v, uint32_t seed,
     CutGraph * g, uint8_t ** orient, TessStats * stats) {
   memset(g, 0, sizeof(CutGraph));
@@ -657,6 +922,7 @@ int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const Tess
     int err = tess_clip(&full, cols, rows, &c);
     cutgraph_free(&full);
     int e2 = err ? 0 : tess_parts(&c, &ori), e3 = err || e2 ? 0 : tess_merge(&c, ori, v->minarea, v->clear, &st);
+    if(!err && !e2 && !e3 && v->neck > 0) e3 = tess_necks(&c, ori, v, &st);
     if(getenv("TESS_DEBUG")) fprintf(stderr, "fit %d: clip %d parts %d merge %d\n", fit, err, e2, e3);
     if(err || e2 || e3) {
       if(!err) cutgraph_free(&c);

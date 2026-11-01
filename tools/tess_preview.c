@@ -19,13 +19,14 @@ int main(int argc, char ** argv) {
   }
   int cols = atoi(argv[2]), rows = atoi(argv[3]);
   uint32_t seed = strtoul(argv[4], NULL, 0);
-  TessVary v = { 0.08f, 0.08f, 0.06f, 0.4f };
+  TessVary v = { 0.08f, 0.08f, 0.06f, 0.4f, 0.2f };
   if(argc > 7) {
     v.jitter = atof(argv[5]);
     v.bump = atof(argv[6]);
     v.clear = atof(argv[7]);
   }
   float cell = argc > 8 ? atof(argv[8]) : 40;
+  if(getenv("TESS_NECK")) v.neck = atof(getenv("TESS_NECK"));
   CutGraph g;
   uint8_t * ori;
   TessStats st;
@@ -33,8 +34,8 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "cut failed\n");
     return 1;
   }
-  printf("%u pieces (target %d), mismatched edges %u, thin before changes %u, passes %u, flattened %u, merged %u, fits %u, failed %u\n",
-      g.count, cols * rows, st.mismatched, st.thinbase, st.passes, st.flattened, st.merged, st.fits, st.failed);
+  printf("%u pieces (target %d), mismatched edges %u, thin before changes %u, passes %u, flattened %u, merged %u, fits %u, failed %u, necks %u (undone %u)\n",
+      g.count, cols * rows, st.mismatched, st.thinbase, st.passes, st.flattened, st.merged, st.fits, st.failed, st.necks, st.neckundo);
   uint32_t maxp = cutgraph_maxpoints(&g);
   float * xy = malloc(sizeof(float) * 2 * maxp);
   // Distinctness: every piece against its most similar same-orientation piece, outlines
@@ -172,7 +173,16 @@ int main(int argc, char ** argv) {
       }
     }
   }
-  stbi_write_png(argv[1], W, H, 3, img, W * 3);
+  // TESS_CROP=x0,y0,x1,y1 (cells, puzzle frame; no spread): write only that part
+  float cr[4];
+  if(getenv("TESS_CROP") && sscanf(getenv("TESS_CROP"), "%f,%f,%f,%f", cr, cr + 1, cr + 2, cr + 3) == 4) {
+    int cx0 = (int)(cr[0] * cell - x0 + pad), cy0 = (int)(cr[1] * cell - y0 + pad);
+    int cx1 = (int)(cr[2] * cell - x0 + pad), cy1 = (int)(cr[3] * cell - y0 + pad);
+    cx0 = cx0 < 0 ? 0 : cx0; cy0 = cy0 < 0 ? 0 : cy0; cx1 = cx1 > W ? W : cx1; cy1 = cy1 > H ? H : cy1;
+    stbi_write_png(argv[1], cx1 - cx0, cy1 - cy0, 3, img + ((size_t)cy0 * W + cx0) * 3, W * 3);
+  } else {
+    stbi_write_png(argv[1], W, H, 3, img, W * 3);
+  }
   free(img); free(xy); free(ori); free(off);
   cutgraph_free(&g);
   return 0;
