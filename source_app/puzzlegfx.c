@@ -13,20 +13,25 @@
 #include <string.h>
 #include <sys/stat.h>
 
-// Raw struct on disk; only ever read back by the same build of the same program. The
+// Raw structs on disk; only ever read back by the same build of the same program. The
 // struct sizes guard against an edit that changes the layout but forgets the version.
+// Everything that decides whether a cache still fits goes in the key: a cache is used only
+// if its key is byte for byte the one wanted (both are zeroed first, padding included).
 typedef struct {
   char magic[4];
   u32 version;
   u16 headsize, layoutsize, tilesize;
-  u16 overlay;            // OVERLAY_* | OVERLAY_LOOK << 8 (0 = none; was padding, zero: caches
-                          // from before overlays are "none")
+  u16 overlay;            // OVERLAY_* | OVERLAY_LOOK << 8 (0 = none)
   u64 srcsize;
   u64 srcmtime;
   u32 target;
   u32 seed;
   u32 style;
   u32 whimsy, whimsyset;
+} PuzzleCacheKey;
+
+typedef struct {
+  PuzzleCacheKey key;
   Layout layout;
   u16 previeww, previewh;
   u32 count;              // Pieces: a LayoutTile table of this many follows the header
@@ -96,11 +101,7 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   uint8_t * gbuf = NULL;
   int result = 1;
   if(fread(&h, sizeof(h), 1, f) != 1) goto done;
-  if(memcmp(h.magic, want->magic, 4) || h.version != want->version || h.headsize != want->headsize ||
-     h.layoutsize != want->layoutsize || h.tilesize != want->tilesize || h.srcsize != want->srcsize ||
-     h.srcmtime != want->srcmtime || h.target != want->target || h.seed != want->seed ||
-     h.style != want->style || h.whimsy != want->whimsy || h.whimsyset != want->whimsyset ||
-     h.overlay != want->overlay) goto done;
+  if(memcmp(&h.key, &want->key, sizeof(PuzzleCacheKey))) goto done;
   if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO ||
      h.count == 0 || h.count > 0xFFF0) goto done;
   pg->layout = h.layout;
@@ -187,13 +188,13 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   src = imageload_rgb(imagepath, &sw, &sh, err, errlen);
   if(!src) return 1;
   Layout * l = &pg->layout;
-  if(layout_crop(l, sw, sh, h->target)) {
-    PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->target);
+  if(layout_crop(l, sw, sh, h->key.target)) {
+    PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->key.target);
     goto done;
   }
   // Cut first (in cells), then pick the piece size whose tiles fit the pages
   if(cb) cb(udata, "Cutting pieces", 0, 1);
-  if(cutter_init(&cut, h->style, h->whimsy, h->whimsyset, l->cols, l->rows, h->seed)) {
+  if(cutter_init(&cut, h->key.style, h->key.whimsy, h->key.whimsyset, l->cols, l->rows, h->key.seed)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }
@@ -210,7 +211,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   int r = layout_fit(l, boxes, cut.count, PGFX_MAXSIDE, PGFX_MAXPAGES, pg->tiles);
   if(r) {
     if(r == 1) PGFX_ERR("Out of memory (tiles)");
-    else PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->target);
+    else PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->key.target);
     goto done;
   }
   if(cb) cb(udata, "Scaling image", 0, 1);
@@ -222,9 +223,9 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   imageload_free(src);
   src = NULL;
-  if(h->overlay) {
+  if(h->key.overlay) {
     if(cb) cb(udata, "Coloring image", 0, 1);
-    overlay_apply(h->overlay & 0xFF, img, l->width, l->height);
+    overlay_apply(h->key.overlay & 0xFF, img, l->width, l->height);
   }
 
   if(puzzlegfx_alloc(pg, err, errlen)) goto done;
@@ -291,19 +292,20 @@ int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const
   err[0] = 0;
   PuzzleCacheHeader h;
   memset(&h, 0, sizeof(h));
-  memcpy(h.magic, "JGCA", 4);
-  h.version = PGFX_CACHE_VERSION;
-  h.headsize = sizeof(PuzzleCacheHeader);
-  h.layoutsize = sizeof(Layout);
-  h.tilesize = sizeof(LayoutTile);
-  h.target = target;
-  h.seed = seed;
-  h.style = style;
-  h.whimsy = whimsy;
-  h.whimsyset = whimsyset;
-  h.overlay = overlay ? overlay | OVERLAY_LOOK << 8 : 0;
-  puzzlegfx_srcinfo(imagepath, &h.srcsize, &h.srcmtime);
-  if(h.srcsize == 0) {
+  PuzzleCacheKey * k = &h.key;
+  memcpy(k->magic, "JGCA", 4);
+  k->version = PGFX_CACHE_VERSION;
+  k->headsize = sizeof(PuzzleCacheHeader);
+  k->layoutsize = sizeof(Layout);
+  k->tilesize = sizeof(LayoutTile);
+  k->target = target;
+  k->seed = seed;
+  k->style = style;
+  k->whimsy = whimsy;
+  k->whimsyset = whimsyset;
+  k->overlay = overlay ? overlay | OVERLAY_LOOK << 8 : 0;
+  puzzlegfx_srcinfo(imagepath, &k->srcsize, &k->srcmtime);
+  if(k->srcsize == 0) {
     PGFX_ERR("Can't find image %s", imagepath);
     return 1;
   }

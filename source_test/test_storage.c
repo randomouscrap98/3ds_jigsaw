@@ -60,7 +60,8 @@ void test_storage(void) {
   CHECK(!storage_iscache(n, "Wheat Field.jpg_48.bin.tmp"));
   CHECK(!storage_iscache(n, "Wheat Field.jpg_s1.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jpg_48_s.bin"));
-  CHECK(!storage_iscache(n, "Wheat Field.jpg_48_x1.bin"));
+  CHECK(storage_iscache(n, "Wheat Field.jpg_48_x1.bin"));   // Options aren't spelled out here: any letter
+  CHECK(!storage_iscache(n, "Wheat Field.jpg_48_X1.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jpg_1.png_48.bin"));   // Another picture
   CHECK(!storage_iscache(n, "Wheat Field.jpeg_48.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jp_48.bin"));
@@ -72,9 +73,9 @@ void test_storage(void) {
   CHECK(!storage_iscachetmp(n, "Other.jpg_48.bin.tmp"));
   CHECK(!storage_iscachetmp(n, ".tmp"));
   CHECK(storage_iscache(n, "Wheat Field.jpg_100_w1_g1.bin"));
-  CHECK(!storage_iscache(n, "Wheat Field.jpg_100_g1.bin"));
+  CHECK(storage_iscache(n, "Wheat Field.jpg_100_g1.bin"));   // ... in any order
   CHECK(!storage_iscache(n, "Wheat Field.jpg_100_w.bin"));
-  CHECK(!storage_iscache(n, "Wheat Field.jpg_100_w1_s1.bin"));
+  CHECK(storage_iscache(n, "Wheat Field.jpg_100_w1_s1.bin"));
   // Old names are unchanged
   char old[STORAGE_MAXPATH];
   storage_cachepath(n, 500, 2, 0, 0, 0, old);
@@ -85,7 +86,8 @@ void test_storage(void) {
   storage_cachepath(n, 100, 1, 2, 1, 1, old);
   CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_100_s1_w2_g1_o1.bin"));
   CHECK(storage_iscache(n, "Wheat Field.jpg_100_o1.bin"));
-  CHECK(!storage_iscache(n, "Wheat Field.jpg_100_o1_s1.bin"));
+  CHECK(storage_iscache(n, "Wheat Field.jpg_100_o1_s1.bin"));
+  CHECK(!storage_iscache(n, "Wheat Field.jpg_100_o1_.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jpg_100_o.bin"));
   // Everything storage_cachepath makes is recognized
   int all = 1;

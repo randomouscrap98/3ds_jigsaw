@@ -43,13 +43,9 @@ static const char * storage_digits(const char * s) {
 int storage_iscache(const char * name, const char * file) {
   size_t n = strlen(name);
   if(strncmp(file, name, n) || file[n] != '_') return 0;
+  // Only storage_cachepath knows which options there are: any "_<letter><digits>" counts
   const char * p = storage_digits(file + n + 1);
-  if(p && p[0] == '_' && p[1] == 's') p = storage_digits(p + 2);
-  if(p && p[0] == '_' && p[1] == 'w') {
-    p = storage_digits(p + 2);
-    if(p && p[0] == '_' && p[1] == 'g') p = storage_digits(p + 2);
-  }
-  if(p && p[0] == '_' && p[1] == 'o') p = storage_digits(p + 2);
+  while(p && p[0] == '_' && p[1] >= 'a' && p[1] <= 'z') p = storage_digits(p + 2);
   return p && !strcmp(p, ".bin");
 }
 

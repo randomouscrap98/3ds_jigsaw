@@ -20,8 +20,9 @@ void storage_puzzlepath(const char * name, char * out);
 void storage_cachepath(const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t set, uint8_t overlay,
     char * out);
 void storage_savepath(const char * name, char * out);
-// 1 if file (a name in the cache folder) is one of image name's caches, any count/style/
-// whimsies/overlay: "<name>_<digits>[_s<digits>][_w<digits>[_g<digits>]][_o<digits>].bin"
+// 1 if file (a name in the cache folder) is one of image name's caches, any count and
+// options: "<name>_<digits>" then any number of "_<a-z><digits>", then ".bin" (so a new
+// option in storage_cachepath needs nothing here)
 int storage_iscache(const char * name, const char * file);
 // 1 if file is a leftover temp file of one of image name's caches ("<cache>.bin.tmp": a
 // cache write cut short by a crash or power off)

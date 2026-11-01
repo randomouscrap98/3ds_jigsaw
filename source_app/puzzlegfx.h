@@ -14,10 +14,11 @@
 #define PGFX_PREVIEW_TEXH 256
 #define PGFX_PREVIEW_MAXW 400
 #define PGFX_PREVIEW_MAXH 240
-#define PGFX_CACHE_VERSION 6     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
+#define PGFX_CACHE_VERSION 7     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
                                  // 5: packed tiles (table in the cache), Random style.
                                  // 6: whimsies (+ level and set in the header), cut hash,
                                  //    struct sizes
+                                 // 7: header starts with PuzzleCacheKey (compared whole)
 #define PGFX_MAXGEO (4 << 20)    // Sanity limit on the cached PieceGeo size
 
 
