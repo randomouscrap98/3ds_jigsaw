@@ -6,10 +6,40 @@
 #include <string.h>
 #include <math.h>
 
-// Maze pieces: no whimsies; a cut with a repeated piece shape or a problematic piece is retried
-// with a new seed
+static const CutStyleInfo cutter_styles[] = {
+  [CUT_STYLE_CLASSIC] = { "Classic", "classic", CUT_KIND_GRID, EDGEGEN_STYLE_CLASSIC,
+      .whimsies = 1, .rotate = 1, .samplepieces = 100 },
+  [CUT_STYLE_IRREGULAR] = { "Irregular", "irregular", CUT_KIND_GRID, EDGEGEN_STYLE_IRREGULAR,
+      .whimsies = 1, .rotate = 1, .samplepieces = 100 },
+  [CUT_STYLE_WILD] = { "Wild", "wild", CUT_KIND_GRID, EDGEGEN_STYLE_WILD,
+      .whimsies = 1, .rotate = 1, .samplepieces = 100 },
+  [CUT_STYLE_RANDOM] = { "Random", "random", CUT_KIND_RANDOM, RANDCUT_STYLE_EVEN,
+      .whimsies = 1, .rotate = 1, .samplepieces = 100 },
+  [CUT_STYLE_RANDRECT] = { "Random Rect", "randrect", CUT_KIND_RANDOM, RANDCUT_STYLE_RECT,
+      .whimsies = 1, .rotate = 1, .samplepieces = 100 },
+  // Maze lines are ~6x as long: fewer sample pieces, or they cover the picture
+  [CUT_STYLE_MAZE] = { "Maze", "maze", CUT_KIND_MAZE, 0,
+      .whimsies = 0, .rotate = 1, .thin = 1, .samplepieces = 24 },
+  [CUT_STYLE_HEX] = { "Hex", "hex", CUT_KIND_HEX, 0,
+      .whimsies = 0, .rotate = 0, .samplepieces = 100 },
+};
+// A gap in the list would be a zeroed entry: test_cut_styles checks every one is filled in
+_Static_assert(sizeof cutter_styles / sizeof cutter_styles[0] == CUT_STYLES, "one CutStyleInfo per CUT_STYLE_*");
+
+const CutStyleInfo * cutter_info(uint8_t style) {
+  return cutter_styles + (style < CUT_STYLES ? style : CUT_STYLE_CLASSIC);
+}
+
+int cutter_byid(const char * id) {
+  for(int st = 0; st < CUT_STYLES; st++) {
+    if(!strcmp(cutter_styles[st].id, id)) return st;
+  }
+  return -1;
+}
+
+// Maze pieces: a cut with a repeated piece shape or a problematic piece is retried with a
+// new seed
 static int cutter_maze(Cutter * c, uint32_t seed) {
-  c->whimsy = WHIMSY_NONE;
   c->usegraph = 1;
   for(uint32_t t = 0; t < CUTTER_MAZETRIES; t++) {
     MazePieces m;
@@ -24,9 +54,8 @@ static int cutter_maze(Cutter * c, uint32_t seed) {
   return 1;
 }
 
-// Hexagons: no whimsies; the piece count is whatever hex grid fits closest
+// Hexagons: the piece count is whatever hex grid fits closest
 static int cutter_hex(Cutter * c) {
-  c->whimsy = WHIMSY_NONE;
   c->usegraph = 1;
   if(hexcut_graph(c->cols, c->rows, &c->g)) return 1;
   c->g.tries = 1;
@@ -36,22 +65,24 @@ static int cutter_hex(Cutter * c) {
 }
 
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed) {
+  const CutStyleInfo * si = cutter_info(style);
   memset(c, 0, sizeof(Cutter));
   c->style = style < CUT_STYLES ? style : CUT_STYLE_CLASSIC;
-  c->whimsy = whimsy < WHIMSY_LEVELS ? whimsy : WHIMSY_NONE;
+  c->whimsy = si->whimsies && whimsy < WHIMSY_LEVELS ? whimsy : WHIMSY_NONE;
   c->set = set < WHIMSY_SETS ? set : WHIMSY_SET_CUTE;
   c->cols = cols;
   c->rows = rows;
   c->count = (uint32_t)cols * rows;
-  if(c->style == CUT_STYLE_MAZE) return cutter_maze(c, seed);
-  if(c->style == CUT_STYLE_HEX) return cutter_hex(c);
-  if(c->style < CUT_STYLE_RANDOM && c->whimsy == WHIMSY_NONE) {
-    if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
+  switch(si->kind) {
+  case CUT_KIND_MAZE: return cutter_maze(c, seed);
+  case CUT_KIND_HEX: return cutter_hex(c);
+  case CUT_KIND_RANDOM: return cutter_graph(c, randcut_style(si->sub), seed);
+  default:
+    if(c->whimsy != WHIMSY_NONE) return cutter_graph(c, NULL, seed);
+    if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(si->sub))) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;
     return 0;
   }
-  return cutter_graph(c, c->style < CUT_STYLE_RANDOM ? NULL :
-      randcut_style(c->style == CUT_STYLE_RANDRECT ? RANDCUT_STYLE_RECT : RANDCUT_STYLE_EVEN), seed);
 }
 
 int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed) {
@@ -67,8 +98,8 @@ int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed) {
     randcut_tabstyle(rnd ? rst : randcut_style(RANDCUT_STYLE_EVEN), &ts);
     ts.whimsytab = WHIMSY_TABEDGE;
     if(!rnd) {
-      ts.jitter = edgegen_style(c->style);
-      if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(c->style))) return 1;
+      ts.jitter = edgegen_style(cutter_info(c->style)->sub);
+      if(edgegen_init(&c->eg, cols, rows, seed, ts.jitter)) return 1;
     }
     int ok = 0;
     for(uint32_t t = 0; t < CUTTER_MAXTRIES && !ok; t++) {

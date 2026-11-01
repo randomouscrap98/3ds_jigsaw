@@ -20,13 +20,8 @@ int main(int argc, char ** argv) {
     return test_failures ? 1 : 0;
   }
   if(argc > 2 && !strcmp(argv[1], "dump")) {
-    uint8_t style = EDGEGEN_STYLE_CLASSIC;
-    if(argc > 3 && !strcmp(argv[3], "irregular")) style = EDGEGEN_STYLE_IRREGULAR;
-    if(argc > 3 && !strcmp(argv[3], "wild")) style = EDGEGEN_STYLE_WILD;
-    if(argc > 3 && !strcmp(argv[3], "random")) style = CUT_STYLE_RANDOM;
-    if(argc > 3 && !strcmp(argv[3], "randrect")) style = CUT_STYLE_RANDRECT;
-    if(argc > 3 && !strcmp(argv[3], "maze")) style = CUT_STYLE_MAZE;
-    if(argc > 3 && !strcmp(argv[3], "hex")) style = CUT_STYLE_HEX;
+    int style = argc > 3 ? cutter_byid(argv[3]) : CUT_STYLE_CLASSIC;
+    if(style < 0) style = CUT_STYLE_CLASSIC;
     if(argc > 3 && !strcmp(argv[3], "wooden")) style = CUT_STYLE_WOODEN;
     if(argc > 3 && !strcmp(argv[3], "wooden2")) style = CUT_STYLE_WOODEN2;
     if(argc > 3 && !strcmp(argv[3], "wooden3")) style = CUT_STYLE_WOODEN3;
@@ -65,6 +60,7 @@ int main(int argc, char ** argv) {
   RUN(test_layout);
   RUN(test_edgegen);
   RUN(test_cut_pinned);
+  RUN(test_cut_styles);
   RUN(test_edgegen_irregular);
   RUN(test_imgscale);
   RUN(test_swizzle);

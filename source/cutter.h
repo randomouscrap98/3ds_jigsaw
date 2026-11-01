@@ -9,10 +9,9 @@
 
 #include <stdint.h>
 
-// Cut styles as stored in saves, cache names and the menu. 0-2 are grid cuts (edgegen
-// styles), 3-4 are random (Voronoi) cuts: scattered points or points on a jittered grid,
-// 5 is maze pieces (mazepiece; no whimsies), 6 is hexagons (hexcut; no whimsies, no turning). (The shelved wooden experiments live in
-// woodcut, numbered from CUT_STYLES.)
+// Cut styles as stored in saves, cache names and the menu. What each one is and how it
+// plays is in its CutStyleInfo (cutter_info); code asks that instead of checking style
+// numbers. (The shelved wooden experiments live in woodcut, numbered from CUT_STYLES.)
 #define CUT_STYLE_CLASSIC 0
 #define CUT_STYLE_IRREGULAR 1
 #define CUT_STYLE_WILD 2
@@ -21,6 +20,28 @@
 #define CUT_STYLE_MAZE 5
 #define CUT_STYLE_HEX 6
 #define CUT_STYLES 7
+
+// Which builder cuts a style (CutStyleInfo.kind)
+#define CUT_KIND_GRID 0     // edgegen grid, sub = EDGEGEN_STYLE_* (a CutGraph when it has whimsies)
+#define CUT_KIND_RANDOM 1   // randcut (Voronoi), sub = RANDCUT_STYLE_*
+#define CUT_KIND_MAZE 2     // mazepiece
+#define CUT_KIND_HEX 3      // hexcut
+
+typedef struct {
+  const char * name;      // Menu name
+  const char * id;        // Short lowercase name: tools, tests, preview file names
+  uint8_t kind, sub;      // CUT_KIND_* and that builder's own style
+  uint8_t whimsies;       // Can have whimsies (otherwise the setting is ignored and grayed out)
+  uint8_t rotate;         // Pieces turn (a quarter turned hex doesn't fit its grid)
+  uint8_t thin;           // Thin, winding pieces (maze): grabbed by loose hulls too, scattered by
+                          // packing their bounds on a bigger table, condensed by outline
+  uint8_t samplepieces;   // Menu cut sample size (long winding lines need fewer)
+} CutStyleInfo;
+
+// A style's description; unknown styles get Classic's (as cutter_init cuts them)
+const CutStyleInfo * cutter_info(uint8_t style);
+// Style with that id, or -1
+int cutter_byid(const char * id);
 
 #define CUTTER_MAXTRIES 16  // Whimsy attempts (new seeds) before cutting without whimsies
 #define CUTTER_MAZEAVG 20   // Maze pieces: cells per piece (complexity vs arm width)
@@ -47,7 +68,7 @@ typedef struct {
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed);
 void cutter_free(Cutter * c);
 // For cutter_init and woodcut: with style, whimsy, set, cols, rows and count filled in,
-// builds c->g (usegraph): a random cut with rst, or a grid (edgegen style c->style) with
+// builds c->g (usegraph): a random cut with rst, or a grid (c->style's edgegen style) with
 // whimsies when rst is NULL. Sets whimsies, count and maxpoints. Returns 0 on success.
 int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed);
 // Closed outline of piece p (clockwise, y down) in the puzzle frame scaled by cell, then

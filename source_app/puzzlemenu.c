@@ -16,7 +16,6 @@
 // the asserts catch a list that's out of step with its enum (a sized array would just get NULLs)
 #define PMENU_LEN(a) (sizeof(a) / sizeof((a)[0]))
 static const uint32_t pmenu_counts[] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
-static const char * const pmenu_styles[] = { "Classic", "Irregular", "Wild", "Random", "Random Rect", "Maze", "Hex" };  // CUT_STYLE_*
 static const char * const pmenu_whimsynames[] = { "None", "Few", "Many" };  // WHIMSY_*
 static const char * const pmenu_whimsies[] = { "", ", few whimsies", ", many whimsies" };  // Summaries
 static const char * const pmenu_overlaynames[] = { "None", "Hologram", "Rainbow" };  // OVERLAY_*
@@ -24,7 +23,6 @@ static const char * const pmenu_overlays[] = { "", ", hologram", ", rainbow" }; 
 static const char * const pmenu_musicnames[] = { "Off", "In order", "Shuffled" };  // Menu order ...
 static const uint8_t pmenu_musicmodes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };  // ... as saved
 _Static_assert(PMENU_LEN(pmenu_counts) == PMENU_NUMCOUNTS, "pmenu_counts");
-_Static_assert(PMENU_LEN(pmenu_styles) == CUT_STYLES, "pmenu_styles: one name per CUT_STYLE_*");
 _Static_assert(PMENU_LEN(pmenu_whimsynames) == WHIMSY_LEVELS && PMENU_LEN(pmenu_whimsies) == WHIMSY_LEVELS, "whimsy names");
 _Static_assert(PMENU_LEN(pmenu_overlaynames) == OVERLAYS && PMENU_LEN(pmenu_overlays) == OVERLAYS, "overlay names");
 _Static_assert(PMENU_LEN(pmenu_musicnames) == SAVEFILE_MUSIC_MODES && PMENU_LEN(pmenu_musicmodes) == SAVEFILE_MUSIC_MODES, "music modes");
@@ -65,7 +63,7 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
   if(sel < 0 || sel >= pm->nentries || !pm->entries[sel].hassave) return NULL;
   // Say what's about to start, since the settings aren't on the line that was pressed
   snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s%s%s",
-      (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], pmenu_styles[(unsigned)pm->style % CUT_STYLES],
+      (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], cutter_info((unsigned)pm->style % CUT_STYLES)->name,
       pmenu_whimsies[(unsigned)pm->whimsy % WHIMSY_LEVELS], pmenu_overlays[(unsigned)pm->overlay % OVERLAYS]);
   tui_menu_reset_ui(&pm->confirm);
   return &pm->confirm;
@@ -137,7 +135,9 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, pmenu_join(values, pmenu_styles, CUT_STYLES));
+    const char * names[CUT_STYLES];
+    for(int i = 0; i < CUT_STYLES; i++) names[i] = cutter_info(i)->name;
+    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, pmenu_join(values, names, CUT_STYLES));
     pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
@@ -324,11 +324,9 @@ static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
   return 1;
 }
 
-// Options item that's grayed out and can't be changed: Whimsies while the style is Maze or
-// Hex (those cuts have none)
+// Options item that's grayed out and can't be changed: Whimsies while the style has none
 static int puzzlemenu_optoff(PuzzleMenu * pm, int item) {
-  unsigned st = (unsigned)pm->style % CUT_STYLES;
-  return item >= 0 && item == pm->optwhimsy && (st == CUT_STYLE_MAZE || st == CUT_STYLE_HEX);
+  return item >= 0 && item == pm->optwhimsy && !cutter_info((unsigned)pm->style % CUT_STYLES)->whimsies;
 }
 
 PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {

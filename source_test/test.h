@@ -43,6 +43,7 @@ void test_stick(void);
 void test_layout(void);
 void test_edgegen(void);
 void test_cut_pinned(void);
+void test_cut_styles(void);
 void test_maze_problems(void);
 void test_hexcut(void);
 void test_edgegen_irregular(void);

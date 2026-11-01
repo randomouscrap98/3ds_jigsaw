@@ -72,9 +72,9 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   }
   // Only one game per picture, so its caches for other counts/styles are dead weight
   storage_cleancaches(name, cpath);
-  // Maze pieces are one thin cell wide: grabbed by a loose hull too, and they need more room
-  int maze = style == CUT_STYLE_MAZE;
-  if(maze && piecegeo_hulls(&g->geo)) {
+  // Thin pieces (maze) are grabbed by a loose hull too, and they need more room
+  const CutStyleInfo * si = cutter_info(style);
+  if(si->thin && piecegeo_hulls(&g->geo)) {
     GAME_ERR("Out of memory (piece hulls)");
     piecegeo_free(&g->geo);
     puzzlegfx_free(&g->gfx);
@@ -82,7 +82,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     return 1;
   }
   Layout * l = &g->gfx.layout;
-  float scale = maze ? GAME_TABLESCALE_MAZE : GAME_TABLESCALE;
+  float scale = si->thin ? GAME_TABLESCALE_MAZE : GAME_TABLESCALE;
   float tw = l->width * scale, th = l->height * scale;
   if(board_init(&g->board, &g->geo, tw, th)) {
     GAME_ERR("Out of memory (board)");
@@ -91,7 +91,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     free(save);
     return 1;
   }
-  g->board.norotate = style == CUT_STYLE_HEX;   // Hexes turned a quarter don't fit the grid
+  g->board.norotate = !si->rotate;
   g->sel = calloc(g->board.count, 1);
   g->boxsel = calloc(g->board.count, 1);
   if(!g->sel || !g->boxsel || drawlist_init(&g->dl, g->board.count)) {
@@ -119,7 +119,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   } else {
     float sw = tw * GAME_SCATTER, sh = th * GAME_SCATTER;
     uint32_t sseed = (uint32_t)osGetTime() ^ rng_hashstr(name);
-    if(maze) board_scatterpack(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
+    if(si->thin) board_scatterpack(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
     else board_scatter(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
     g->dirty = 1;
   }
@@ -263,7 +263,7 @@ static int game_release(Game * g) {
 // keep them selected (on top) so the block can be dragged away
 static void game_condense(Game * g) {
   Board * b = &g->board;
-  if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE, g->style == CUT_STYLE_MAZE)) return;
+  if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE, cutter_info(g->style)->thin)) return;
   board_raise_marked(b, g->sel);
   g->dldirty = 1;
   g->dirty = 1;

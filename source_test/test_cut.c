@@ -39,8 +39,6 @@ void test_layout(void) {
   // Every cut style packs into 3 pages at every count, with no overlaps, never upscaling
   uint32_t targets[4] = { 50, 100, 250, 500 };
   uint32_t sizes[4][2] = { { 4000, 3000 }, { 1024, 1024 }, { 600, 1400 }, { 1024, 768 } };
-  static const char * const names[] = { "classic", "irregular", "wild", "random", "randrect", "maze", "hex" };
-  _Static_assert(sizeof names / sizeof names[0] == CUT_STYLES, "one name per style");
   for(int s = 0; s < 4; s++) {
     for(int t = 0; t < 4; t++) {
       printf("  %4ux%-4u %3u:", sizes[s][0], sizes[s][1], targets[t]);
@@ -82,7 +80,7 @@ void test_layout(void) {
           }
         }
         CHECK(inside && covers && overlap == 0 && maxok);
-        printf("  %s %3u/%u", names[st], l.cell, l.pages);
+        printf("  %s %3u/%u", cutter_info(st)->id, l.cell, l.pages);
         free(boxes); free(tiles); free(again);
         cutter_free(&cut);
       }
@@ -127,6 +125,18 @@ void test_cut_pinned(void) {
       CHECK(h == wantw[st][wh]);
     }
   }
+}
+
+// Every style is filled in (a gap in cutter_styles would be all zeros), ids are unique and
+// found again, unknown styles describe Classic
+void test_cut_styles(void) {
+  for(int st = 0; st < CUT_STYLES; st++) {
+    const CutStyleInfo * si = cutter_info(st);
+    CHECK(si->name && si->id && si->samplepieces > 0);
+    CHECK(cutter_byid(si->id) == st);
+  }
+  CHECK(cutter_byid("nope") == -1);
+  CHECK(cutter_info(CUT_STYLES) == cutter_info(CUT_STYLE_CLASSIC));
 }
 
 void test_edgegen(void) {

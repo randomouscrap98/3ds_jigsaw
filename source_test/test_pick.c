@@ -24,7 +24,7 @@ static int32_t pick_old(Board * b, float x, float y) {
 
 void test_pick_same(void) {
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
-    if(st == CUT_STYLE_MAZE) continue;
+    if(cutter_info(st)->thin) continue;   // Hull picking: tested below
     for(uint8_t wh = 0; wh < 2; wh++) {
       Cutter c;
       CHECK(cutter_init(&c, st, wh ? WHIMSY_MANY : WHIMSY_NONE, WHIMSY_SET_CUTE, 12, 9, 50 + st) == 0);
