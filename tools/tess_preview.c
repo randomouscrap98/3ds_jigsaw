@@ -1,6 +1,6 @@
 // Tessellation cut preview: tess_preview OUT.png COLS ROWS SEED [JITTER BUMP CLEAR [CELLPX]]
 // Pieces filled by orientation (red / yellow / green, lightness varied per piece), dark
-// outlines; prints TessStats. JITTER 0 BUMP 0 = the plain tiling.
+// outlines; prints TessStats. JITTER 0 BUMP 0 = the plain tiling. TESS_SHAPE=n: TESSCUT_SHAPE_*.
 #include "tesscut.h"
 #include "geom.h"
 
@@ -30,7 +30,8 @@ int main(int argc, char ** argv) {
   CutGraph g;
   uint8_t * ori;
   TessStats st;
-  if(tesscut_graph(cols, rows, tesscut_lizard(), &v, seed, &g, &ori, &st)) {
+  int shape = getenv("TESS_SHAPE") ? atoi(getenv("TESS_SHAPE")) : TESSCUT_SHAPE_LIZARD;
+  if(tesscut_graph(cols, rows, tesscut_shape(shape), &v, seed, &g, &ori, &st)) {
     fprintf(stderr, "cut failed\n");
     return 1;
   }
@@ -80,7 +81,7 @@ int main(int argc, char ** argv) {
       if(!inner[p]) continue;
       best[ni] = 1e9f;
       for(uint32_t q = 0; q < g.count; q++) {
-        if(q == p || !inner[q] || ori[q] != ori[p]) continue;
+        if(q == p || !inner[q] || (ori[q] != ori[p] && atoi(getenv("TESS_DISTINCT")) != 2)) continue;   // 2: every piece (shapes that look alike turned)
         float h = 0;
         for(int dir = 0; dir < 2; dir++) {
           const float * A = sp + 2 * NS * (dir ? q : p), * B = sp + 2 * NS * (dir ? p : q);

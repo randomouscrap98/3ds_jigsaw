@@ -26,6 +26,16 @@ static const float tess_liz0[] = { 0.017f, 0.006f, 0.150f, 0.137f, 0.262f, 0.238
 static const float tess_liz2[] = { 0.065f, 0.142f, 0.153f, 0.275f, 0.322f, 0.514f, 0.405f, 0.612f, 0.436f, 0.567f, 0.444f, 0.489f, 0.406f, 0.032f, 0.430f, -0.023f, 0.627f, -0.249f, 0.672f, -0.276f, 0.721f, -0.285f, 0.871f, -0.258f, 0.972f, -0.226f };
 // Free edge 2 (traced corners 4 -> 5), tolerance 0.0034
 static const float tess_liz4[] = { 0.010f, 0.004f, 0.063f, 0.247f, 0.130f, 0.251f, 0.249f, 0.237f, 0.282f, 0.187f, 0.267f, 0.043f, 0.283f, -0.026f, 0.591f, -0.500f, 0.665f, -0.483f };
+// Flower (SHELVED 2026-11-01: too close to the lizard; not in the menu): a whole flower per
+// piece. Every edge is the same S, symmetric about its middle (a petal out in the first half,
+// the neighbour's petal's notch in the second), which makes the six turned copies around a
+// tile all alike: six petals, pinwheel twist, every tile the same
+static const float tess_flower0[] = { 0.04f, 0.06f, 0.09f, 0.17f, 0.16f, 0.27f, 0.25f, 0.33f, 0.33f, 0.33f, 0.4f, 0.27f, 0.45f, 0.16f, 0.48f, 0.06f, 0.52f, -0.06f, 0.55f, -0.16f, 0.6f, -0.27f, 0.67f, -0.33f, 0.75f, -0.33f, 0.84f, -0.27f, 0.91f, -0.17f, 0.96f, -0.06f };
+static const TessShape tess_flower = { {
+  { sizeof tess_flower0 / sizeof(float) / 2, tess_flower0 },
+  { sizeof tess_flower0 / sizeof(float) / 2, tess_flower0 },
+  { sizeof tess_flower0 / sizeof(float) / 2, tess_flower0 },
+} };
 static const TessShape tess_lizard = { {
   { sizeof tess_liz0 / sizeof(float) / 2, tess_liz0 },
   { sizeof tess_liz2 / sizeof(float) / 2, tess_liz2 },
@@ -37,8 +47,7 @@ const TessShape * tesscut_lizard(void) {
 }
 
 const TessShape * tesscut_shape(uint8_t shape) {
-  (void)shape;   // The only one so far
-  return &tess_lizard;
+  return shape == TESSCUT_SHAPE_FLOWER ? &tess_flower : &tess_lizard;
 }
 
 static void tess_rot(float ang, float x, float y, float * ox, float * oy) {

@@ -47,7 +47,8 @@ typedef struct {
 } TessStats;
 
 #define TESSCUT_SHAPE_LIZARD 0
-#define TESSCUT_SHAPES 1
+#define TESSCUT_SHAPE_FLOWER 1
+#define TESSCUT_SHAPES 2
 
 // Shape by number (unknown -> lizard)
 const TessShape * tesscut_shape(uint8_t shape);
