@@ -49,6 +49,7 @@ int main(int argc, char ** argv) {
   RUN(test_musicdec);
   RUN(test_boardsave);
   RUN(test_savefile);
+  RUN(test_savefile_layout);
   RUN(test_sfxgen);
   RUN(test_storage);
   RUN(test_chunkwriter);

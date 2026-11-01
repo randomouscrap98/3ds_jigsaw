@@ -31,6 +31,7 @@ void test_musicdec(void);
 void test_musicdec_files(const char * dir);
 void test_boardsave(void);
 void test_savefile(void);
+void test_savefile_layout(void);
 void test_sfxgen(void);
 void test_storage(void);
 void test_webup(void);

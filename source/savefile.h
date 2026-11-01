@@ -9,8 +9,6 @@
 #define SAVEFILE_MAGIC   "3DSJGSAW"
 #define SAVEFILE_VERSION 1
 #define SAVEFILE_HEADER  64      // Header size written by this version
-#define SAVEFILE_MINHEADER 23    // Smallest header we can read (fields below; later ones
-                                 // default to 0 when the header is shorter)
 #define SAVEFILE_MUSIC_ORDER   0 // Zero so saves from before the field play in order
 #define SAVEFILE_MUSIC_OFF     1
 #define SAVEFILE_MUSIC_SHUFFLE 2
@@ -18,22 +16,30 @@
 #define SAVEFILE_VOLUME_HIGH   0 // Zero so saves from before the field stay at full volume
 #define SAVEFILE_VOLUME_LOW    1
 #define SAVEFILE_VOLUME_MEDIUM 2
+#define SAVEFILE_VOLUMES       3
 
-// A whole save file: this header, then a boardsave blob. Little endian. Header layout:
-//   0  char[8] "3DSJGSAW"
-//   8  u16 save version          10 u16 header size (boardsave starts here)
-//   12 u8[3] app version that wrote it (major, minor, micro)
-//   15 u8 cut style              16 u16 target piece count
-//   18 u8 table color            19 u32 play time, seconds
-//   23 u8 music mode (SAVEFILE_MUSIC_*; 1.1, was reserved = 0 = in order)
-//   24 u8 whimsy level (WHIMSY_*; 1.2, 0 = none)
-//   25 u8 whimsy shape set (WHIMSY_SET_*; 1.2, 0 = cute)
-//   26 u32 cut hash (cutter_hash of the cut the board was saved with; 1.2, 0 = unknown)
-//   30 u32 cut seed (1.2, 0 = unknown: savefile_cutseed of the picture's name). Kept so a
-//      renamed picture still cuts the same way.
-//   34 u8 overlay (OVERLAY_*; 1.2, 0 = none)
-//   35 u8 music volume (SAVEFILE_VOLUME_*; 1.3, 0 = high)
-//   36.. reserved, zero
+// A whole save file: this header, then a boardsave blob. Little endian. Header layout
+// (byte offsets). Fields after SAVEFILE_AT_MUSIC were added later: one past the end of an
+// older (shorter) header reads as 0, so 0 must always mean the old behavior. A new field goes
+// at SAVEFILE_AT_END and moves it on; never move a field (test_savefile_layout pins them).
+#define SAVEFILE_AT_MAGIC     0   // char[8] "3DSJGSAW"
+#define SAVEFILE_AT_VERSION   8   // u16 save version
+#define SAVEFILE_AT_SIZE      10  // u16 header size (boardsave starts here)
+#define SAVEFILE_AT_APPVER    12  // u8[3] app version that wrote it (major, minor, micro)
+#define SAVEFILE_AT_STYLE     15  // u8 cut style
+#define SAVEFILE_AT_TARGET    16  // u16 target piece count
+#define SAVEFILE_AT_TABLE     18  // u8 table color
+#define SAVEFILE_AT_SECONDS   19  // u32 play time, seconds
+#define SAVEFILE_AT_MUSIC     23  // u8 music mode (SAVEFILE_MUSIC_*; 1.1, was reserved = 0 = in order)
+#define SAVEFILE_AT_WHIMSY    24  // u8 whimsy level (WHIMSY_*; 1.2, 0 = none)
+#define SAVEFILE_AT_WHIMSYSET 25  // u8 whimsy shape set (WHIMSY_SET_*; 1.2, 0 = cute)
+#define SAVEFILE_AT_CUTHASH   26  // u32 cutter_hash of the cut the board was saved with (1.2, 0 = unknown)
+#define SAVEFILE_AT_SEED      30  // u32 cut seed (1.2, 0 = unknown: savefile_cutseed of the picture's
+                                  // name). Kept so a renamed picture still cuts the same way.
+#define SAVEFILE_AT_OVERLAY   34  // u8 overlay (OVERLAY_*; 1.2, 0 = none)
+#define SAVEFILE_AT_VOLUME    35  // u8 music volume (SAVEFILE_VOLUME_*; 1.3, 0 = high)
+#define SAVEFILE_AT_END       36  // First unused byte; the rest up to SAVEFILE_HEADER is zero
+#define SAVEFILE_MINHEADER SAVEFILE_AT_MUSIC  // Smallest header we can read (1.0's)
 typedef struct {
   uint16_t version;
   uint16_t size;

@@ -22,9 +22,9 @@ void test_savefile(void) {
   CHECK(memcmp(buf, "3DSJGSAW", 8) == 0);
   CHECK(buf[8] == SAVEFILE_VERSION && buf[9] == 0 && buf[10] == SAVEFILE_HEADER && buf[11] == 0);
   int zero = 1;
-  for(int i = 24; i < SAVEFILE_HEADER; i++) if(buf[i]) zero = 0;
+  for(int i = SAVEFILE_AT_MUSIC + 1; i < SAVEFILE_HEADER; i++) if(buf[i]) zero = 0;
   CHECK(zero);
-  CHECK(buf[23] == SAVEFILE_MUSIC_SHUFFLE);
+  CHECK(buf[SAVEFILE_AT_MUSIC] == SAVEFILE_MUSIC_SHUFFLE);
   CHECK(memcmp(buf + SAVEFILE_HEADER, "JIGS", 4) == 0);
 
   CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK);
@@ -33,12 +33,12 @@ void test_savefile(void) {
   CHECK(r.style == 1 && r.target == 500 && r.table == 7 && r.seconds == 0x01020304);
   CHECK(buf[19] == 4 && buf[22] == 1);
   CHECK(r.music == SAVEFILE_MUSIC_SHUFFLE);
-  // Saves from before the music field (byte 23 zero) play in order; junk values too
-  buf[23] = 0;
+  // Saves from before the music field (zero) play in order; junk values too
+  buf[SAVEFILE_AT_MUSIC] = 0;
   CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.music == SAVEFILE_MUSIC_ORDER);
-  buf[23] = 200;
+  buf[SAVEFILE_AT_MUSIC] = 200;
   CHECK(savefile_readheader(buf, len, &r) == SAVEFILE_OK && r.music == SAVEFILE_MUSIC_ORDER);
-  buf[23] = SAVEFILE_MUSIC_SHUFFLE;
+  buf[SAVEFILE_AT_MUSIC] = SAVEFILE_MUSIC_SHUFFLE;
 
   // Peek works from just the start of the file, like the menu reads it
   SaveInfo info;
@@ -116,4 +116,44 @@ void test_savefile(void) {
   CHECK(savefile_readheader(old, sizeof(old), &r) == SAVEFILE_BAD);
   free(buf);
   test_board_free(&b);
+}
+
+// The header layout, byte for byte, with every field set: catches a field that moved (old
+// saves would read wrong). Written out by hand on purpose, separate from savefile.h.
+void test_savefile_layout(void) {
+  Board b;
+  CHECK(test_board_grid(&b, 3, 2, 20, 400, 300) == 0);
+  SaveHeader h, r;
+  savefile_init(&h);
+  h.appver[0] = 1; h.appver[1] = 4; h.appver[2] = 9;
+  h.style = 6; h.target = 0x1234; h.table = 7; h.seconds = 0xA1B2C3D4;
+  h.music = SAVEFILE_MUSIC_SHUFFLE; h.whimsy = 2; h.whimsyset = 1;
+  h.cuthash = 0x11223344; h.seed = 0x55667788; h.overlay = 2; h.volume = SAVEFILE_VOLUME_MEDIUM;
+  uint8_t * buf = malloc(savefile_size(&b));
+  savefile_write(&h, &b, buf);
+  static const uint8_t want[36] = {
+    '3', 'D', 'S', 'J', 'G', 'S', 'A', 'W',  // 0 magic
+    1, 0, 64, 0,                             // 8 version, 10 header size
+    1, 4, 9,                                 // 12 app version
+    6, 0x34, 0x12,                           // 15 style, 16 target
+    7, 0xD4, 0xC3, 0xB2, 0xA1,               // 18 table, 19 seconds
+    2, 2, 1,                                 // 23 music, 24 whimsy, 25 whimsy set
+    0x44, 0x33, 0x22, 0x11,                  // 26 cut hash
+    0x88, 0x77, 0x66, 0x55,                  // 30 cut seed
+    2, 2,                                    // 34 overlay, 35 volume
+  };
+  CHECK(memcmp(buf, want, sizeof want) == 0);
+  int zero = 1;
+  for(int i = sizeof want; i < SAVEFILE_HEADER; i++) zero &= buf[i] == 0;
+  CHECK(zero);
+  CHECK(savefile_readheader(buf, SAVEFILE_HEADER, &r) == SAVEFILE_OK);
+  CHECK(r.style == 6 && r.target == 0x1234 && r.table == 7 && r.seconds == 0xA1B2C3D4 &&
+      r.music == SAVEFILE_MUSIC_SHUFFLE && r.whimsy == 2 && r.whimsyset == 1 && r.cuthash == 0x11223344 &&
+      r.seed == 0x55667788 && r.overlay == 2 && r.volume == SAVEFILE_VOLUME_MEDIUM);
+  // A shorter header (an older version's) reads the fields it has, the rest default to 0
+  buf[10] = 26;
+  CHECK(savefile_readheader(buf, SAVEFILE_HEADER, &r) == SAVEFILE_OK);
+  CHECK(r.whimsyset == 1 && r.cuthash == 0 && r.seed == 0 && r.overlay == 0 && r.volume == 0);
+  free(buf);
+  board_free(&b);
 }
