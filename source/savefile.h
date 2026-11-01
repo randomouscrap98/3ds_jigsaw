@@ -14,6 +14,7 @@
 #define SAVEFILE_MUSIC_ORDER   0 // Zero so saves from before the field play in order
 #define SAVEFILE_MUSIC_OFF     1
 #define SAVEFILE_MUSIC_SHUFFLE 2
+#define SAVEFILE_MUSIC_MODES   3
 #define SAVEFILE_VOLUME_HIGH   0 // Zero so saves from before the field stay at full volume
 #define SAVEFILE_VOLUME_LOW    1
 #define SAVEFILE_VOLUME_MEDIUM 2

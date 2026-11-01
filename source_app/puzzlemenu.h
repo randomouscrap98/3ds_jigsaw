@@ -13,7 +13,6 @@
 #define PMENU_WIDTH 46
 #define PMENU_MAXNAME 128
 #define PMENU_NUMCOUNTS 4
-#define PMENU_PIECES_NAMES "50\n100\n250\n500"  // Same as pmenu_counts in puzzlemenu.c
 #define PMENU_PIECES_DEFAULT 1                  // 100
 #define PMENU_FIRST 1        // List items before the puzzles ("Add files over Wi-Fi")
 #define PMENU_MAXOPTS 9      // Continue, Pieces, Piece style, Whimsies, Overlay, Music, Start new puzzle, Rename,
@@ -25,9 +24,7 @@
 #define PMENU_VALUEWIDTH 13  // Room for the piece style value ("Random Rect") in the options menu; labels
                              // get PMENU_WIDTH - this - 1 chars (longest: "View finished puzzle (h:mm:ss)")
 #define PMENU_VALUEX 200     // Pixel x of that value column (top screen)
-#define PMENU_OVERLAY_NAMES "None\nHologram\nRainbow"         // OVERLAY_* order
-#define PMENU_MUSIC_NAMES "Off\nIn order\nShuffled"  // Menu order of the music modes
-#define PMENU_MUSIC_DEFAULT 1                         // In order
+#define PMENU_MUSIC_DEFAULT 1   // In order (index into pmenu_musicnames)
 #define PMENU_THUMBH THUMB_MAXH  // Bottom screen height used by the picture; controls below
 #define PMENU_PEEKBYTES 256     // Start of a save read to summarize it (header + board header)
 

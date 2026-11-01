@@ -12,10 +12,33 @@
 
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
 
-static const uint32_t pmenu_counts[PMENU_NUMCOUNTS] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
-static const char * const pmenu_styles[CUT_STYLES] = { "Classic", "Irregular", "Wild", "Random", "Random Rect", "Maze", "Hex" };  // CUT_STYLE_*
-static const char * const pmenu_whimsies[WHIMSY_LEVELS] = { "", ", few whimsies", ", many whimsies" };  // WHIMSY_*
-static const char * const pmenu_overlays[OVERLAYS] = { "", ", hologram", ", rainbow" };  // OVERLAY_*
+// The one list of each menu choice: the options rows are built from these (pmenu_join), and
+// the asserts catch a list that's out of step with its enum (a sized array would just get NULLs)
+#define PMENU_LEN(a) (sizeof(a) / sizeof((a)[0]))
+static const uint32_t pmenu_counts[] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
+static const char * const pmenu_styles[] = { "Classic", "Irregular", "Wild", "Random", "Random Rect", "Maze", "Hex" };  // CUT_STYLE_*
+static const char * const pmenu_whimsynames[] = { "None", "Few", "Many" };  // WHIMSY_*
+static const char * const pmenu_whimsies[] = { "", ", few whimsies", ", many whimsies" };  // Summaries
+static const char * const pmenu_overlaynames[] = { "None", "Hologram", "Rainbow" };  // OVERLAY_*
+static const char * const pmenu_overlays[] = { "", ", hologram", ", rainbow" };  // Summaries
+static const char * const pmenu_musicnames[] = { "Off", "In order", "Shuffled" };  // Menu order ...
+static const uint8_t pmenu_musicmodes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };  // ... as saved
+_Static_assert(PMENU_LEN(pmenu_counts) == PMENU_NUMCOUNTS, "pmenu_counts");
+_Static_assert(PMENU_LEN(pmenu_styles) == CUT_STYLES, "pmenu_styles: one name per CUT_STYLE_*");
+_Static_assert(PMENU_LEN(pmenu_whimsynames) == WHIMSY_LEVELS && PMENU_LEN(pmenu_whimsies) == WHIMSY_LEVELS, "whimsy names");
+_Static_assert(PMENU_LEN(pmenu_overlaynames) == OVERLAYS && PMENU_LEN(pmenu_overlays) == OVERLAYS, "overlay names");
+_Static_assert(PMENU_LEN(pmenu_musicnames) == SAVEFILE_MUSIC_MODES && PMENU_LEN(pmenu_musicmodes) == SAVEFILE_MUSIC_MODES, "music modes");
+
+// littlemenu enums take their values as one string with \n between them. buf holds
+// TUIMENU_MAXENUMTOTAL chars; names that don't fit are left off.
+static const char * pmenu_join(char * buf, const char * const * names, size_t n) {
+  size_t len = 0;
+  buf[0] = 0;
+  for(size_t i = 0; i < n && len < TUIMENU_MAXENUMTOTAL; i++) {
+    len += snprintf(buf + len, TUIMENU_MAXENUMTOTAL - len, "%s%s", i ? "\n" : "", names[i]);
+  }
+  return buf;
+}
 
 static int puzzlemenu_isimage(const char * name) {
   const char * dot = strrchr(name, '.');
@@ -87,6 +110,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   pm->optwhimsy = -1;
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
+  char values[TUIMENU_MAXENUMTOTAL];
   char path[STORAGE_MAXPATH];
   storage_puzzlepath(e->name, path);
   thumb_request(&pm->thumb, path, e->hassave ? e->save.header.overlay : (unsigned)pm->overlay % OVERLAYS);
@@ -103,26 +127,32 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   }
   // Settings for a new puzzle (Continue uses the save's), then the button that starts it
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Pieces", &pm->pieces, PMENU_PIECES_NAMES);
+    char nums[PMENU_NUMCOUNTS][12];
+    const char * names[PMENU_NUMCOUNTS];
+    for(int i = 0; i < PMENU_NUMCOUNTS; i++) {
+      snprintf(nums[i], sizeof(nums[i]), "%lu", (unsigned long)pmenu_counts[i]);
+      names[i] = nums[i];
+    }
+    TUIMITEM_ENUM(&pm->options, err, "Pieces", &pm->pieces, pmenu_join(values, names, PMENU_NUMCOUNTS));
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, "Classic\nIrregular\nWild\nRandom\nRandom Rect\nMaze");
+    TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, pmenu_join(values, pmenu_styles, CUT_STYLES));
     pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Whimsies", &pm->whimsy, "None\nFew\nMany");
+    TUIMITEM_ENUM(&pm->options, err, "Whimsies", &pm->whimsy, pmenu_join(values, pmenu_whimsynames, WHIMSY_LEVELS));
     pm->optwhimsy = n;
     pm->optcut[n] = 1;
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Overlay", &pm->overlay, PMENU_OVERLAY_NAMES);
+    TUIMITEM_ENUM(&pm->options, err, "Overlay", &pm->overlay, pmenu_join(values, pmenu_overlaynames, OVERLAYS));
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
-    TUIMITEM_ENUM(&pm->options, err, "Music", &pm->music, PMENU_MUSIC_NAMES);
+    TUIMITEM_ENUM(&pm->options, err, "Music", &pm->music, pmenu_join(values, pmenu_musicnames, SAVEFILE_MUSIC_MODES));
     pm->optact[n++] = PMENU_ACT_NONE;
   }
   if(!err) {
@@ -373,8 +403,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     choice.whimsy = (unsigned)pm->whimsy % WHIMSY_LEVELS;
     choice.whimsyset = WHIMSY_SET_CUTE;   // The only set for now (no menu option yet)
     choice.overlay = (unsigned)pm->overlay % OVERLAYS;
-    static const uint8_t modes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };
-    choice.music = modes[(unsigned)pm->music % 3];
+    choice.music = pmenu_musicmodes[(unsigned)pm->music % SAVEFILE_MUSIC_MODES];
     thumb_clear(&pm->thumb, 0);  // Caller waits (puzzlemenu_waitidle) once Loading is showing
     tui_menu_reset(&pm->root);
     // Keep the cursor on this puzzle when we come back

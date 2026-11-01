@@ -1,5 +1,7 @@
 #include "test.h"
 #include "storage.h"
+#include "cutter.h"
+#include "overlay.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -88,7 +90,8 @@ void test_storage(void) {
   // Everything storage_cachepath makes is recognized
   int all = 1;
   uint32_t counts[4] = { 48, 108, 252, 500 };
-  for(int c = 0; c < 4; c++) for(uint8_t st = 0; st < 4; st++) for(uint8_t w = 0; w < 3; w++) for(uint8_t g = 0; g < 2; g++) for(uint8_t o = 0; o < 3; o++) {
+  for(int c = 0; c < 4; c++) for(uint8_t st = 0; st < CUT_STYLES; st++) for(uint8_t w = 0; w < WHIMSY_LEVELS; w++)
+      for(uint8_t g = 0; g <= WHIMSY_SETS; g++) for(uint8_t o = 0; o < OVERLAYS; o++) {
     char path[STORAGE_MAXPATH];
     storage_cachepath(n, counts[c], st, w, g, o, path);
     if(!storage_iscache(n, strrchr(path, '/') + 1)) all = 0;

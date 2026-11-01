@@ -217,7 +217,8 @@ int main(int argc, char ** argv) {
     fprintf(stderr, "can't load %s\n", imgpath);
     return 1;
   }
-  const char * stylenames[WOODCUT_STYLES_END] = { "classic", "irregular", "wild", "random", "randrect", "maze", "wooden", "wooden2", "wooden3", "wooden4", "wooden5" };
+  static const char * const stylenames[] = { "classic", "irregular", "wild", "random", "randrect", "maze", "hex", "wooden", "wooden2", "wooden3", "wooden4", "wooden5" };
+  _Static_assert(sizeof stylenames / sizeof stylenames[0] == WOODCUT_STYLES_END, "one name per style");
   // Only these styles (comma separated names), and then no shape sheet or crop samples
   const char * only = argc > 4 ? argv[4] : NULL;
 #define WANT(st) wanted(only, stylenames[st])

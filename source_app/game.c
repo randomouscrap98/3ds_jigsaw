@@ -284,7 +284,7 @@ int game_update(Game * g, const GameInput * gin) {
         [SAVEFILE_MUSIC_ORDER] = SAVEFILE_MUSIC_SHUFFLE,
         [SAVEFILE_MUSIC_SHUFFLE] = SAVEFILE_MUSIC_OFF,
       };
-      g->music = next[g->music % 3];
+      g->music = next[g->music % SAVEFILE_MUSIC_MODES];
       g->dirty = 1;
       ev |= GAME_EV_MUSICMODE;
     }
