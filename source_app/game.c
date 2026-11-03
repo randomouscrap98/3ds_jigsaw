@@ -524,27 +524,30 @@ void game_render_top(Game * g, TextDraw * td) {
     u8 a = (u8)(panel * 255);
     char time[16];
     textdraw_fmttime(time, sizeof(time), g->playms / 1000);
-    C2D_DrawRectSolid(70, 66, 0.7f, 260, 98, C2D_Color32(16, 16, 20, (u8)(panel * 210)));
+    const float cpuh = GAME_SHOWCPU ? 0 : 16;  // Without the CPU line the song moves up into its row
+    C2D_DrawRectSolid(70, 66, 0.7f, 260, 98 - cpuh, C2D_Color32(16, 16, 20, (u8)(panel * 210)));
     textdraw_center(td, 200, 74, 0.8f, C2D_Color32(255, 220, 90, a), "%s", time);
     textdraw_center(td, 200, 108, 0.5f, C2D_Color32(230, 230, 230, a), "%lu pieces, %lu groups left",
         (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
-    // CPU use (main thread, then music decoding) and the song
     const GamePerf * pf = &g->perf;
     u32 pc = C2D_Color32(170, 170, 170, a);
+#if GAME_SHOWCPU
+    // CPU use (main thread, then music decoding)
     int pct = pf->frame > 0 ? (int)(100 * pf->cpu / pf->frame) : 0;
     int mpct = pf->frame > 0 ? (int)(100 * (pf->music + pf->musicsd) / pf->frame) : 0;
     textdraw_center(td, 200, 128, 0.45f, pc, "CPU %.1f ms (%d%%)  music %.1f+%.1fms (%d%%)",
         pf->cpu, pct, pf->music, pf->musicsd, mpct);
+#endif
     // Song name rolls if it's too long, starting over each time the song changes
     if(strcmp(g->lastsong, pf->song)) {
       snprintf(g->lastsong, sizeof(g->lastsong), "%s", pf->song);
       g->songstart = osGetTime();
     }
     // Volume and mode icons stay put; the rest of the line is the song
-    game_drawvolume(g->volume, 80, 151, pc);
-    game_drawmode(g->music, 106, 151, pc, C2D_Color32(16, 16, 20, a));
+    game_drawvolume(g->volume, 80, 151 - cpuh, pc);
+    game_drawmode(g->music, 106, 151 - cpuh, pc, C2D_Color32(16, 16, 20, a));
     const char * song = g->music == SAVEFILE_MUSIC_OFF ? "Music off" : pf->song[0] ? pf->song : "No music";
-    textdraw_marquee(td, 118, 144, 202, 0.45f, pc,
+    textdraw_marquee(td, 118, 144 - cpuh, 202, 0.45f, pc,
         (osGetTime() - g->songstart) * GAME_MARQUEE_SPEED / 1000, song);
   }
   if(info && g->overlay > 0) render_preview(&g->gfx, 0, 0, 400, 204, 0.95f, g->overlay);
