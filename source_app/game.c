@@ -48,6 +48,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     g->table = hdr.table;
     g->music = hdr.music;
     g->volume = hdr.volume;
+    g->top = hdr.top;
     g->playms = (u64)hdr.seconds * 1000;
     g->seed = savefile_seedfor(&hdr, name);
   } else {
@@ -166,6 +167,7 @@ int game_save(Game * g, int background) {
   sh.table = g->table;
   sh.music = g->music;
   sh.volume = g->volume;
+  sh.top = g->top;
   sh.seconds = g->playms / 1000;
   savefile_write(&sh, &g->board, buf);
   char path[STORAGE_MAXPATH];
@@ -298,7 +300,14 @@ int game_update(Game * g, const GameInput * gin) {
       g->dirty = 1;
       ev |= GAME_EV_VOLUME;
     }
-    if((gin->down & GAME_MOD_CONDENSE) && g->nsel && g->held < 0 && !g->boxing) game_condense(g);
+    if(gin->down & GAME_MOD_TOP) {
+      g->top = g->top == SAVEFILE_TOP_INFO ? SAVEFILE_TOP_PICTURE : SAVEFILE_TOP_INFO;
+      g->dirty = 1;
+    }
+    // Condense on the second of the two buttons, either order: a selection made with the
+    // select key still held condenses with just a Y press
+    if((gin->down & (GAME_MOD_CONDENSE | GAME_MODKEY)) && (gin->held & GAME_MOD_CONDENSE) &&
+        g->nsel && g->held < 0 && !g->boxing) game_condense(g);
     const u32 keep = KEY_TOUCH | GAME_MODKEY | GAME_MOD_KEEPKEYS;
     fin.down &= keep;
     fin.held &= keep;
@@ -484,7 +493,11 @@ static void game_drawvolume(uint8_t volume, float x, float cy, u32 c) {
 
 void game_render_top(Game * g, TextDraw * td) {
   const u32 white = C2D_Color32(230, 230, 230, 255), dim = C2D_Color32(140, 140, 140, 255);
-  render_preview(&g->gfx, 0, 0, 400, 204);
+  // Picture mode: the picture, with the info panel fading in over it while Y is held.
+  // Info mode: the panel, with the picture fading in over it (drawn last, on top of all).
+  const int info = g->top == SAVEFILE_TOP_INFO;
+  const float panel = info ? 1.0f : g->overlay;
+  if(!info) render_preview(&g->gfx, 0, 0, 400, 204, 0.5f, 1.0f);
   const u32 warn = C2D_Color32(255, 110, 100, 255);
   if(g->savefailed) {
     C2D_DrawRectSolid(0, 0, 400, 20, 0.7f, C2D_Color32(0, 0, 0, 190));
@@ -506,12 +519,12 @@ void game_render_top(Game * g, TextDraw * td) {
     textdraw_print(td, 6, 224, 0.45f, dim, g->board.norotate ? "Up/Down or X/B zoom  START save+menu"
         : "L or R rotate held  Up/Down or X/B zoom  START save+menu");
   }
-  if(g->overlay > 0) {
-    // Info panel over the middle of the preview (hold Y)
-    u8 a = (u8)(g->overlay * 255);
+  if(panel > 0) {
+    // Info panel over the middle of the preview
+    u8 a = (u8)(panel * 255);
     char time[16];
     textdraw_fmttime(time, sizeof(time), g->playms / 1000);
-    C2D_DrawRectSolid(70, 66, 0.7f, 260, 98, C2D_Color32(16, 16, 20, (u8)(g->overlay * 210)));
+    C2D_DrawRectSolid(70, 66, 0.7f, 260, 98, C2D_Color32(16, 16, 20, (u8)(panel * 210)));
     textdraw_center(td, 200, 74, 0.8f, C2D_Color32(255, 220, 90, a), "%s", time);
     textdraw_center(td, 200, 108, 0.5f, C2D_Color32(230, 230, 230, a), "%lu pieces, %lu groups left",
         (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
@@ -534,4 +547,5 @@ void game_render_top(Game * g, TextDraw * td) {
     textdraw_marquee(td, 118, 144, 202, 0.45f, pc,
         (osGetTime() - g->songstart) * GAME_MARQUEE_SPEED / 1000, song);
   }
+  if(info && g->overlay > 0) render_preview(&g->gfx, 0, 0, 400, 204, 0.95f, g->overlay);
 }

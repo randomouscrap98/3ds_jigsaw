@@ -131,9 +131,11 @@ void render_box(Camera * c, float wx0, float wy0, float wx1, float wy1) {
   C2D_DrawRectSolid(x1 - 1, y0, 0.8f, 1, h, RENDER_COLOR_BOXEDGE);
 }
 
-void render_preview(PuzzleGfx * pg, float x, float y, float w, float h) {
+void render_preview(PuzzleGfx * pg, float x, float y, float w, float h, float z, float alpha) {
   float pw = pg->previewsub.width, ph = pg->previewsub.height;
   float s = w / pw < h / ph ? w / pw : h / ph;
   if(s > 1) s = 1;
-  C2D_DrawImageAt(puzzlegfx_preview(pg), x + (w - pw * s) / 2, y + (h - ph * s) / 2, 0.5f, NULL, s, s);
+  C2D_ImageTint tint;
+  C2D_AlphaImageTint(&tint, alpha);
+  C2D_DrawImageAt(puzzlegfx_preview(pg), x + (w - pw * s) / 2, y + (h - ph * s) / 2, z, &tint, s, s);
 }

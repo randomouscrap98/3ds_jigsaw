@@ -65,6 +65,7 @@ void savefile_write(const SaveHeader * h, Board * b, uint8_t * buf) {
   sf_put32(buf, SAVEFILE_AT_SEED, h->seed);
   buf[SAVEFILE_AT_OVERLAY] = h->overlay;
   buf[SAVEFILE_AT_VOLUME] = h->volume;
+  buf[SAVEFILE_AT_TOP] = h->top;
   boardsave_write(b, buf + SAVEFILE_HEADER);
 }
 
@@ -89,8 +90,10 @@ int savefile_readheader(const uint8_t * buf, size_t len, SaveHeader * h) {
   if(SF_HAS(hs, SAVEFILE_AT_SEED, 4)) h->seed = sf_get32(buf, SAVEFILE_AT_SEED);
   if(SF_HAS(hs, SAVEFILE_AT_OVERLAY, 1)) h->overlay = buf[SAVEFILE_AT_OVERLAY];
   if(SF_HAS(hs, SAVEFILE_AT_VOLUME, 1)) h->volume = buf[SAVEFILE_AT_VOLUME];
+  if(SF_HAS(hs, SAVEFILE_AT_TOP, 1)) h->top = buf[SAVEFILE_AT_TOP];
   if(h->music >= SAVEFILE_MUSIC_MODES) h->music = SAVEFILE_MUSIC_ORDER;
   if(h->volume >= SAVEFILE_VOLUMES) h->volume = SAVEFILE_VOLUME_HIGH;
+  if(h->top >= SAVEFILE_TOPS) h->top = SAVEFILE_TOP_PICTURE;
   return SAVEFILE_OK;
 }
 

@@ -45,7 +45,8 @@ void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, Puzzle
     int32_t held, const uint8_t * sel, int table);
 // Selection box between two world points, on top of everything
 void render_box(Camera * c, float wx0, float wy0, float wx1, float wy1);
-// Draw the preview picture centered in the given box, scaled down to fit if needed
-void render_preview(PuzzleGfx * pg, float x, float y, float w, float h);
+// Draw the preview picture centered in the given box, scaled down to fit if needed, at depth
+// z with the given opacity (0..1)
+void render_preview(PuzzleGfx * pg, float x, float y, float w, float h, float z, float alpha);
 
 #endif

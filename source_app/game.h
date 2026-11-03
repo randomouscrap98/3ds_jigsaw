@@ -53,7 +53,8 @@
 #define GAME_MOD_SKIPSONG KEY_X
 #define GAME_MOD_MUSICMODE KEY_A  // Cycles off -> in order -> shuffled
 #define GAME_MOD_VOLUME KEY_B     // Cycles low -> medium -> high
-#define GAME_MOD_CONDENSE KEY_SELECT  // Squish the selection into a tidy block
+#define GAME_MOD_TOP KEY_SELECT     // Swaps the top screen: picture (Y = info) or info (Y = picture)
+#define GAME_MOD_CONDENSE KEY_DLEFT  // Squish the selection into a tidy block (also held, then Y)
 #define GAME_MOD_KEEPKEYS (KEY_DUP | KEY_DDOWN)  // Buttons that keep working with the modifier (zoom)
 
 // Input for one frame, gathered by the caller
@@ -100,6 +101,7 @@ typedef struct {
   uint8_t table;          // Table color (palette index in render)
   uint8_t music;          // Music mode (SAVEFILE_MUSIC_*), saved with the puzzle
   uint8_t volume;         // Music volume (SAVEFILE_VOLUME_*), saved with the puzzle
+  uint8_t top;            // Top screen mode (SAVEFILE_TOP_*), saved with the puzzle
   SaveWriter * writer;    // Where saves go (NULL = write immediately)
   progress_fn progress;   // Status screen for blocking saves (game_init's cb; may be NULL)
   void * progressdata;

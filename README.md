@@ -26,11 +26,12 @@ you haven't). Without it the game just runs silently.
 | Hold A or D-Pad Left + drag the stylus | Select every piece in a box |
 | Hold A or D-Pad Left + tap a piece | Add it to, or remove it from, the selection |
 | Stylus on a selected piece | Move the whole selection (L/R turns it as one) |
-| Hold Y | Show your time, progress, CPU use and the song playing |
+| Hold Y | Show your time, progress, CPU use and the song playing (or the picture, see Y + SELECT) |
 | Y + X | Next song |
 | Y + A | Music: off, in order, shuffled (saved with the puzzle) |
 | Y + B | Music volume: low, medium, high (saved with the puzzle) |
-| Y + SELECT | Squish the selection into a tidy block (it stays selected) |
+| Y + SELECT | Top screen: picture (hold Y for info) or info (hold Y for the picture); saved with the puzzle |
+| Y + D-Pad Left | Squish the selection into a tidy block (it stays selected). Pressing Y while still holding Left after a box select works too |
 | SELECT | Change felt (saved with puzzle) |
 | START | Save and go back to the menu |
 

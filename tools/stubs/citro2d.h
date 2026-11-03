@@ -21,6 +21,7 @@ bool C2D_DrawTriangle(float x0, float y0, u32 clr0, float x1, float y1, u32 clr1
 bool C2D_DrawLine(float x0, float y0, u32 clr0, float x1, float y1, u32 clr1, float thickness, float depth);
 bool C2D_DrawCircleSolid(float x, float y, float z, float radius, u32 clr);
 void C2D_PlainImageTint(C2D_ImageTint * tint, u32 color, float blend);
+void C2D_AlphaImageTint(C2D_ImageTint * tint, float alpha);
 C2D_TextBuf C2D_TextBufNew(size_t maxGlyphs); void C2D_TextBufDelete(C2D_TextBuf buf); void C2D_TextBufClear(C2D_TextBuf buf);
 const char * C2D_TextParse(C2D_Text * text, C2D_TextBuf buf, const char * str);
 void C2D_TextOptimize(const C2D_Text * text);

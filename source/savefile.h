@@ -17,6 +17,9 @@
 #define SAVEFILE_VOLUME_LOW    1
 #define SAVEFILE_VOLUME_MEDIUM 2
 #define SAVEFILE_VOLUMES       3
+#define SAVEFILE_TOP_PICTURE   0 // Top screen: picture, hold Y for the info panel (zero: the old way)
+#define SAVEFILE_TOP_INFO      1 // Top screen: info panel, hold Y for the picture
+#define SAVEFILE_TOPS          2
 
 // A whole save file: this header, then a boardsave blob. Little endian. Header layout
 // (byte offsets). Fields after SAVEFILE_AT_MUSIC were added later: one past the end of an
@@ -38,7 +41,8 @@
                                   // name). Kept so a renamed picture still cuts the same way.
 #define SAVEFILE_AT_OVERLAY   34  // u8 overlay (OVERLAY_*; 1.2, 0 = none)
 #define SAVEFILE_AT_VOLUME    35  // u8 music volume (SAVEFILE_VOLUME_*; 1.3, 0 = high)
-#define SAVEFILE_AT_END       36  // First unused byte; the rest up to SAVEFILE_HEADER is zero
+#define SAVEFILE_AT_TOP       36  // u8 top screen mode (SAVEFILE_TOP_*; 1.4, 0 = picture)
+#define SAVEFILE_AT_END       37  // First unused byte; the rest up to SAVEFILE_HEADER is zero
 #define SAVEFILE_MINHEADER SAVEFILE_AT_MUSIC  // Smallest header we can read (1.0's)
 typedef struct {
   uint16_t version;
@@ -55,6 +59,7 @@ typedef struct {
   uint32_t seed;      // The cut's seed (0 = unknown: savefile_cutseed of the name)
   uint8_t overlay;    // OVERLAY_*
   uint8_t volume;     // SAVEFILE_VOLUME_*
+  uint8_t top;        // SAVEFILE_TOP_*
 } SaveHeader;
 
 // What a save says about a puzzle in progress, without loading the board
