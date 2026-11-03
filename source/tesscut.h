@@ -5,12 +5,15 @@
 
 #include <stdint.h>
 
-// Tessellation cuts (Lizard style): Escher-style tiles on a hexagon grid. Each
+// Tessellation cuts (Lizard, Pinwheel styles): Escher-style tiles on a hexagon grid. Each
 // tile is a flat-top hexagon whose edges are curves; edges E1, E3, E5 are E0, E2, E4 turned
 // -120 degrees around the vertex they share (V1, V3, V5), so tiles come in three orientations
 // 120 degrees apart and fit together everywhere. Every edge then gets its own small change
 // (vertex jitter + a bump) so no two pieces are the same, rerolled where a piece gets too thin.
 // Border: tiles cut to the rectangle; bits that come out small or thin join a neighbour.
+// Diamond lattice (Pinwheel): a square grid turned 45 degrees, four tiles at every vertex, every
+// tile the same way up; all four edges are the one free curve turned 90 degrees at a time (it must
+// be point-symmetric about its middle, so opposite edges fit after a shift).
 
 // One free edge curve: points between the edge's ends, as (t along the edge, n out from the
 // hexagon), both in edge lengths
@@ -19,14 +22,20 @@ typedef struct {
   const float * tn;
 } TessCurve;
 
-// The free curves on E0 (V0 -> V1), E2 (V2 -> V3), E4 (V4 -> V5). Vertices of the unit hexagon:
-// V_k = (cos 60k, sin 60k), y down (so k goes clockwise on screen).
+#define TESS_LATTICE_HEX 0
+#define TESS_LATTICE_DIAMOND 1
+
+// Hex: the free curves on E0 (V0 -> V1), E2 (V2 -> V3), E4 (V4 -> V5). Vertices of the unit
+// hexagon: V_k = (cos 60k, sin 60k), y down (so k goes clockwise on screen).
+// Diamond: c[0] on E0 (V0 -> V1). Vertices V_k = (cos(90k - 90), sin(90k - 90)): top, right,
+// bottom, left.
 typedef struct {
   TessCurve c[3];
+  uint8_t lattice;  // TESS_LATTICE_*
 } TessShape;
 
 typedef struct {
-  float jitter;   // Vertex moves, up to this x the hexagon's radius
+  float jitter;   // Vertex moves, up to this x the tile's radius
   float bump;     // Per edge bend (sin(pi t) and sin(2 pi t) along the edge), up to this x its length
   float clear;    // Thinnest part of a piece (cells; cutgraph_thick_ok)
   float minarea;  // Border bits smaller than this (cells) join a neighbour (thin ones up to 4 x it)
@@ -48,12 +57,13 @@ typedef struct {
 
 #define TESSCUT_SHAPE_LIZARD 0
 #define TESSCUT_SHAPE_FLOWER 1
-#define TESSCUT_SHAPES 2
+#define TESSCUT_SHAPE_PINWHEEL 2
+#define TESSCUT_SHAPES 3
 
 // Shape by number (unknown -> lizard)
 const TessShape * tesscut_shape(uint8_t shape);
 const TessShape * tesscut_lizard(void);
-// The unit tile's outline (6 edges, closed, y down) for previews; xy holds tesscut_tilepoints
+// The unit tile's outline (6 or 4 edges, closed, y down) for previews; xy holds tesscut_tilepoints
 // pairs. Returns the point count.
 uint32_t tesscut_tilepoints(const TessShape * sh);
 uint32_t tesscut_tile(const TessShape * sh, float * xy);

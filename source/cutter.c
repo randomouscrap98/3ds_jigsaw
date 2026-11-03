@@ -27,6 +27,10 @@ static const CutStyleInfo cutter_styles[] = {
   // 120 degrees apart: no quarter turns)
   [CUT_STYLE_LIZARD] = { "Lizard", "lizard", CUT_KIND_TESS, TESSCUT_SHAPE_LIZARD,
       .whimsies = 0, .rotate = 0, .thin = 1, .samplepieces = 50 },
+  // Quilt pinwheel stars on a 45 degree grid: one orientation, so quarter turns work. Sawtooth
+  // sides are long: fewer sample pieces
+  [CUT_STYLE_PINWHEEL] = { "Pinwheel", "pinwheel", CUT_KIND_TESS, TESSCUT_SHAPE_PINWHEEL,
+      .whimsies = 0, .rotate = 1, .samplepieces = 60 },
 };
 // A gap in the list would be a zeroed entry: test_cut_styles checks every one is filled in
 _Static_assert(sizeof cutter_styles / sizeof cutter_styles[0] == CUT_STYLES, "one CutStyleInfo per CUT_STYLE_*");
@@ -73,6 +77,7 @@ static int cutter_hex(Cutter * c) {
 static int cutter_tess(Cutter * c, uint8_t shape, uint32_t seed) {
   c->usegraph = 1;
   TessVary v = { CUTTER_TESSJITTER, CUTTER_TESSBUMP, CUTTER_TESSCLEAR, CUTTER_TESSMINAREA, CUTTER_TESSNECK };
+  if(shape == TESSCUT_SHAPE_PINWHEEL) v.jitter = v.bump = CUTTER_PINVARY;
   TessStats st;
   if(tesscut_graph(c->cols, c->rows, tesscut_shape(shape), &v, seed, &c->g, NULL, &st)) return 1;
   c->g.tries = st.fits + st.failed;

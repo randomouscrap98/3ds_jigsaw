@@ -20,7 +20,8 @@
 #define CUT_STYLE_MAZE 5
 #define CUT_STYLE_HEX 6
 #define CUT_STYLE_LIZARD 7
-#define CUT_STYLES 8
+#define CUT_STYLE_PINWHEEL 8
+#define CUT_STYLES 9
 
 // Which builder cuts a style (CutStyleInfo.kind)
 #define CUT_KIND_GRID 0     // edgegen grid, sub = EDGEGEN_STYLE_* (a CutGraph when it has whimsies)
@@ -53,6 +54,7 @@ int cutter_byid(const char * id);
 // that join a neighbour, necks cut at the border (lizard legs are ~0.13 cells wide)
 #define CUTTER_TESSJITTER 0.08f
 #define CUTTER_TESSBUMP 0.08f
+#define CUTTER_PINVARY 0.12f   // Pinwheel jitter and bump (stronger: the stars still read as stars)
 #define CUTTER_TESSCLEAR 0.06f
 #define CUTTER_TESSMINAREA 0.4f
 #define CUTTER_TESSNECK 0.2f

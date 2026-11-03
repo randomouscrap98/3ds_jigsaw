@@ -1,6 +1,7 @@
 // Tessellation cut preview: tess_preview OUT.png COLS ROWS SEED [JITTER BUMP CLEAR [CELLPX]]
 // Pieces filled by orientation (red / yellow / green, lightness varied per piece), dark
 // outlines; prints TessStats. JITTER 0 BUMP 0 = the plain tiling. TESS_SHAPE=n: TESSCUT_SHAPE_*.
+// TESS_QUILT=1: each piece a random quilt colour instead (one orientation: Pinwheel).
 #include "tesscut.h"
 #include "geom.h"
 
@@ -148,6 +149,9 @@ int main(int argc, char ** argv) {
   uint8_t * img = malloc((size_t)W * H * 3);
   memset(img, 235, (size_t)W * H * 3);
   static const uint8_t base[3][3] = { { 220, 50, 40 }, { 240, 210, 40 }, { 140, 200, 40 } };
+  static const uint8_t quilt[8][3] = { { 232, 72, 60 }, { 238, 160, 70 }, { 226, 214, 70 }, { 160, 196, 70 },
+      { 90, 159, 130 }, { 120, 180, 214 }, { 236, 196, 190 }, { 80, 80, 86 } };
+  int usequilt = getenv("TESS_QUILT") != NULL;
   uint32_t rs = seed * 2654435761u;
   for(uint32_t p = 0; p < g.count; p++) {
     uint32_t n = cutgraph_outline(&g, p, cell, pad - x0 + off[2 * p], pad - y0 + off[2 * p + 1], xy);
@@ -170,7 +174,8 @@ int main(int argc, char ** argv) {
         }
         uint8_t * o = img + ((size_t)y * W + x) * 3;
         float edge = d < 1.2f ? 0.15f : 1;
-        for(int c = 0; c < 3; c++) o[c] = (uint8_t)(base[ori[p]][c] * shade * edge);
+        const uint8_t * bc = usequilt ? quilt[(p * 2654435761u >> 16) % 8] : base[ori[p]];
+        for(int c = 0; c < 3; c++) o[c] = (uint8_t)(bc[c] * shade * edge);
       }
     }
   }
