@@ -22,12 +22,13 @@
 #define PINNED_HEX 0x14F0A367u            // 1.4
 #define PINNED_LIZARD 0x7FB6B3A6u         // 1.4
 #define PINNED_PINWHEEL 0x21A4EC86u       // 1.4
+#define PINNED_TRIHOOK 0x5F54A5B3u        // 1.4
 #define PINNED_WHIMSY { { 0x8C3BD049u, 0x881A00CEu }, { 0xFFEF07BBu, 0xBEC93799u }, \
     { 0x33ED2971u, 0xB5F9C31Fu }, { 0x987CDF7Bu, 0xBEC67F6Cu }, \
     { 0x33BEE477u, 0x0450611Bu }, \
     { PINNED_MAZE, PINNED_MAZE }, { PINNED_HEX, PINNED_HEX }, { PINNED_LIZARD, PINNED_LIZARD }, \
-    { PINNED_PINWHEEL, PINNED_PINWHEEL } }   // 1.2 (Random Rect, Maze 1.3, Hex + Lizard + Pinwheel 1.4;
-                                     // Maze, Hex, Lizard, Pinwheel ignore whimsies), style x Few/Many
+    { PINNED_PINWHEEL, PINNED_PINWHEEL }, { PINNED_TRIHOOK, PINNED_TRIHOOK } }   // 1.2 (Random Rect, Maze 1.3,
+                                     // Hex, Lizard, Pinwheel, Trihook 1.4; those four + Maze ignore whimsies), style x Few/Many
 
 void test_layout(void) {
   uint16_t c, r;
@@ -111,7 +112,7 @@ static uint32_t cut_hash(uint8_t style, uint8_t whimsy, uint16_t cols, uint16_t 
 }
 
 void test_cut_pinned(void) {
-  static const uint32_t want[] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT, PINNED_MAZE, PINNED_HEX, PINNED_LIZARD, PINNED_PINWHEEL };
+  static const uint32_t want[] = { PINNED_CLASSIC, PINNED_IRREGULAR, PINNED_WILD, PINNED_RANDOM, PINNED_RANDRECT, PINNED_MAZE, PINNED_HEX, PINNED_LIZARD, PINNED_PINWHEEL, PINNED_TRIHOOK };
   _Static_assert(sizeof want / sizeof want[0] == CUT_STYLES, "one pin per style");
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
     uint32_t h = cut_hash(st, WHIMSY_NONE, 13, 9, 4242);
@@ -419,7 +420,7 @@ void test_cutsample(void) {
       clear += a[i] == 0;
     }
     // Lines everywhere but mostly see-through (48 pieces: 18% line, 66% clear)
-    if(st == CUT_STYLE_MAZE || st == CUT_STYLE_LIZARD || st == CUT_STYLE_PINWHEEL) printf("  %s sample: %u%% line, %u%% clear\n", cutter_info(st)->id, (unsigned)(100 * lines / (w * h)), (unsigned)(100 * clear / (w * h)));
+    if(st == CUT_STYLE_MAZE || st == CUT_STYLE_LIZARD || st == CUT_STYLE_PINWHEEL || st == CUT_STYLE_TRIHOOK) printf("  %s sample: %u%% line, %u%% clear\n", cutter_info(st)->id, (unsigned)(100 * lines / (w * h)), (unsigned)(100 * clear / (w * h)));
     CHECK(lines > (uint32_t)(w * h) / 20 && clear > (uint32_t)(w * h) / 2);
   }
   CHECK(cutsample_draw(CUT_STYLE_CLASSIC, WHIMSY_NONE, 0, 200, 320, a) == 0);  // Portrait

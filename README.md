@@ -2,7 +2,7 @@
 
 Jigsaw puzzles on the 3DS, made from your own pictures. Pick a picture, choose 50 to 500
 pieces and a cut style (classic, irregular, wild, random, random rect, maze, hex,
-Escher-style lizards, or quilt pinwheels), optionally with whimsy pieces (hearts, stars, flowers and clouds
+Escher-style lizards, quilt pinwheels, or swirly trihooks), optionally with whimsy pieces (hearts, stars, flowers and clouds
 cut into the puzzle), and put it together on the touch screen, with your own music
 playing if you like. A dozen paintings come with it to get you started.
 

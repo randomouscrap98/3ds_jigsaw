@@ -21,7 +21,8 @@
 #define CUT_STYLE_HEX 6
 #define CUT_STYLE_LIZARD 7
 #define CUT_STYLE_PINWHEEL 8
-#define CUT_STYLES 9
+#define CUT_STYLE_TRIHOOK 9
+#define CUT_STYLES 10
 
 // Which builder cuts a style (CutStyleInfo.kind)
 #define CUT_KIND_GRID 0     // edgegen grid, sub = EDGEGEN_STYLE_* (a CutGraph when it has whimsies)
@@ -30,12 +31,16 @@
 #define CUT_KIND_HEX 3      // hexcut
 #define CUT_KIND_TESS 4     // tesscut, sub = TESSCUT_SHAPE_*
 
+#define CUT_ROTATE_NONE 0
+#define CUT_ROTATE_QUARTER 1
+#define CUT_ROTATE_HALF 2   // Up and down pieces swap (Trihook)
+
 typedef struct {
   const char * name;      // Menu name
   const char * id;        // Short lowercase name: tools, tests, preview file names
   uint8_t kind, sub;      // CUT_KIND_* and that builder's own style
   uint8_t whimsies;       // Can have whimsies (otherwise the setting is ignored and grayed out)
-  uint8_t rotate;         // Pieces turn (a quarter turned hex doesn't fit its grid)
+  uint8_t rotate;         // CUT_ROTATE_*: how pieces turn (a quarter turned hex doesn't fit its grid)
   uint8_t thin;           // Thin, winding pieces (maze): grabbed by loose hulls too, scattered by
                           // packing their bounds on a bigger table, condensed by outline
   uint8_t samplepieces;   // Menu cut sample size (long winding lines need fewer)
@@ -55,6 +60,7 @@ int cutter_byid(const char * id);
 #define CUTTER_TESSJITTER 0.08f
 #define CUTTER_TESSBUMP 0.08f
 #define CUTTER_PINVARY 0.12f   // Pinwheel jitter and bump (stronger: the stars still read as stars)
+#define CUTTER_TRISLIDE 0.15f  // Trihook: only slides (each S's middle moves along its side)
 #define CUTTER_TESSCLEAR 0.06f
 #define CUTTER_TESSMINAREA 0.4f
 #define CUTTER_TESSNECK 0.2f

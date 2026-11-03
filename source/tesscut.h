@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-// Tessellation cuts (Lizard, Pinwheel styles): Escher-style tiles on a hexagon grid. Each
+// Tessellation cuts (Lizard, Pinwheel, Trihook styles): Escher-style tiles on a hexagon grid. Each
 // tile is a flat-top hexagon whose edges are curves; edges E1, E3, E5 are E0, E2, E4 turned
 // -120 degrees around the vertex they share (V1, V3, V5), so tiles come in three orientations
 // 120 degrees apart and fit together everywhere. Every edge then gets its own small change
@@ -14,6 +14,8 @@
 // Diamond lattice (Pinwheel): a square grid turned 45 degrees, four tiles at every vertex, every
 // tile the same way up; all four edges are the one free curve turned 90 degrees at a time (it must
 // be point-symmetric about its middle, so opposite edges fit after a shift).
+// Triangle lattice (Trihook): six tiles at every vertex, up and down tiles (a half turn apart),
+// every edge the one point-symmetric curve.
 
 // One free edge curve: points between the edge's ends, as (t along the edge, n out from the
 // hexagon), both in edge lengths
@@ -24,11 +26,14 @@ typedef struct {
 
 #define TESS_LATTICE_HEX 0
 #define TESS_LATTICE_DIAMOND 1
+#define TESS_LATTICE_TRI 2
 
 // Hex: the free curves on E0 (V0 -> V1), E2 (V2 -> V3), E4 (V4 -> V5). Vertices of the unit
 // hexagon: V_k = (cos 60k, sin 60k), y down (so k goes clockwise on screen).
 // Diamond: c[0] on E0 (V0 -> V1). Vertices V_k = (cos(90k - 90), sin(90k - 90)): top, right,
 // bottom, left.
+// Tri: c[0] on every edge (point-symmetric); unit side, V_k = (cos(120k - 90), sin(120k - 90)) / sqrt3:
+// top, bottom right, bottom left. Down tiles are the up tile turned 180 (orientation 1).
 typedef struct {
   TessCurve c[3];
   uint8_t lattice;  // TESS_LATTICE_*
@@ -41,6 +46,9 @@ typedef struct {
   float minarea;  // Border bits smaller than this (cells) join a neighbour (thin ones up to 4 x it)
   float neck;     // Border pieces narrower than this (cells) where the smaller side touches the
                   // border are cut there, the smaller side going to a neighbour (0 = off)
+  // Per edge kinds, x its length, used instead of bump when any is set: bow (sin pi t, out),
+  // wave (sin 2 pi t, out: a deeper / shallower S), slide (sin pi t, along: the middle moves)
+  float bow, wave, slide;
 } TessVary;
 
 typedef struct {
@@ -58,12 +66,13 @@ typedef struct {
 #define TESSCUT_SHAPE_LIZARD 0
 #define TESSCUT_SHAPE_FLOWER 1
 #define TESSCUT_SHAPE_PINWHEEL 2
-#define TESSCUT_SHAPES 3
+#define TESSCUT_SHAPE_TRIHOOK 3
+#define TESSCUT_SHAPES 4
 
 // Shape by number (unknown -> lizard)
 const TessShape * tesscut_shape(uint8_t shape);
 const TessShape * tesscut_lizard(void);
-// The unit tile's outline (6 or 4 edges, closed, y down) for previews; xy holds tesscut_tilepoints
+// The unit tile's outline (6, 4 or 3 edges, closed, y down) for previews; xy holds tesscut_tilepoints
 // pairs. Returns the point count.
 uint32_t tesscut_tilepoints(const TessShape * sh);
 uint32_t tesscut_tile(const TessShape * sh, float * xy);

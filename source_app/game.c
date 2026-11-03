@@ -92,7 +92,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     free(save);
     return 1;
   }
-  g->board.norotate = !si->rotate;
+  g->board.turns = si->rotate == CUT_ROTATE_HALF ? BOARD_TURNS_HALF
+      : si->rotate == CUT_ROTATE_QUARTER ? BOARD_TURNS_QUARTER : BOARD_TURNS_NONE;
   g->sel = calloc(g->board.count, 1);
   g->boxsel = calloc(g->board.count, 1);
   if(!g->sel || !g->boxsel || drawlist_init(&g->dl, g->board.count)) {
@@ -516,7 +517,7 @@ void game_render_top(Game * g, TextDraw * td) {
       textdraw_print(td, 6, 208, 0.5f, white, "%lu pieces, %lu groups left",
           (unsigned long)g->board.count, (unsigned long)g->board.ngroups);
     }
-    textdraw_print(td, 6, 224, 0.45f, dim, g->board.norotate ? "Up/Down or X/B zoom  START save+menu"
+    textdraw_print(td, 6, 224, 0.45f, dim, g->board.turns == BOARD_TURNS_NONE ? "Up/Down or X/B zoom  START save+menu"
         : "L or R rotate held  Up/Down or X/B zoom  START save+menu");
   }
   if(panel > 0) {

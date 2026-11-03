@@ -2,6 +2,7 @@
 // Pieces filled by orientation (red / yellow / green, lightness varied per piece), dark
 // outlines; prints TessStats. JITTER 0 BUMP 0 = the plain tiling. TESS_SHAPE=n: TESSCUT_SHAPE_*.
 // TESS_QUILT=1: each piece a random quilt colour instead (one orientation: Pinwheel).
+// TESS_KIND=BOW,WAVE,SLIDE: per edge bend kinds instead of BUMP. TESS_S=A,P: a triangle-lattice S curve instead of TESS_SHAPE, n = A sgn(u) |u|^P, u = sin 2 pi t.
 #include "tesscut.h"
 #include "geom.h"
 
@@ -20,7 +21,7 @@ int main(int argc, char ** argv) {
   }
   int cols = atoi(argv[2]), rows = atoi(argv[3]);
   uint32_t seed = strtoul(argv[4], NULL, 0);
-  TessVary v = { 0.08f, 0.08f, 0.06f, 0.4f, 0.2f };
+  TessVary v = { 0.08f, 0.08f, 0.06f, 0.4f, 0.2f, 0, 0, 0 };
   if(argc > 7) {
     v.jitter = atof(argv[5]);
     v.bump = atof(argv[6]);
@@ -28,11 +29,24 @@ int main(int argc, char ** argv) {
   }
   float cell = argc > 8 ? atof(argv[8]) : 40;
   if(getenv("TESS_NECK")) v.neck = atof(getenv("TESS_NECK"));
+  if(getenv("TESS_KIND")) sscanf(getenv("TESS_KIND"), "%f,%f,%f", &v.bow, &v.wave, &v.slide);   // Instead of BUMP
   CutGraph g;
   uint8_t * ori;
   TessStats st;
   int shape = getenv("TESS_SHAPE") ? atoi(getenv("TESS_SHAPE")) : TESSCUT_SHAPE_LIZARD;
-  if(tesscut_graph(cols, rows, tesscut_shape(shape), &v, seed, &g, &ori, &st)) {
+  const TessShape * sh = tesscut_shape(shape);
+  static float scurve[2 * 31];
+  static TessShape custom = { { { 31, scurve } }, TESS_LATTICE_TRI };
+  float sa, sp;
+  if(getenv("TESS_S") && sscanf(getenv("TESS_S"), "%f,%f", &sa, &sp) == 2) {
+    for(int i = 0; i < 31; i++) {
+      float tt = (i + 1) / 32.0f, u = sinf(2 * (float)M_PI * tt);
+      scurve[2 * i] = tt;
+      scurve[2 * i + 1] = sa * (u < 0 ? -1 : 1) * powf(fabsf(u), sp);
+    }
+    sh = &custom;
+  }
+  if(tesscut_graph(cols, rows, sh, &v, seed, &g, &ori, &st)) {
     fprintf(stderr, "cut failed\n");
     return 1;
   }
@@ -174,7 +188,7 @@ int main(int argc, char ** argv) {
         }
         uint8_t * o = img + ((size_t)y * W + x) * 3;
         float edge = d < 1.2f ? 0.15f : 1;
-        const uint8_t * bc = usequilt ? quilt[(p * 2654435761u >> 16) % 8] : base[ori[p]];
+        const uint8_t * bc = usequilt ? quilt[((p * 2654435761u) ^ (p * 2654435761u >> 15)) * 2246822519u >> 29] : base[ori[p]];
         for(int c = 0; c < 3; c++) o[c] = (uint8_t)(bc[c] * shade * edge);
       }
     }

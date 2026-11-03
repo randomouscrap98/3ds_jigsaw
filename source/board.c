@@ -51,6 +51,13 @@ void board_free(Board * b) {
 }
 
 // Position a single-piece group so that piece's center lands on (cx, cy)
+// A random starting rotation the turns allow. Always one draw, so every mode leaves the rng in
+// the same place.
+static uint8_t board_randrot(const Board * b, Rng * rng) {
+  uint8_t r = rng_below(rng, 4);
+  return b->turns == BOARD_TURNS_NONE ? 0 : b->turns == BOARD_TURNS_HALF ? r & 2 : r;
+}
+
 static void board_place_single(Board * b, uint16_t piece, float cx, float cy, uint8_t rot) {
   BoardGroup * g = b->groups + b->pieces[piece].group;
   float rx, ry;
@@ -97,7 +104,7 @@ void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h)
   if(!slots) {
     // Degenerate fallback: stack everything in the middle
     for(uint32_t i = 0; i < b->count; i++) {
-      board_place_single(b, i, x + w / 2, y + h / 2, rng_below(&rng, 4) * !b->norotate);
+      board_place_single(b, i, x + w / 2, y + h / 2, board_randrot(b, &rng));
     }
   } else {
     for(uint32_t i = 0; i < nslots; i++) slots[i] = i;
@@ -115,7 +122,7 @@ void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h)
       uint32_t s = slots[i];
       float cx = offx + ((s % scols) + 0.5f) * slot + rng_range(&rng, -slack, slack);
       float cy = offy + ((s / scols) + 0.5f) * slot + rng_range(&rng, -slack, slack);
-      board_place_single(b, i, cx, cy, rng_below(&rng, 4) * !b->norotate);
+      board_place_single(b, i, cx, cy, board_randrot(b, &rng));
     }
     free(slots);
   }
@@ -163,9 +170,9 @@ void board_move(Board * b, uint16_t group, float dx, float dy) {
 }
 
 void board_rotate(Board * b, uint16_t group, int dir, float px, float py) {
-  if(b->norotate) return;
+  if(b->turns == BOARD_TURNS_NONE) return;
   BoardGroup * g = b->groups + group;
-  uint8_t r = dir > 0 ? 1 : 3;
+  uint8_t r = b->turns == BOARD_TURNS_HALF ? 2 : dir > 0 ? 1 : 3;
   float rx, ry;
   board_rotvec(r, g->x - px, g->y - py, &rx, &ry);
   g->x = px + rx;
@@ -421,11 +428,11 @@ int board_scatterpack(Board * b, uint32_t seed, float x, float y, float w, float
   }
   for(uint32_t i = 0; i < n; i++) {
     // Lying flat packs tighter: random turn, then a quarter more if that leaves it standing
-    uint8_t rot = rng_below(&rng, 4) * !b->norotate;
+    uint8_t rot = board_randrot(b, &rng);
     for(int pass = 0; pass < 2; pass++) {
       float * bx = box + 4 * i;
       board_hbbounds(geo, i, rot, bx);
-      if(b->norotate || bx[3] - bx[1] <= bx[2] - bx[0]) break;
+      if(b->turns != BOARD_TURNS_QUARTER || bx[3] - bx[1] <= bx[2] - bx[0]) break;
       rot = (rot + 1) & 3;
     }
     b->groups[i].rot = rot;

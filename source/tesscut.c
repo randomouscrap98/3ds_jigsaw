@@ -13,7 +13,7 @@
 #define TESS_FITS 4         // Builds to fit the piece count (tile size rescaled each time)
 #define TESS_MAXFAILS 8     // Failed builds (retried with the lattice moved) before giving up
 #define TESS_MAXMERGE 32    // Merge rounds for small / thin border bits
-#define TESS_MAXDEG 4       // Edges at a lattice vertex (hex 3, diamond 4)
+#define TESS_MAXDEG 6       // Edges at a lattice vertex (hex 3, diamond 4, tri 6)
 #define TESS_BORDERGAP 0.02f  // Points this close to a border line are pushed off it (cells), so
                               // crossings there are well apart and come out in the right order
 
@@ -50,12 +50,19 @@ static const float tess_pin0[] = { 1 / 6.0f, -1 / 6.0f, 0.5f, 1 / 6.0f, 0.5f, -1
 static const TessShape tess_pinwheel = { { { sizeof tess_pin0 / sizeof(float) / 2, tess_pin0 } },
     TESS_LATTICE_DIAMOND };
 
+// Trihook: after a classroom triangle tessellation (every side the same S; drawn, not traced):
+// n = 0.22 sgn(u) |u|^0.6, u = sin 2 pi t (fuller lobes than a sine), 31 points
+static const float tess_tri0[] = { 0.03125f, 0.082521f, 0.0625f, 0.12363f, 0.09375f, 0.15462f, 0.125f, 0.1787f, 0.15625f, 0.19694f, 0.1875f, 0.20979f, 0.21875f, 0.21745f, 0.25f, 0.22f, 0.28125f, 0.21745f, 0.3125f, 0.20979f, 0.34375f, 0.19694f, 0.375f, 0.1787f, 0.40625f, 0.15462f, 0.4375f, 0.12363f, 0.46875f, 0.082521f, 0.5f, 0.0f, 0.53125f, -0.082521f, 0.5625f, -0.12363f, 0.59375f, -0.15462f, 0.625f, -0.1787f, 0.65625f, -0.19694f, 0.6875f, -0.20979f, 0.71875f, -0.21745f, 0.75f, -0.22f, 0.78125f, -0.21745f, 0.8125f, -0.20979f, 0.84375f, -0.19694f, 0.875f, -0.1787f, 0.90625f, -0.15462f, 0.9375f, -0.12363f, 0.96875f, -0.082521f };
+static const TessShape tess_trihook = { { { sizeof tess_tri0 / sizeof(float) / 2, tess_tri0 } },
+    TESS_LATTICE_TRI };
+
 const TessShape * tesscut_lizard(void) {
   return &tess_lizard;
 }
 
 const TessShape * tesscut_shape(uint8_t shape) {
-  return shape == TESSCUT_SHAPE_FLOWER ? &tess_flower : shape == TESSCUT_SHAPE_PINWHEEL ? &tess_pinwheel : &tess_lizard;
+  return shape == TESSCUT_SHAPE_FLOWER ? &tess_flower : shape == TESSCUT_SHAPE_PINWHEEL ? &tess_pinwheel :
+      shape == TESSCUT_SHAPE_TRIHOOK ? &tess_trihook : &tess_lizard;
 }
 
 static void tess_rot(float ang, float x, float y, float * ox, float * oy) {
@@ -65,19 +72,19 @@ static void tess_rot(float ang, float x, float y, float * ox, float * oy) {
 }
 
 static int tess_nedges(const TessShape * sh) {
-  return sh->lattice == TESS_LATTICE_DIAMOND ? 4 : 6;
+  return sh->lattice == TESS_LATTICE_DIAMOND ? 4 : sh->lattice == TESS_LATTICE_TRI ? 3 : 6;
 }
 
 static void tess_vertex(const TessShape * sh, int k, float * x, float * y) {
   int n = tess_nedges(sh);
-  float a = 2 * (float)M_PI / n * (k % n) - (n == 4 ? (float)M_PI / 2 : 0);
-  *x = cosf(a);
-  *y = sinf(a);
+  float a = 2 * (float)M_PI / n * (k % n) - (n == 6 ? 0 : (float)M_PI / 2), r = n == 3 ? 1 / TESS_SQRT3 : 1;
+  *x = r * cosf(a);
+  *y = r * sinf(a);
 }
 
 // The free curve local edge k comes from
 static const TessCurve * tess_curve(const TessShape * sh, int k) {
-  return sh->lattice == TESS_LATTICE_DIAMOND ? &sh->c[0] : &sh->c[k / 2];
+  return sh->lattice != TESS_LATTICE_HEX ? &sh->c[0] : &sh->c[k / 2];
 }
 
 // Points along local edge k of the unit tile, ends included (count: tess_edgepoints)
@@ -86,8 +93,8 @@ static uint32_t tess_edgepoints(const TessShape * sh, int k) {
 }
 
 static void tess_edge(const TessShape * sh, int k, float * xy) {
-  int diamond = sh->lattice == TESS_LATTICE_DIAMOND;
-  int f = diamond ? 0 : k & ~1;   // The free edge it comes from
+  int one = sh->lattice != TESS_LATTICE_HEX;   // One curve, turned around the center per edge
+  int f = one ? 0 : k & ~1;   // The free edge it comes from
   const TessCurve * c = tess_curve(sh, k);
   float ax, ay, bx, by;
   tess_vertex(sh, f, &ax, &ay);
@@ -114,9 +121,9 @@ static void tess_edge(const TessShape * sh, int k, float * xy) {
   }
   xy[2 * m] = bx; xy[2 * m + 1] = by;
   m++;
-  if(diamond) {
-    // Edge 0 turned 90 k degrees around the center
-    for(uint32_t i = 0; i < m; i++) tess_rot((float)M_PI / 2 * k, xy[2 * i], xy[2 * i + 1], xy + 2 * i, xy + 2 * i + 1);
+  if(one) {
+    // Edge 0 turned 360 / edges x k degrees around the center
+    for(uint32_t i = 0; i < m; i++) tess_rot(2 * (float)M_PI / tess_nedges(sh) * k, xy[2 * i], xy[2 * i + 1], xy + 2 * i, xy + 2 * i + 1);
     return;
   }
   if(!(k & 1)) return;
@@ -152,7 +159,7 @@ uint32_t tesscut_tile(const TessShape * sh, float * xy) {
 // Working state: each edge's unbent points (after vertex jitter) and its current bend
 typedef struct {
   float * base;       // 2 * npts per edge at the edge's p0
-  float * bend;       // 2 per edge
+  float * bend;       // 3 per edge: bow, wave, slide
 } TessWork;
 
 static void tess_applybend(CutGraph * g, const TessWork * w, uint32_t ei) {
@@ -162,12 +169,27 @@ static void tess_applybend(CutGraph * g, const TessWork * w, uint32_t ei) {
   float dx = bx - ax, dy = by - ay, L = sqrtf(dx * dx + dy * dy);
   if(L <= 0) return;
   float nx = -dy / L, ny = dx / L;
+  const float * bd = w->bend + 3 * ei;
   for(uint32_t i = 0; i < e->npts; i++) {
-    float t = (float)(i + 1) / (e->npts + 1);
-    float d = L * (w->bend[2 * ei] * sinf((float)M_PI * t) + w->bend[2 * ei + 1] * sinf(2 * (float)M_PI * t));
-    g->pts[2 * (e->p0 + i)] = b[2 * i] + nx * d;
-    g->pts[2 * (e->p0 + i) + 1] = b[2 * i + 1] + ny * d;
+    float t = (float)(i + 1) / (e->npts + 1), s1 = sinf((float)M_PI * t);
+    float d = L * (bd[0] * s1 + bd[1] * sinf(2 * (float)M_PI * t)), a = L * bd[2] * s1;
+    g->pts[2 * (e->p0 + i)] = b[2 * i] + nx * d - ny * a;
+    g->pts[2 * (e->p0 + i) + 1] = b[2 * i + 1] + ny * d + nx * a;
   }
+}
+
+// New random bend for an edge, f (0..1) x the full amounts. Bump alone draws as it always
+// has (pinned cuts stay the same).
+static void tess_rollbend(Rng * rng, const TessVary * v, float f, float * bd) {
+  if(v->bow > 0 || v->wave > 0 || v->slide > 0) {
+    bd[0] = rng_range(rng, -1, 1) * v->bow * f;
+    bd[1] = rng_range(rng, -1, 1) * v->wave * f;
+    bd[2] = rng_range(rng, -1, 1) * v->slide * f;
+    return;
+  }
+  bd[0] = rng_range(rng, -v->bump * f, v->bump * f);
+  bd[1] = rng_range(rng, -v->bump * f, v->bump * f) * 0.5f;
+  bd[2] = 0;
 }
 
 static float tess_arclen(const CutGraph * g, const CutEdge * e) {
@@ -241,10 +263,12 @@ static int tess_addedge(TessBuild * bd, uint32_t l0, uint32_t l1, const float * 
 // (<= -s), varied (jitter, bends rerolled around thin pieces). ori: per tile.
 // Hex: lattice points (ox + x s/2, oy + y s sqrt3/2), centers every 3 x and 2 y (odd columns a
 // row down). Diamond: lattice points (ox + x s, oy + y s), centers where x + y is even.
+// Tri: lattice points as hex, a band of tiles between rows y and y + 1: up tiles (apex (x, y))
+// where x + y is even, down tiles (apex (x, y + 1)) between.
 static int tess_tiles(float w, float h, float s, float ox, float oy, const TessShape * sh, const TessVary * v,
     uint32_t seed, CutGraph * g, uint8_t ** orient, TessStats * stats) {
   memset(g, 0, sizeof(CutGraph));
-  int diamond = sh->lattice == TESS_LATTICE_DIAMOND, nedges = tess_nedges(sh);
+  int diamond = sh->lattice == TESS_LATTICE_DIAMOND, tri = sh->lattice == TESS_LATTICE_TRI, nedges = tess_nedges(sh);
   float ux = diamond ? s : s / 2, uy = diamond ? s : s * TESS_SQRT3 / 2;
   int nc, nr, lx0, ly0, lw, lh;
   if(diamond) {
@@ -254,6 +278,12 @@ static int tess_tiles(float w, float h, float s, float ox, float oy, const TessS
     lx0 = 0; ly0 = 0; lw = nc + 2; lh = nr + 2;
     g->count = 0;
     for(int i = 1; i <= nc; i++) g->count += (nr + (i & 1)) / 2;
+  } else if(tri) {
+    // Tiles x in 0..nc in bands 0..nr - 1
+    nc = (int)ceilf((w - ox) / ux) + 2;
+    nr = (int)ceilf((h - oy) / uy) + 1;
+    lx0 = -1; ly0 = 0; lw = nc + 3; lh = nr + 1;
+    g->count = (uint32_t)nr * (nc + 1);
   } else {
     nc = (int)ceilf((w - ox + s) / (1.5f * s)) + 1;
     nr = (int)ceilf((h - oy + s) / (TESS_SQRT3 * s)) + 1;
@@ -280,7 +310,7 @@ static int tess_tiles(float w, float h, float s, float ox, float oy, const TessS
   g->pts = malloc(sizeof(float) * 2 * maxe * maxept);
   uint8_t * ori = malloc(g->count);
   float * world = malloc(sizeof(float) * 2 * maxept);
-  TessWork wk = { malloc(sizeof(float) * 2 * maxe * maxept), calloc(2 * maxe, sizeof(float)) };
+  TessWork wk = { malloc(sizeof(float) * 2 * maxe * maxept), calloc(3 * maxe, sizeof(float)) };
   float * xy = NULL, * old = NULL;
   TessBuild bd = { g, vid, vedge, vdeg, maxe, stats };
   int ok = vid && vedge && vdeg && g->v && g->e && g->pts && ori && world && wk.base && wk.bend;
@@ -303,6 +333,31 @@ static int tess_tiles(float w, float h, float s, float ox, float oy, const TessS
           for(uint32_t q = 0; q < ept[k]; q++) {
             world[2 * q] = ox + cx * ux + s * local[k][2 * q];
             world[2 * q + 1] = oy + cy * uy + s * local[k][2 * q + 1];
+          }
+          if(tess_addedge(&bd, l[0], l[1], world, ept[k] - 2, p)) goto fail;
+        }
+      }
+    }
+  } else if(tri) {
+    for(int y = 0; y < nr; y++) {
+      for(int x = 0; x <= nc; x++, p++) {
+        int up = !((x + y) & 1);
+        ori[p] = !up;
+        // V0..V2 as tess_vertex (down: turned 180)
+        const int vx[3] = { x, up ? x + 1 : x - 1, up ? x - 1 : x + 1 };
+        const int vy[3] = { up ? y : y + 1, up ? y + 1 : y, up ? y + 1 : y };
+        float cx = ox + x * ux, cy = oy + (y + (up ? 2 : 1) / 3.0f) * uy;
+        for(int k = 0; k < 3; k++) {
+          uint32_t l[2];
+          for(int e = 0; e < 2; e++) {
+            int lx = vx[(k + e) % 3], ly = vy[(k + e) % 3];
+            l[e] = (uint32_t)(ly - ly0) * lw + (lx - lx0);
+            tess_vid(&bd, l[e], ox + lx * ux, oy + ly * uy);
+          }
+          for(uint32_t q = 0; q < ept[k]; q++) {
+            float lxy = local[k][2 * q], lyy = local[k][2 * q + 1];
+            world[2 * q] = cx + s * (up ? lxy : -lxy);
+            world[2 * q + 1] = cy + s * (up ? lyy : -lyy);
           }
           if(tess_addedge(&bd, l[0], l[1], world, ept[k] - 2, p)) goto fail;
         }
@@ -370,21 +425,19 @@ static int tess_tiles(float w, float h, float s, float ox, float oy, const TessS
   memcpy(wk.base, g->pts, sizeof(float) * 2 * g->npts);
   // Bends, rerolled (smaller each pass) around pieces that come out too thin
   for(uint32_t i = 0; i < g->ne; i++) {
-    wk.bend[2 * i] = rng_range(&rng, -v->bump, v->bump);
-    wk.bend[2 * i + 1] = rng_range(&rng, -v->bump, v->bump) * 0.5f;
+    tess_rollbend(&rng, v, 1, wk.bend + 3 * i);
     tess_applybend(g, &wk, i);
   }
   for(uint32_t pass = 0; pass <= TESS_MAXPASSES; pass++) {
     int bad = 0;
-    float amp = v->bump * (1 - (float)pass / TESS_MAXPASSES);
+    float amp = 1 - (float)pass / TESS_MAXPASSES;
     for(uint32_t pc = 0; pc < g->count; pc++) {
       uint32_t n = cutgraph_outline(g, pc, 1, 0, 0, xy);
       if(cutgraph_thick_ok(xy, n, v->clear)) continue;
       bad++;
       for(uint32_t q = g->pstart[pc]; q < g->pstart[pc + 1]; q++) {
         uint32_t ei = g->pedge[q] / 2;
-        wk.bend[2 * ei] = rng_range(&rng, -amp, amp);
-        wk.bend[2 * ei + 1] = rng_range(&rng, -amp, amp) * 0.5f;
+        tess_rollbend(&rng, v, amp, wk.bend + 3 * ei);
         stats->flattened += pass == TESS_MAXPASSES;
         tess_applybend(g, &wk, ei);
       }
@@ -984,8 +1037,8 @@ int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const Tess
   if(orient) *orient = NULL;
   uint32_t target = (uint32_t)cols * rows;
   // Tile radius for one cell of area per tile, then rescaled to the count the border leaves
-  int diamond = sh->lattice == TESS_LATTICE_DIAMOND;
-  float s = diamond ? sqrtf(0.5f) : sqrtf(2 / (3 * TESS_SQRT3));
+  int diamond = sh->lattice == TESS_LATTICE_DIAMOND, tri = sh->lattice == TESS_LATTICE_TRI;
+  float s = diamond ? sqrtf(0.5f) : tri ? sqrtf(4 / TESS_SQRT3) : sqrtf(2 / (3 * TESS_SQRT3));
   Rng rng;
   rng_init(&rng, seed ^ 0x0FF5E7u);
   float fx = rng_range(&rng, 0, 1), fy = rng_range(&rng, 0, 1);
@@ -999,9 +1052,9 @@ int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const Tess
     TessStats st = { 0 };
     CutGraph full, c;
     uint8_t * ori = NULL;
-    // Lattice origin: a random spot within two columns / three rows (diamond: one period), a
+    // Lattice origin: a random spot within two columns / three rows (diamond, tri: one period), a
     // tile out
-    float ox = -s - fx * (diamond ? 2 : 3) * s, oy = -s - fy * (diamond ? 2 * s : 3 * s * TESS_SQRT3);
+    float ox = -s - fx * (diamond ? 2 : tri ? 1 : 3) * s, oy = -s - fy * (diamond ? 2 * s : tri ? s * TESS_SQRT3 : 3 * s * TESS_SQRT3);
     if(tess_tiles(cols, rows, s, ox, oy, sh, v, seed, &full, &ori, &st)) break;
     int err = tess_clip(&full, cols, rows, &c);
     cutgraph_free(&full);

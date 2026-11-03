@@ -61,6 +61,25 @@ void test_board(void) {
   board_rotate(&b, 0, 1, 33, 7);
   board_rotate(&b, 0, -1, 33, 7);
   CHECKF(b.groups[0].x, 100); CHECKF(b.groups[0].y, 100);
+  // Half turns: either direction turns 180 around the pivot; scatter only uses 0 and 2
+  b.turns = BOARD_TURNS_HALF;
+  board_rotate(&b, 0, 1, 33, 7);
+  CHECK(b.groups[0].rot == 3);
+  CHECKF(b.groups[0].x, 2 * 33 - 100); CHECKF(b.groups[0].y, 2 * 7 - 100);
+  board_rotate(&b, 0, -1, 33, 7);
+  CHECK(b.groups[0].rot == 1);
+  CHECKF(b.groups[0].x, 100); CHECKF(b.groups[0].y, 100);
+  board_scatter(&b, 3, 0, 0, 200, 150);
+  int odd = 0, two = 0;
+  for(uint32_t i = 0; i < b.ngroups; i++) { odd += b.groups[i].rot & 1; two += b.groups[i].rot == 2; }
+  CHECK(odd == 0 && two > 0);
+  b.turns = BOARD_TURNS_NONE;
+  uint8_t r0 = b.groups[0].rot;
+  board_rotate(&b, 0, 1, 33, 7);
+  CHECK(b.groups[0].rot == r0);
+  board_scatter(&b, 3, 0, 0, 200, 150);
+  for(uint32_t i = 0; i < b.ngroups; i++) odd += b.groups[i].rot != 0;
+  CHECK(odd == 0);
   test_board_free(&b);
 
   // Rotation about a pivot keeps the pivot fixed and moves pieces correctly
