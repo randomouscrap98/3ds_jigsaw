@@ -41,8 +41,9 @@ typedef struct {
   uint8_t kind, sub;      // CUT_KIND_* and that builder's own style
   uint8_t whimsies;       // Can have whimsies (otherwise the setting is ignored and grayed out)
   uint8_t rotate;         // CUT_ROTATE_*: how pieces turn (a quarter turned hex doesn't fit its grid)
-  uint8_t thin;           // Thin, winding pieces (maze): grabbed by loose hulls too, scattered by
-                          // packing their bounds on a bigger table, condensed by outline
+  uint8_t hulls;          // Pieces with narrow parts or hollows: grabbed by loose hulls too
+  uint8_t sprawl;         // Bounds mostly empty (maze, lizard): scattered by packing their bounds
+                          // on a bigger table, condensed by outline
   uint8_t samplepieces;   // Menu cut sample size (long winding lines need fewer)
 } CutStyleInfo;
 

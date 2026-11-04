@@ -73,9 +73,9 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   }
   // Only one game per picture, so its caches for other counts/styles are dead weight
   storage_cleancaches(name, cpath);
-  // Thin pieces (maze) are grabbed by a loose hull too, and they need more room
+  // Some pieces are grabbed by a loose hull too; sprawling ones (maze) need more room
   const CutStyleInfo * si = cutter_info(style);
-  if(si->thin && piecegeo_hulls(&g->geo)) {
+  if(si->hulls && piecegeo_hulls(&g->geo)) {
     GAME_ERR("Out of memory (piece hulls)");
     piecegeo_free(&g->geo);
     puzzlegfx_free(&g->gfx);
@@ -83,7 +83,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     return 1;
   }
   Layout * l = &g->gfx.layout;
-  float scale = si->thin ? GAME_TABLESCALE_MAZE : GAME_TABLESCALE;
+  float scale = si->sprawl ? GAME_TABLESCALE_SPRAWL : GAME_TABLESCALE;
   float tw = l->width * scale, th = l->height * scale;
   if(board_init(&g->board, &g->geo, tw, th)) {
     GAME_ERR("Out of memory (board)");
@@ -121,7 +121,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   } else {
     float sw = tw * GAME_SCATTER, sh = th * GAME_SCATTER;
     uint32_t sseed = (uint32_t)osGetTime() ^ rng_hashstr(name);
-    if(si->thin) board_scatterpack(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
+    if(si->sprawl) board_scatterpack(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
     else board_scatter(&g->board, sseed, (tw - sw) / 2, (th - sh) / 2, sw, sh);
     g->dirty = 1;
   }
@@ -266,7 +266,7 @@ static int game_release(Game * g) {
 // keep them selected (on top) so the block can be dragged away
 static void game_condense(Game * g) {
   Board * b = &g->board;
-  if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE, cutter_info(g->style)->thin)) return;
+  if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE, cutter_info(g->style)->sprawl)) return;
   board_raise_marked(b, g->sel);
   g->dldirty = 1;
   g->dirty = 1;

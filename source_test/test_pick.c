@@ -24,7 +24,7 @@ static int32_t pick_old(Board * b, float x, float y) {
 
 void test_pick_same(void) {
   for(uint8_t st = 0; st < CUT_STYLES; st++) {
-    if(cutter_info(st)->thin) continue;   // Hull picking: tested below
+    if(cutter_info(st)->hulls) continue;   // Hull picking: tested below
     for(uint8_t wh = 0; wh < 2; wh++) {
       Cutter c;
       CHECK(cutter_init(&c, st, wh ? WHIMSY_MANY : WHIMSY_NONE, WHIMSY_SET_CUTE, 12, 9, 50 + st) == 0);
@@ -54,7 +54,7 @@ void test_pick_same(void) {
 }
 
 // Maze: hulls hold their pieces, every piece is picked at its own cells after the packed
-// scatter, and the pack fits the game's scatter region (GAME_TABLESCALE_MAZE 3.5, 0.67 of it)
+// scatter, and the pack fits the game's scatter region (GAME_TABLESCALE_SPRAWL 3.5, 0.67 of it)
 void test_pick_maze(void) {
   const uint16_t sizes[3][2] = { { 8, 6 }, { 12, 9 }, { 26, 19 } };
   for(int si = 0; si < 3; si++) {

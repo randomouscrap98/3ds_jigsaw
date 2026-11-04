@@ -20,21 +20,21 @@ static const CutStyleInfo cutter_styles[] = {
       .whimsies = 1, .rotate = CUT_ROTATE_QUARTER, .samplepieces = 100 },
   // Maze lines are ~6x as long: fewer sample pieces, or they cover the picture
   [CUT_STYLE_MAZE] = { "Maze", "maze", CUT_KIND_MAZE, 0,
-      .whimsies = 0, .rotate = CUT_ROTATE_QUARTER, .thin = 1, .samplepieces = 24 },
+      .whimsies = 0, .rotate = CUT_ROTATE_QUARTER, .hulls = 1, .sprawl = 1, .samplepieces = 24 },
   [CUT_STYLE_HEX] = { "Hex", "hex", CUT_KIND_HEX, 0,
       .whimsies = 0, .rotate = CUT_ROTATE_NONE, .samplepieces = 100 },
   // Legs and tails: grabbed by loose hulls too, packed when scattered (three orientations
   // 120 degrees apart: no quarter turns)
   [CUT_STYLE_LIZARD] = { "Lizard", "lizard", CUT_KIND_TESS, TESSCUT_SHAPE_LIZARD,
-      .whimsies = 0, .rotate = CUT_ROTATE_NONE, .thin = 1, .samplepieces = 50 },
+      .whimsies = 0, .rotate = CUT_ROTATE_NONE, .hulls = 1, .sprawl = 1, .samplepieces = 50 },
   // Quilt pinwheel stars on a 45 degree grid: one orientation, so quarter turns work. Sawtooth
   // sides are long: fewer sample pieces
   [CUT_STYLE_PINWHEEL] = { "Pinwheel", "pinwheel", CUT_KIND_TESS, TESSCUT_SHAPE_PINWHEEL,
       .whimsies = 0, .rotate = CUT_ROTATE_QUARTER, .samplepieces = 60 },
   // Swirls on a triangle grid: up and down pieces, a half turn apart. Long S sides: fewer
-  // sample pieces
+  // sample pieces. Hooks leave hollows: loose hulls
   [CUT_STYLE_TRIHOOK] = { "Trihook", "trihook", CUT_KIND_TESS, TESSCUT_SHAPE_TRIHOOK,
-      .whimsies = 0, .rotate = CUT_ROTATE_HALF, .samplepieces = 60 },
+      .whimsies = 0, .rotate = CUT_ROTATE_HALF, .hulls = 1, .samplepieces = 60 },
 };
 // A gap in the list would be a zeroed entry: test_cut_styles checks every one is filled in
 _Static_assert(sizeof cutter_styles / sizeof cutter_styles[0] == CUT_STYLES, "one CutStyleInfo per CUT_STYLE_*");
