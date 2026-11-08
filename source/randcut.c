@@ -357,7 +357,7 @@ int randcut_graph(CutGraph * c, float w, float h, uint32_t count, uint32_t seed,
     for(int pass = 0; pass <= st->relax && !err; pass++) {
       uint32_t n = 0;
       for(uint32_t i = 0; i < count && !err; i++) {
-        if(i % 64 == 0) progress_report(pr, "Cutting pieces", pass * count + i, (st->relax + 1) * count);
+        if(i % 64 == 0) progress_report(pr, PROGRESS_CUTTING, pass * count + i, (st->relax + 1) * count);
         wk.cstart[i] = n;
         int m = randcut_cell(sites, count, i, w, h, near, wk.cell + n);
         if(m == 0) err = 1;

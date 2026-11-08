@@ -52,11 +52,11 @@ int cutter_byid(const char * id) {
 
 // Maze pieces: a cut with a repeated piece shape or a problematic piece is retried with a
 // new seed
-static int cutter_maze(Cutter * c, uint32_t seed) {
+static int cutter_maze(Cutter * c, uint32_t seed, const Progress * pr) {
   c->usegraph = 1;
   for(uint32_t t = 0; t < CUTTER_MAZETRIES; t++) {
     MazePieces m;
-    if(mazepiece_init(&m, c->cols, c->rows, c->count, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, randcut_tryseed(seed, t))) continue;
+    if(mazepiece_init(&m, c->cols, c->rows, c->count, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, randcut_tryseed(seed, t), pr)) continue;
     int err = m.dups || m.problems || mazepiece_graph(&m, c->cols, c->rows, &c->g);
     mazepiece_free(&m);
     if(err) continue;
@@ -108,8 +108,9 @@ int cutter_initp(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_
   c->cols = cols;
   c->rows = rows;
   c->count = (uint32_t)cols * rows;
+  progress_report(pr, PROGRESS_CUTTING, 0, 1);   // Every style; the slow ones report more as they go
   switch(si->kind) {
-  case CUT_KIND_MAZE: return cutter_maze(c, seed);
+  case CUT_KIND_MAZE: return cutter_maze(c, seed, pr);
   case CUT_KIND_HEX: return cutter_hex(c);
   case CUT_KIND_TESS: return cutter_tess(c, si->sub, seed, pr);
   case CUT_KIND_RANDOM: return cutter_graph(c, randcut_style(si->sub), seed, pr);

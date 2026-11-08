@@ -86,8 +86,8 @@ typedef struct {
 // Same style + whimsy level + set + seed = same cut. Unknown styles cut classic, unknown
 // whimsy levels/sets are none/cute. Returns 0 on success.
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed);
-// cutter_init with progress reports for the slow parts (pr may be NULL): "Cutting pieces" in random and
-// tessellation cuts, "Adding whimsies"
+// cutter_init with progress reports (pr may be NULL): PROGRESS_CUTTING once at the start, then
+// through random, maze and tessellation cuts; "Adding whimsies" once per whimsy
 int cutter_initp(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed,
     const Progress * pr);
 void cutter_free(Cutter * c);

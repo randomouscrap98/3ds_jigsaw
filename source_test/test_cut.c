@@ -458,7 +458,7 @@ void test_maze_problems(void) {
   CHECK(problems_in(nohook, 5) == 0);
   // A real cut with one (found by a sweep), and the cutter skipping it
   MazePieces m;
-  CHECK(!mazepiece_init(&m, 25, 20, 500, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, 612));
+  CHECK(!mazepiece_init(&m, 25, 20, 500, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, 612, NULL));
   CHECK(m.problems == 1);
   mazepiece_free(&m);
   uint32_t found = 0;
@@ -466,7 +466,7 @@ void test_maze_problems(void) {
     Cutter cut;
     CHECK(!cutter_init(&cut, CUT_STYLE_MAZE, WHIMSY_NONE, WHIMSY_SET_CUTE, 25, 20, seed));
     MazePieces again;
-    if(!mazepiece_init(&again, 25, 20, 500, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, randcut_tryseed(seed, cut.g.tries - 1))) {
+    if(!mazepiece_init(&again, 25, 20, 500, CUTTER_MAZEAVG, CUTTER_MAZENEWEST, 0, randcut_tryseed(seed, cut.g.tries - 1), NULL)) {
       found += again.problems;
       mazepiece_free(&again);
     }

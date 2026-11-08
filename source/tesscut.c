@@ -1049,7 +1049,7 @@ int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const Tess
   // order is then a toss-up): the lattice moves a little and the same size is built again
   int fails = 0;
   for(int fit = 0; fit < TESS_FITS && fails < TESS_MAXFAILS; fit++) {
-    progress_report(pr, "Cutting pieces", fit, TESS_FITS);
+    progress_report(pr, PROGRESS_CUTTING, fit, TESS_FITS);
     TessStats st = { 0 };
     CutGraph full, c;
     uint8_t * ori = NULL;

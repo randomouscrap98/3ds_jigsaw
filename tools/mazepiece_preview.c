@@ -67,7 +67,7 @@ int main(int argc, char ** argv) {
   uint16_t cols, rows;
   layout_grid(1024, 768, target, &cols, &rows);
   MazePieces m;
-  if(mazepiece_init(&m, cols, rows, cols * rows, avg, newest, cap, seed)) { fprintf(stderr, "failed\n"); return 1; }
+  if(mazepiece_init(&m, cols, rows, cols * rows, avg, newest, cap, seed, NULL)) { fprintf(stderr, "failed\n"); return 1; }
   int W = m.w, H = m.h;
   uint32_t n = m.count;
   // Per piece: cells, bbox, ends / bends / branches (by same-piece neighbours)

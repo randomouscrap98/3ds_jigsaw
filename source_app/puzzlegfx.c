@@ -40,6 +40,30 @@ typedef struct {
 } PuzzleCacheHeader;
 
 #define PGFX_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
+#define PGFX_CUTBAR_MS 2000     // The cut's progress bar shows only after this long...
+#define PGFX_CUTBAR_LEFT 0.5f   // ...and only if at least this much of the cut is left then
+
+// Passes the cutter's reports on, except the cut stage's own (PROGRESS_CUTTING): those are dropped
+// for PGFX_CUTBAR_MS, then show from there on if enough is left (fast cuts never show a bar)
+typedef struct {
+  progress_fn cb;
+  void * udata;
+  u64 start;
+  int bar;    // -1 not decided yet, 0 no bar, 1 bar
+} PgfxCutProgress;
+
+static void puzzlegfx_cutprogress(void * udata, const char * msg, int done, int total) {
+  PgfxCutProgress * p = udata;
+  if(strcmp(msg, PROGRESS_CUTTING)) {
+    p->cb(p->udata, msg, done, total);
+    return;
+  }
+  if(p->bar < 0) {
+    if(svcGetSystemTick() - p->start < PGFX_CUTBAR_MS * (u64)(SYSCLOCK_ARM11 / 1000)) return;
+    p->bar = total > 1 && done <= total * (1 - PGFX_CUTBAR_LEFT);
+  }
+  if(p->bar) p->cb(p->udata, msg, done, total);
+}
 
 static void puzzlegfx_zero(PuzzleGfx * pg) {
   memset(pg, 0, sizeof(PuzzleGfx));
@@ -193,9 +217,10 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
     goto done;
   }
   // Cut first (in cells), then pick the piece size whose tiles fit the pages
-  if(cb) cb(udata, "Cutting pieces", 0, 1);
-  Progress pr = { cb, udata };
-  if(cutter_initp(&cut, h->key.style, h->key.whimsy, h->key.whimsyset, l->cols, l->rows, h->key.seed, &pr)) {
+  if(cb) cb(udata, PROGRESS_CUTTING, 0, 1);
+  PgfxCutProgress cp = { cb, udata, svcGetSystemTick(), -1 };
+  Progress pr = { puzzlegfx_cutprogress, &cp };
+  if(cutter_initp(&cut, h->key.style, h->key.whimsy, h->key.whimsyset, l->cols, l->rows, h->key.seed, cb ? &pr : NULL)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }

@@ -536,7 +536,8 @@ uint32_t mazepiece_problems(const MazePieces * m) {
   return found;
 }
 
-int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, float cap, uint32_t seed) {
+int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, float cap, uint32_t seed,
+    const Progress * pr) {
   memset(m, 0, sizeof(MazePieces));
   float wf = sqrtf((float)count * avg * cols / rows);
   uint16_t a = (uint16_t)lroundf((wf + 1) / 2), b = (uint16_t)lroundf((wf * rows / cols + 1) / 2);
@@ -563,6 +564,7 @@ int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count,
     // Threshold giving the piece count closest to the target
     uint32_t best = 2, bestd = UINT32_MAX;
     for(uint32_t thr = 2; thr <= 3 * avg; thr++) {
+      progress_report(pr, PROGRESS_CUTTING, thr - 2, 3 * avg - 1);
       uint32_t c = mp_cut(m, &t, thr, capcells, res, cut);
       uint32_t d = c > count ? c - count : count - c;
       if(d < bestd) { bestd = d; best = thr; }

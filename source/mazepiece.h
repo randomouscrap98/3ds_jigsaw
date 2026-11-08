@@ -2,6 +2,7 @@
 #define __HEADER_JIGSAW_MAZEPIECE__
 
 #include "cutgraph.h"
+#include "progress.h"
 
 #include <stdint.h>
 
@@ -27,7 +28,9 @@ typedef struct {
 // Cut a cols x rows puzzle (in pieces) into exactly count pieces of about avg cells each.
 // newest = maze branchiness: 1 = depth-first (long corridors), 0 = Prim-like (bushy).
 // cap > 0: pieces over cap x the mean size are split (best effort). Returns 0 on success.
-int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, float cap, uint32_t seed);
+// pr (may be NULL) hears PROGRESS_CUTTING through the threshold scan.
+int mazepiece_init(MazePieces * m, uint16_t cols, uint16_t rows, uint32_t count, uint32_t avg, float newest, float cap, uint32_t seed,
+    const Progress * pr);
 void mazepiece_free(MazePieces * m);
 // Problematic pieces (either hand): exactly a 4-way cell whose four arms all turn the
 // same way, each arm and hook straight, nothing else in the piece. Uses w, h, label, count.
