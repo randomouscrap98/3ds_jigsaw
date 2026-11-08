@@ -81,10 +81,11 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   }
 }
 
-// A table color shifted toward white (dark colors) or black (light ones) by t
-static u32 render_shade(u32 c, float t) {
+// A table color shifted toward white by lighten (dark colors) or black by darken (light ones)
+static u32 render_shade(u32 c, float lighten, float darken) {
   int r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
-  int to = (r * 3 + g * 6 + b) / 10 < RENDER_TRAY_DARK ? 255 : 0;
+  int dark = (r * 3 + g * 6 + b) / 10 < RENDER_TRAY_DARK, to = dark ? 255 : 0;
+  float t = dark ? lighten : darken;
   r += (int)lroundf((to - r) * t);
   g += (int)lroundf((to - g) * t);
   b += (int)lroundf((to - b) * t);
@@ -132,8 +133,8 @@ void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, Puzzle
   for(uint32_t i = 0; i < still; i++) render_piece(r, b, c, pg, dl->pieces[i], sel, &seltint, half);
   if(tray && tray->top < c->sh) {
     // Drawn in order, straight after the table pieces (same depth: later sprites cover earlier ones)
-    C2D_DrawRectSolid(0, tray->top, 0.5f, c->sw, c->sh - tray->top, render_shade(tc, RENDER_TRAY_SHADE));
-    C2D_DrawRectSolid(0, tray->top, 0.5f, c->sw, RENDER_TRAY_EDGE, render_shade(tc, RENDER_TRAY_EDGESHADE));
+    C2D_DrawRectSolid(0, tray->top, 0.5f, c->sw, c->sh - tray->top, render_shade(tc, RENDER_TRAY_LIGHTEN, RENDER_TRAY_DARKEN));
+    C2D_DrawRectSolid(0, tray->top, 0.5f, c->sw, RENDER_TRAY_EDGE, render_shade(tc, RENDER_TRAY_EDGESHADE, RENDER_TRAY_EDGESHADE));
     Camera tcam = tray->cam;
     for(uint32_t i = 0; i < b->ngroups; i++) {
       const BoardGroup * g = b->groups + b->order[i];
