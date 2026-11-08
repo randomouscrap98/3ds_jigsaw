@@ -116,7 +116,7 @@ int cutter_initp(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_
   case CUT_KIND_RANDOM: return cutter_graph(c, randcut_style(si->sub), seed, pr);
   default:
     if(c->whimsy != WHIMSY_NONE) return cutter_graph(c, NULL, seed, pr);
-    if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(si->sub))) return 1;
+    if(edgegen_initp(&c->eg, cols, rows, seed, edgegen_style(si->sub), pr)) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;
     return 0;
   }
@@ -136,7 +136,7 @@ int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed, const Prog
     ts.whimsytab = WHIMSY_TABEDGE;
     if(!rnd) {
       ts.jitter = edgegen_style(cutter_info(c->style)->sub);
-      if(edgegen_init(&c->eg, cols, rows, seed, ts.jitter)) return 1;
+      if(edgegen_initp(&c->eg, cols, rows, seed, ts.jitter, pr)) return 1;
     }
     int ok = 0;
     for(uint32_t t = 0; t < CUTTER_MAXTRIES && !ok; t++) {

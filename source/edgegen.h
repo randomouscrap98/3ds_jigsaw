@@ -1,6 +1,7 @@
 #ifndef __HEADER_JIGSAW_EDGEGEN__
 #define __HEADER_JIGSAW_EDGEGEN__
 
+#include "progress.h"
 #include "rng.h"
 
 #include <stdint.h>
@@ -55,6 +56,8 @@ typedef struct {
 const EdgeStyle * edgegen_style(uint8_t style);
 // The same seed and style always produce the same cut. Returns 0 on success.
 int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, const EdgeStyle * style);
+// edgegen_init with PROGRESS_CUTTING reports (pr may be NULL) through the piece check
+int edgegen_initp(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, const EdgeStyle * style, const Progress * pr);
 void edgegen_free(EdgeGen * eg);
 // 1 if the piece's outline passes the checks above
 int edgegen_piece_ok(const EdgeGen * eg, uint16_t col, uint16_t row);

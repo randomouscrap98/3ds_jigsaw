@@ -50,9 +50,9 @@ static void edgegen_reroll(EdgeGen * eg, uint32_t seed, uint16_t col, uint16_t r
   if(eg->style.corner > 0) edgegen_corners(eg, &r, col, row);
 }
 
-// Check every piece; reroll the bad ones and recheck around them until all pass.
-// Returns 0 if everything passed.
-static int edgegen_validate(EdgeGen * eg, uint32_t seed) {
+// Check every piece; reroll the bad ones and recheck around them until all pass (the first
+// pass checks everything, so it reports progress per row). Returns 0 if everything passed.
+static int edgegen_validate(EdgeGen * eg, uint32_t seed, const Progress * pr) {
   uint16_t cols = eg->cols, rows = eg->rows;
   uint8_t * check = malloc((size_t)cols * rows);
   if(!check) return 1;
@@ -62,6 +62,7 @@ static int edgegen_validate(EdgeGen * eg, uint32_t seed) {
     // Pieces rerolled this pass; their neighbours (incl. diagonal, via corners) need a recheck
     int any = 0;
     for(uint16_t row = 0; row < rows; row++) {
+      if(pass == 0) progress_report(pr, PROGRESS_CUTTING, row, rows);
       for(uint16_t col = 0; col < cols; col++) {
         uint8_t * c = check + row * cols + col;
         if(!(*c & 1)) continue;
@@ -88,6 +89,10 @@ static int edgegen_validate(EdgeGen * eg, uint32_t seed) {
 }
 
 int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, const EdgeStyle * style) {
+  return edgegen_initp(eg, cols, rows, seed, style, NULL);
+}
+
+int edgegen_initp(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, const EdgeStyle * style, const Progress * pr) {
   eg->cols = cols;
   eg->rows = rows;
   eg->style = *style;
@@ -117,7 +122,7 @@ int edgegen_init(EdgeGen * eg, uint16_t cols, uint16_t rows, uint32_t seed, cons
     }
   }
   // Not converging would only leave an odd looking piece, so it isn't an error
-  edgegen_validate(eg, seed);
+  edgegen_validate(eg, seed, pr);
   return 0;
 }
 
