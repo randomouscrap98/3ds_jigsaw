@@ -68,7 +68,7 @@ with the music off.
 The easy way: pick **+ Add files over Wi-Fi** at the top of the puzzle list. With the 3DS
 on Wi-Fi, open the address it shows (or scan the QR code) in a browser on a phone or
 computer on the same network, choose pictures (you can change their names) and press Send. The page shrinks them to
-1024 pixels and turns them into JPGs before sending, and they show up in the list when you
+1448 pixels and turns them into JPGs before sending, and they show up in the list when you
 press B. The same page sends music too. Only one file travels at a time; anyone on your network could reach the page
 while that screen is open.
 

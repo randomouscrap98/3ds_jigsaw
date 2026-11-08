@@ -30,14 +30,14 @@
 <div id="main">
   <h2>Add to 3DS Jigsaw</h2>
   <h3>Pictures</h3>
-  <p>Pictures are shrunk to 1024 pixels on the long side before they're sent.</p>
+  <p>Pictures are shrunk to 1448 pixels on the long side before they're sent.</p>
   <div id="warn" hidden>
     <div>Your browser is blocking the picture shrinker (canvas access), so pictures would arrive
       ruined. Allow canvas access for this page (look for an icon in the address bar), then
       press Check again.</div>
     <button onclick="checkCanvas()">Check again</button>
     <div>Or send the files as they are. That only works for pictures that are already small
-      (about 1024 pixels on the long side); bigger ones are refused by the 3DS.</div>
+      (up to about 2100 x 2100 pixels); bigger ones are refused by the 3DS.</div>
     <button id="originals" onclick="sendAll(true)">Send originals instead</button>
   </div>
   <input type="file" id="files" multiple accept="image/*" onchange="showNames()">
@@ -51,7 +51,7 @@
   <ul id="log"></ul>
 </div>
 <script>
-const MAXSIDE = 1024, QUALITY = 0.92;
+const MAXSIDE = 1448, QUALITY = 0.92;   // 1448: enough for high res mode (2x the pixels of 1024)
 
 // Browsers that block reading canvases (fingerprinting protection) hand back blank or made-up
 // pixels, which would upload as ruined pictures. Reading a small test canvas tells; doing it
