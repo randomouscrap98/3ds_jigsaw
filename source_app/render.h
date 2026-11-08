@@ -18,7 +18,7 @@
 #define RENDER_GLOW_CORE    0.5f    // Fraction of the blob radius that's solid before fading
 #define RENDER_GLOW_SQUARE  4.0f    // Blob shape: 2 = circle, higher = squarer (rounded corners)
 #define RENDER_GLOW_OFFSET  0.15f   // Shadow offset down-right, in cells (scales with zoom)
-#define RENDER_GLOW_MINOFF  2.0f    // No shadow when the offset is under this many screen pixels
+#define RENDER_GLOW_MAXDRAWN 1800  // No shadow when the last frame drew more pieces (pieces + blobs + text stay under citro2d's 4096 objects)
 #define RENDER_GLOW_TEX     64
 #define RENDER_COLOR_SELECT C2D_Color32(240, 200, 90, 255)  // Selected pieces tint (menu yellow)
 #define RENDER_SELECT_BLEND 0.85f   // How much of the select color goes into a selected piece
