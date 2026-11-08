@@ -14,7 +14,9 @@
 
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
 #define PMENU_HINTY 220                          // Top of the hint bar (top screen)
-#define PMENU_HINTBG C2D_Color32(42, 45, 53, 255)  // A shade off the top screen background
+#define PMENU_HINTBG C2D_Color32(42, 45, 53, 255)  // A shade off the top screen background (title bar too)
+#define PMENU_BIGCOUNT 1000                      // Piece counts from here get the New 3DS hint
+#define PMENU_TITLEH 28                          // Title bar height (the list starts at y 32)
 
 // The one list of each menu choice: the options rows are built from these (pmenu_join), and
 // the asserts catch a list that's out of step with its enum (a sized array would just get NULLs)
@@ -30,10 +32,10 @@ static const char * const pmenu_reses[] = { "", ", high detail", ", max detail" 
 static const char * const pmenu_reshints[] = {
   "Best colors, and quick to make.",
   "More detail, but grainier colors. Still quick to make.",
-  "The most detail and good colors, but slow to make the first time.",
+  "The most detail and good colors, but slow to create.",
 };
 static const char * const pmenu_overlayhints[] = {
-  NULL,
+  "Color hinting makes puzzles easier.",
   "A soft color wash, so black and white pictures are easier to sort.",
   "A gentle rainbow from corner to corner.",
 };
@@ -179,6 +181,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   pm->optpieces = -1;
   pm->optres = -1;
   pm->optoverlay = -1;
+  pm->optstyle = -1;
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
   char values[TUIMENU_MAXENUMTOTAL];
@@ -216,6 +219,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     const char * names[CUT_STYLES];
     for(int i = 0; i < CUT_STYLES; i++) names[i] = cutter_info(i)->name;
     TUIMITEM_ENUM(&pm->options, err, "Piece style", &pm->style, pmenu_join(values, names, CUT_STYLES));
+    pm->optstyle = n;
     if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 1);
   }
   if(!err) {
@@ -529,6 +533,16 @@ static const char * puzzlemenu_hint(PuzzleMenu * pm) {
     return pmenu_reshints[puzzlemenu_res(pm)];
   }
   if(cur == pm->optoverlay) return pmenu_overlayhints[(unsigned)pm->overlay % OVERLAYS];
+  if(cur == pm->optpieces) {
+    return pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS] >= PMENU_BIGCOUNT ? "Recommend New 3DS for high piece count." : NULL;
+  }
+  if(cur == pm->optstyle) {
+    unsigned st = (unsigned)pm->style % CUT_STYLES;
+    if(st == CUT_STYLE_IRREGULAR) return "Closest to most puzzles.";
+    if(st == CUT_STYLE_HEX) return "Avoid flat colors.";
+    if(cutter_info(st)->kind == CUT_KIND_TESS) return "Tessellation pattern.";
+    return NULL;
+  }
   if(cur == pm->optwhimsy) {
     if(!cutter_info((unsigned)pm->style % CUT_STYLES)->whimsies) return "This piece style doesn't have them.";
     return (unsigned)pm->whimsy % WHIMSY_LEVELS ? "Little hearts, stars and flowers mixed in with the pieces." : NULL;
@@ -546,6 +560,7 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
       active == &pm->slowwarn ? "Max takes a while on this 3DS" : pm->entries[pm->root.current - PMENU_FIRST].name;
   int hlen = active == &pm->root || active == &pm->confirm || active == &pm->slowwarn ? (int)strlen(heading) :
       puzzlemenu_namelen(heading);
+  C2D_DrawRectSolid(0, 0, 0.4f, 400, PMENU_TITLEH, PMENU_HINTBG);   // Title bar, same shade as the hint bar
   if(active == &pm->delconfirm) textdraw_print(td, 10, 6, 0.6f, title, "Delete %.*s?", hlen, heading);
   else textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
   // Hint bar across the bottom: a line about what's under the cursor, or else the puzzle's disk use
@@ -575,7 +590,10 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
       // Status gutter: filled circle = done, ring = in progress, blank = not started
       x = 20;
       int ei = active->top + i - PMENU_FIRST;
-      if(pm->nentries && ei >= 0 && ei < pm->nentries && pm->entries[ei].hassave) {
+      // Not on littlemenu's "..." rows (more above / below), which stand in for an item
+      int edge = active->ui_listedge[0] && active->height < active->numitems &&
+          ((i == 0 && active->top > 0) || (i == active->height - 1 && active->top + active->height < active->numitems));
+      if(!edge && pm->nentries && ei >= 0 && ei < pm->nentries && pm->entries[ei].hassave) {
         const u32 rowbg = cur ? selbg : C2D_Color32(30, 32, 38, 255);   // MAIN_BG_TOP
         if(pm->entries[ei].save.groups <= 1) {
           C2D_DrawCircleSolid(13, y + 9, 0.5f, 2.5f, cur ? C2D_Color32(30, 120, 50, 255) : C2D_Color32(110, 200, 120, 255));

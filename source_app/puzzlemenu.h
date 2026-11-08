@@ -67,6 +67,7 @@ typedef struct {
   int optpieces;                         // Options item index of Pieces (-1 = none)
   int optres;                            // Options item index of Resolution (-1 = none)
   int optoverlay;                        // Options item index of Overlay (-1 = none)
+  int optstyle;                          // Options item index of Piece style (-1 = none)
   u8 maxres;                             // Highest resolution offered for the picture
   u8 new3ds;                             // Running on a New 3DS (Max is quick enough to not warn)
   u8 showcut;                            // Cursor is on such an item (or on Continue)
