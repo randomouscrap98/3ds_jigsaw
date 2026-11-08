@@ -199,8 +199,8 @@ static void puzzlemenu_build_root(PuzzleMenu * pm) {
     char name[TUIMENU_MAXNAME];
     int len = puzzlemenu_namelen(e->name);
     if(len > 100) len = 100;
-    if(e->hassave && e->save.groups <= 1) snprintf(name, sizeof(name), "%.*s  [done]", len, e->name);
-    else if(e->hassave) snprintf(name, sizeof(name), "%.*s  [%lu left]", len, e->name, (unsigned long)e->save.groups);
+    // Done / in progress also get a circle drawn left of the name (puzzlemenu_render_top)
+    if(e->hassave && e->save.groups > 1) snprintf(name, sizeof(name), "%.*s  [%lu left]", len, e->name, (unsigned long)e->save.groups);
     else snprintf(name, sizeof(name), "%.*s", len, e->name);
     tui_menu_item_data * idata;
     TUIMITEM_SUBMENU(&pm->root, err, name, puzzlemenu_create_options,
@@ -446,11 +446,26 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
     // littlemenu pads to character columns, but the system font is proportional, so the
     // value column gets its own fixed x or values drift with the label widths
     int split = PMENU_WIDTH - active->valuewidth;
+    int x = 10;
+    if(active == &pm->root) {
+      // Status gutter: filled circle = done, ring = in progress, blank = not started
+      x = 24;
+      int ei = active->top + i - PMENU_FIRST;
+      if(pm->nentries && ei >= 0 && ei < pm->nentries && pm->entries[ei].hassave) {
+        const u32 rowbg = cur ? selbg : C2D_Color32(30, 32, 38, 255);   // MAIN_BG_TOP
+        if(pm->entries[ei].save.groups <= 1) {
+          C2D_DrawCircleSolid(16, y + 8, 0.5f, 3.5f, cur ? C2D_Color32(30, 120, 50, 255) : C2D_Color32(110, 200, 120, 255));
+        } else {
+          C2D_DrawCircleSolid(16, y + 8, 0.5f, 3.5f, cur ? sel : title);
+          C2D_DrawCircleSolid(16, y + 8, 0.5f, 2.0f, rowbg);
+        }
+      }
+    }
     if(active->valuewidth > 0 && split > 0) {
-      textdraw_print(td, 10, y + 1, 0.5f, fg, "%.*s", split, line);
+      textdraw_print(td, x, y + 1, 0.5f, fg, "%.*s", split, line);
       textdraw_print(td, PMENU_VALUEX, y + 1, 0.5f, fg, "%s", line + split);
     } else {
-      textdraw_print(td, 10, y + 1, 0.5f, fg, "%s", line);
+      textdraw_print(td, x, y + 1, 0.5f, fg, "%s", line);
     }
   }
 }
