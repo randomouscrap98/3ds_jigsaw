@@ -541,8 +541,9 @@ void game_render_top(Game * g, TextDraw * td) {
     // GPU drawing time, pieces drawn and texture page switches on the bottom screen
     textdraw_center(td, 200, 144, 0.45f, pc, "GPU %.1f ms  frame %.1f ms  %lu drawn  %lu swaps",
         pf->gpu, pf->frame, (unsigned long)pf->drawn, (unsigned long)pf->texswaps);
-    // Inside the CPU time: game_update and drawing the table + pieces (speedup is always on here)
-    textdraw_center(td, 200, 160, 0.45f, pc, "update %.1f ms  bottom %.1f ms  speedup on", pf->update, pf->bottom);
+    // Inside the CPU time: game_update and drawing the table + pieces
+    textdraw_center(td, 200, 160, 0.45f, pc, "update %.1f ms  bottom %.1f ms  speedup %s", pf->update, pf->bottom,
+        g->board.count > GAME_SPEEDUP_PIECES ? "on" : "off");
 #endif
     // Song name rolls if it's too long, starting over each time the song changes
     if(strcmp(g->lastsong, pf->song)) {

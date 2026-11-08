@@ -38,6 +38,7 @@
 #ifndef GAME_SHOWCPU
 #define GAME_SHOWCPU 0            // 1 = CPU use line on the info overlay (make EXTRA_CFLAGS=-DGAME_SHOWCPU=1)
 #endif
+#define GAME_SPEEDUP_PIECES 500   // More pieces: New 3DS speedup for the whole game (2000 needed it for 60 fps)
 #define GAME_MARQUEE_SPEED 30.0f  // Song name scroll, pixels per second
 #define GAME_SELECTKEYS (KEY_A | KEY_DLEFT)  // Held at touch-down: box-select / tap-toggle
 #define GAME_TAPDIST 6            // Stylus moving less than this (pixels) is a tap, not a box
