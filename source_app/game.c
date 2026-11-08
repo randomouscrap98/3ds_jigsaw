@@ -394,9 +394,9 @@ int game_update(Game * g, const GameInput * gin) {
       g->dirty = 1;
       ev |= GAME_EV_VOLUME;
     }
-    // Tray in / out (not while something is held or a box is being drawn); a selection in the
-    // tray is dropped when it closes
-    if((gin->down & GAME_MOD_TRAY) && g->held < 0 && !g->boxing) {
+    // Tray in / out on the second of the two buttons, either order (not while something is held
+    // or a box is being drawn); a selection in the tray is dropped when it closes
+    if((gin->down & (GAME_MOD_TRAY | GAME_MODKEY)) && (gin->held & GAME_MOD_TRAY) && g->held < 0 && !g->boxing) {
       g->trayopen = !g->trayopen;
       if(!g->trayopen && g->seltray) game_clearsel(g);
       g->dirty = 1;

@@ -32,7 +32,7 @@ you haven't). Without it the game just runs silently.
 | Y + B | Music volume: low, medium, high (saved with the puzzle) |
 | Y + SELECT | Top screen: picture (hold Y for info) or info (hold Y for the picture); saved with the puzzle |
 | Y + D-Pad Left | Squish the selection into a tidy block (it stays selected). Pressing Y while still holding Left after a box select works too |
-| Y + L or Y + R | Open or close the tray |
+| Y + L or Y + R | Open or close the tray (either button first) |
 | SELECT | Change felt (saved with puzzle) |
 | START | Save and go back to the menu |
 
