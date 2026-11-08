@@ -69,6 +69,8 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   float size = RENDER_GLOW_SIZE * b->geo->cell * c->zoom;
   float scale = size / RENDER_GLOW_TEX, half = size / 2;
   float off = RENDER_GLOW_OFFSET * b->geo->cell * c->zoom;
+  // Too small to see; also keeps a big held selection under citro2d's object limit
+  if(off < RENDER_GLOW_MINOFF) return;
   for(uint16_t p = b->groups[gid].first; p != BOARD_NONE; p = b->pieces[p].next) {
     float wx, wy, sx, sy;
     board_piece_center(b, p, &wx, &wy);
