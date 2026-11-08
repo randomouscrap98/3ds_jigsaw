@@ -15,7 +15,7 @@
 // The one list of each menu choice: the options rows are built from these (pmenu_join), and
 // the asserts catch a list that's out of step with its enum (a sized array would just get NULLs)
 #define PMENU_LEN(a) (sizeof(a) / sizeof((a)[0]))
-static const uint32_t pmenu_counts[] = { 50, 100, 250, 500 };  // Targets; the grid lands near them
+static const uint32_t pmenu_counts[] = { 50, 100, 250, 500, 1000, 2000 };  // Targets (ascending); the grid lands near them
 static const char * const pmenu_whimsynames[] = { "None", "Few", "Many" };  // WHIMSY_*
 static const char * const pmenu_whimsies[] = { "", ", few whimsies", ", many whimsies" };  // Summaries
 static const char * const pmenu_overlaynames[] = { "None", "Hologram", "Rainbow" };  // OVERLAY_*
@@ -63,6 +63,17 @@ static int puzzlemenu_opt(PuzzleMenu * pm, int * n, uint32_t act, u8 cut) {
   pm->optcut[*n] = cut;
   (*n)++;
   return 0;
+}
+
+// Pieces only offers the counts the piece style allows (pmenu_counts is ascending, so a
+// prefix of it); a style change clamps the count down.
+static void puzzlemenu_fitpieces(PuzzleMenu * pm) {
+  uint32_t max = cutter_info((unsigned)pm->style % CUT_STYLES)->maxpieces, n = 1;
+  while(n < PMENU_NUMCOUNTS && pmenu_counts[n] <= max) n++;
+  if((unsigned)pm->pieces % PMENU_NUMCOUNTS >= n) pm->pieces = n - 1;
+  if(pm->optpieces >= 0 && pm->optpieces < pm->options.numitems) {
+    pm->options.items[pm->optpieces].data.enumerator.numitems = n;
+  }
 }
 
 // Confirm menu only appears when there's a save to throw away. Returning NULL makes
@@ -116,6 +127,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   tui_menu_clear(&pm->options);
   memset(pm->optcut, 0, sizeof(pm->optcut));
   pm->optwhimsy = -1;
+  pm->optpieces = -1;
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
   char values[TUIMENU_MAXENUMTOTAL];
@@ -142,6 +154,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
       names[i] = nums[i];
     }
     TUIMITEM_ENUM(&pm->options, err, "Pieces", &pm->pieces, pmenu_join(values, names, PMENU_NUMCOUNTS));
+    pm->optpieces = n;
     if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);
   }
   if(!err) {
@@ -181,6 +194,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     if(!err) idata->ptr = pm;
     if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);   // Acted on from delconfirm
   }
+  puzzlemenu_fitpieces(pm);
   return err ? NULL : &pm->options;
 }
 
@@ -368,6 +382,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   if(act.action == TUIMENU_ACTION_ACCEPT || act.action == TUIMENU_ACTION_CANCEL) pm->status[0] = 0;
 
   tui_menu_result r = tui_menu_run(&pm->root, act);
+  puzzlemenu_fitpieces(pm);
   // Backed out to the list: the picture goes away. In the options it follows the overlay.
   if(pm->thumb.state != THUMB_NONE && puzzlemenu_active(pm) == &pm->root) thumb_clear(&pm->thumb, 0);
   int ent0 = pm->root.current - PMENU_FIRST;

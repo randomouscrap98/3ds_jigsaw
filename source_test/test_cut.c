@@ -136,7 +136,7 @@ void test_cut_pinned(void) {
 void test_cut_styles(void) {
   for(int st = 0; st < CUT_STYLES; st++) {
     const CutStyleInfo * si = cutter_info(st);
-    CHECK(si->name && si->id && si->samplepieces > 0);
+    CHECK(si->name && si->id && si->samplepieces > 0 && si->maxpieces >= 500);
     CHECK(cutter_byid(si->id) == st);
   }
   CHECK(cutter_byid("nope") == -1);

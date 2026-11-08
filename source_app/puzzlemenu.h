@@ -12,7 +12,7 @@
 #define PMENU_HEIGHT 12
 #define PMENU_WIDTH 46
 #define PMENU_MAXNAME 128
-#define PMENU_NUMCOUNTS 4
+#define PMENU_NUMCOUNTS 6
 #define PMENU_PIECES_DEFAULT 1                  // 100
 #define PMENU_FIRST 1        // List items before the puzzles ("Add files over Wi-Fi")
 #define PMENU_MAXOPTS 16     // Options rows (9 now: Continue, Pieces, Piece style, Whimsies, Overlay, Music,
@@ -62,6 +62,7 @@ typedef struct {
   uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
   u8 optcut[PMENU_MAXOPTS];              // Options item shows the cut sample over the picture
   int optwhimsy;                         // Options item index of Whimsies (-1 = none)
+  int optpieces;                         // Options item index of Pieces (-1 = none)
   u8 showcut;                            // Cursor is on such an item (or on Continue)
   u8 cutsrc;                             // Cut sample last asked for: 1 = the save's, 2 = the settings'
   tui_menu_number_t pieces;              // Piece count picked in options: index into the counts

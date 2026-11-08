@@ -45,6 +45,7 @@ typedef struct {
   uint8_t sprawl;         // Bounds mostly empty (maze, lizard): scattered by packing their bounds
                           // on a bigger table, condensed by outline
   uint8_t samplepieces;   // Menu cut sample size (long winding lines need fewer)
+  uint16_t maxpieces;     // Biggest piece count the menu offers (cut time, and Maze fails at 2000)
 } CutStyleInfo;
 
 // A style's description; unknown styles get Classic's (as cutter_init cuts them)
