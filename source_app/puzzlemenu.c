@@ -22,8 +22,8 @@ static const char * const pmenu_whimsynames[] = { "None", "Few", "Many" };  // W
 static const char * const pmenu_whimsies[] = { "", ", few whimsies", ", many whimsies" };  // Summaries
 static const char * const pmenu_overlaynames[] = { "None", "Hologram", "Rainbow" };  // OVERLAY_*
 static const char * const pmenu_overlays[] = { "", ", hologram", ", rainbow" };  // Summaries
-static const char * const pmenu_resnames[] = { "Standard", "Alt High" };  // SAVEFILE_RES_*
-static const char * const pmenu_reses[] = { "", ", alt high" };  // Summaries
+static const char * const pmenu_resnames[] = { "Standard", "Alt High", "Alt Max" };  // SAVEFILE_RES_*
+static const char * const pmenu_reses[] = { "", ", alt high", ", alt max" };  // Summaries
 static const char * const pmenu_musicnames[] = { "Off", "In order", "Shuffled" };  // Menu order ...
 static const uint8_t pmenu_musicmodes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };  // ... as saved
 _Static_assert(PMENU_LEN(pmenu_counts) == PMENU_NUMCOUNTS, "pmenu_counts");
@@ -81,9 +81,31 @@ static void puzzlemenu_fitpieces(PuzzleMenu * pm) {
   }
 }
 
-// Resolution a new game gets: what's picked, unless the picture is too small for it to matter
+// Resolution offers the alternatives only for pictures bigger than Standard uses (Alt Max even when
+// the picture can't fill it: it looks different, so it's a choice); a small picture clamps it down
+static void puzzlemenu_fitres(PuzzleMenu * pm) {
+  if((unsigned)pm->res % SAVEFILE_RESES > pm->maxres) pm->res = pm->maxres;
+  if(pm->optres >= 0 && pm->optres < pm->options.numitems) {
+    pm->options.items[pm->optres].data.enumerator.numitems = pm->maxres + 1;
+  }
+}
+
+// Resolution a new game gets
 static uint8_t puzzlemenu_res(PuzzleMenu * pm) {
-  return pm->bigpic ? (unsigned)pm->res % SAVEFILE_RESES : SAVEFILE_RES_STANDARD;
+  unsigned r = (unsigned)pm->res % SAVEFILE_RESES;
+  return r > pm->maxres ? pm->maxres : r;
+}
+
+// Old 3DS: Alt Max asks once more before starting (encoding takes a long time)
+static int puzzlemenu_needwarn(PuzzleMenu * pm) {
+  return puzzlemenu_res(pm) == SAVEFILE_RES_ALTMAX && !pm->new3ds;
+}
+
+static tui_menu * puzzlemenu_create_slowwarn(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
+  PuzzleMenu * pm = data->ptr;
+  if(!puzzlemenu_needwarn(pm)) return NULL;
+  tui_menu_reset_ui(&pm->slowwarn);
+  return &pm->slowwarn;
 }
 
 // Confirm menu only appears when there's a save to throw away. Returning NULL makes
@@ -91,7 +113,8 @@ static uint8_t puzzlemenu_res(PuzzleMenu * pm) {
 static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
   PuzzleMenu * pm = data->ptr;
   int sel = pm->root.current - PMENU_FIRST;
-  if(sel < 0 || sel >= pm->nentries || !pm->entries[sel].hassave) return NULL;
+  if(sel < 0 || sel >= pm->nentries) return NULL;
+  if(!pm->entries[sel].hassave) return puzzlemenu_create_slowwarn(data, parent, pos);
   // Say what's about to start, since the settings aren't on the line that was pressed
   snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s%s%s%s",
       (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], cutter_info((unsigned)pm->style % CUT_STYLES)->name,
@@ -145,9 +168,10 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   char values[TUIMENU_MAXENUMTOTAL];
   char path[STORAGE_MAXPATH];
   storage_puzzlepath(e->name, path);
-  // Alt High only helps pictures bigger than standard resolution uses (header read only)
+  // The alternative resolutions only help pictures bigger than Standard uses (header read only)
   int pw, ph;
-  pm->bigpic = !imageload_size(path, &pw, &ph) && (pw > PGFX_MAXSIDE || ph > PGFX_MAXSIDE);
+  pm->maxres = !imageload_size(path, &pw, &ph) && (pw > PGFX_MAXSIDE || ph > PGFX_MAXSIDE) ?
+      SAVEFILE_RESES - 1 : SAVEFILE_RES_STANDARD;
   thumb_request(&pm->thumb, path, e->hassave ? e->save.header.overlay : (unsigned)pm->overlay % OVERLAYS);
   if(e->hassave) {
     char time[16];
@@ -215,6 +239,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
     if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);   // Acted on from delconfirm
   }
   puzzlemenu_fitpieces(pm);
+  puzzlemenu_fitres(pm);
   return err ? NULL : &pm->options;
 }
 
@@ -292,16 +317,29 @@ int puzzlemenu_init(PuzzleMenu * pm) {
   tui_menu_init(&pm->options, PMENU_HEIGHT);
   tui_menu_init(&pm->confirm, PMENU_HEIGHT);
   tui_menu_init(&pm->delconfirm, PMENU_HEIGHT);
+  tui_menu_init(&pm->slowwarn, PMENU_HEIGHT);
+  bool n3ds = false;
+  APT_CheckNew3DS(&n3ds);
+  pm->new3ds = n3ds;
   pm->root.valuewidth = 0;
   pm->options.valuewidth = PMENU_VALUEWIDTH;
   pm->confirm.valuewidth = 0;
   pm->delconfirm.valuewidth = 0;
+  pm->slowwarn.valuewidth = 0;
   pm->music = PMENU_MUSIC_DEFAULT;
   pm->pieces = PMENU_PIECES_DEFAULT;
   thumb_init(&pm->thumb);  // On failure there's just no picture
   int err = 0;
   TUIMITEM_BASIC(&pm->confirm, err, "No, keep my save", 1);
-  if(!err) TUIMITEM_BASIC(&pm->confirm, err, "Yes, erase it and start over", 0);  // Reworded on open
+  if(!err) {
+    // Reworded on open; goes on to the Alt Max warning when there is one
+    tui_menu_item_data * idata;
+    TUIMITEM_SUBMENU(&pm->confirm, err, "Yes, erase it and start over", puzzlemenu_create_slowwarn,
+        tui_menu_submenu_destroy_existing_menu, idata, 0);
+    if(!err) idata->ptr = pm;
+  }
+  if(!err) TUIMITEM_BASIC(&pm->slowwarn, err, "No, go back", 1);
+  if(!err) TUIMITEM_BASIC(&pm->slowwarn, err, "Yes, start (can take a few minutes)", 0);
   if(!err) TUIMITEM_BASIC(&pm->delconfirm, err, "No, keep it", 1);
   if(!err) TUIMITEM_BASIC(&pm->delconfirm, err, "Yes, delete it", 0);           // Reworded on open
   if(err) return err;
@@ -314,6 +352,7 @@ void puzzlemenu_free(PuzzleMenu * pm) {
   tui_menu_free(&pm->options);
   tui_menu_free(&pm->confirm);
   tui_menu_free(&pm->delconfirm);
+  tui_menu_free(&pm->slowwarn);
   free(pm->entries);
   pm->entries = NULL;
 }
@@ -371,7 +410,7 @@ static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
 static int puzzlemenu_optoff(PuzzleMenu * pm, int item) {
   if(item < 0) return 0;
   if(item == pm->optwhimsy) return !cutter_info((unsigned)pm->style % CUT_STYLES)->whimsies;
-  if(item == pm->optres) return !pm->bigpic;
+  if(item == pm->optres) return pm->maxres == SAVEFILE_RES_STANDARD;
   return 0;
 }
 
@@ -407,6 +446,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
 
   tui_menu_result r = tui_menu_run(&pm->root, act);
   puzzlemenu_fitpieces(pm);
+  puzzlemenu_fitres(pm);
   // Backed out to the list: the picture goes away. In the options it follows the overlay.
   if(pm->thumb.state != THUMB_NONE && puzzlemenu_active(pm) == &pm->root) thumb_clear(&pm->thumb, 0);
   int ent0 = pm->root.current - PMENU_FIRST;
@@ -438,8 +478,10 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     return choice;
   }
   int opt = pm->options.current;
-  // Accepted inside options (no save, so no confirm) or "Yes" inside confirm
-  if(active == &pm->options || (active == &pm->confirm && pm->confirm.current == 1)) {
+  // Accepted inside options (no save, so no confirm), "Yes" inside confirm, or "Yes" past the Alt
+  // Max warning
+  if(active == &pm->options || (active == &pm->confirm && pm->confirm.current == 1) ||
+     (active == &pm->slowwarn && pm->slowwarn.current == 1)) {
     if(opt < 0 || opt >= pm->options.numitems || pm->optact[opt] == PMENU_ACT_NONE) return choice;
     choice.name = pm->entries[ent].name;
     choice.rename = pm->optact[opt] == PMENU_ACT_RENAME;
@@ -464,8 +506,10 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   const u32 off = C2D_Color32(110, 110, 110, 255), offsel = C2D_Color32(130, 100, 40, 255);  // Grayed out item
   tui_menu * active = puzzlemenu_active(pm);
   const char * heading = active == &pm->root ? "Pick a puzzle" :
-      active == &pm->confirm ? "Erase the saved game?" : pm->entries[pm->root.current - PMENU_FIRST].name;
-  int hlen = active == &pm->root || active == &pm->confirm ? (int)strlen(heading) : puzzlemenu_namelen(heading);
+      active == &pm->confirm ? "Erase the saved game?" :
+      active == &pm->slowwarn ? "Alt Max takes a while on this 3DS" : pm->entries[pm->root.current - PMENU_FIRST].name;
+  int hlen = active == &pm->root || active == &pm->confirm || active == &pm->slowwarn ? (int)strlen(heading) :
+      puzzlemenu_namelen(heading);
   if(active == &pm->delconfirm) textdraw_print(td, 10, 6, 0.6f, title, "Delete %.*s?", hlen, heading);
   else textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
   // The puzzle's disk use (picture + save + caches), small in the corner like the version

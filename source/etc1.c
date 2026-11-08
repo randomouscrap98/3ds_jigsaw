@@ -189,3 +189,36 @@ void etc1_decode(uint64_t b, uint8_t * rgb) {
     }
   }
 }
+
+uint32_t etc1a4_blockoffset(uint32_t w, uint32_t x, uint32_t y) {
+  return ((y >> 3) * (w >> 3) + (x >> 3)) * 64 + (((x >> 2) & 1) + 2 * ((y >> 2) & 1)) * 16;
+}
+
+static void etc1_put64(uint8_t * p, uint64_t v) {
+  for(int i = 0; i < 8; i++) p[i] = (uint8_t)(v >> (8 * i));
+}
+
+void etc1a4_encode_page(const uint32_t * rgba, uint32_t w, uint32_t h, uint8_t * out, int quality,
+    const Progress * pr, const char * msg, int done0, int total) {
+  for(uint32_t by = 0; by < h; by += 4) {
+    if(by % 8 == 0) progress_report(pr, msg, done0 + (int)(by / 8), total);
+    for(uint32_t bx = 0; bx < w; bx += 4) {
+      uint8_t * o = out + etc1a4_blockoffset(w, bx, by);
+      uint8_t rgb[48];
+      uint64_t alpha = 0;
+      for(int y = 0; y < 4; y++) {
+        for(int x = 0; x < 4; x++) {
+          uint32_t p = rgba[(by + y) * w + bx + x];
+          uint64_t a4 = ((p & 0xFF) * 15 + 127) / 255;
+          alpha |= a4 << (4 * (x * 4 + y));
+          uint8_t * c = rgb + 3 * (y * 4 + x);
+          c[0] = p >> 24;
+          c[1] = (p >> 16) & 0xFF;
+          c[2] = (p >> 8) & 0xFF;
+        }
+      }
+      etc1_put64(o, alpha);
+      etc1_put64(o + 8, alpha ? etc1_encode(rgb, quality) : 0);
+    }
+  }
+}

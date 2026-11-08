@@ -51,6 +51,7 @@ void test_hexcut(void);
 void test_edgegen_irregular(void);
 void test_imgscale(void);
 void test_swizzle(void);
+void test_etc1(void);
 void test_piecebake(void);
 void test_littlemenu(void);
 void test_cutsample(void);

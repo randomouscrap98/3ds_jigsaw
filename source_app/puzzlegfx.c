@@ -1,6 +1,7 @@
 #include "puzzlegfx.h"
 #include "savefile.h"
 #include "cutter.h"
+#include "etc1.h"
 #include "imageload.h"
 #include "imgscale.h"
 #include "overlay.h"
@@ -40,6 +41,7 @@ static const struct {
 } pgfx_res[SAVEFILE_RESES] = {
   [SAVEFILE_RES_STANDARD] = { PGFX_MAXSIDE, 3, GPU_RGBA8 },
   [SAVEFILE_RES_ALTHIGH] = { PGFX_MAXSIDE_HIGH, 6, GPU_RGBA5551 },   // Same 12 MB
+  [SAVEFILE_RES_ALTMAX] = { PGFX_MAXSIDE_MAX, 12, GPU_ETC1A4 },
 };
 
 typedef struct {
@@ -54,6 +56,7 @@ typedef struct {
 #define PGFX_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
 #define PGFX_CUTBAR_MS 1500     // The cut's progress bar shows only after this long...
 #define PGFX_CUTBAR_LEFT 0.5f   // ...and only if at least this much of the cut is left then
+#define PGFX_ETC1_QUALITY 0     // etc1_encode quality for Alt Max (0 = fast: refit costs ~2x for ~0.3 dB)
 
 // Passes the cutter's reports on, except the cut stage's own (PROGRESS_CUTTING): those are dropped
 // for PGFX_CUTBAR_MS, then show from there on if enough is left (fast cuts never show a bar)
@@ -213,7 +216,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
     progress_fn cb, void * udata, char * err, size_t errlen) {
   int result = 1;
   uint8_t * src = NULL, * img = NULL, * prev = NULL;
-  uint32_t * tile = NULL;
+  uint32_t * tile = NULL, * page = NULL;
   float * boxes = NULL, * outline = NULL;
   Cutter cut;
   int hascut = 0;
@@ -281,7 +284,31 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   tile = malloc(sizeof(uint32_t) * l->maxw * l->maxh);
   if(!tile) { PGFX_ERR("Out of memory (tile)"); goto done; }
-  for(uint32_t i = 0; i < cut.count; i++) {
+  if(pgfx_res[pg->res].fmt == GPU_ETC1A4) {
+    // Block compressed: blocks straddle tiles, so each page is baked whole (RGBA), then encoded
+    page = malloc(sizeof(uint32_t) * LAYOUT_PAGESIZE * LAYOUT_PAGESIZE);
+    if(!page) { PGFX_ERR("Out of memory (page)"); goto done; }
+    Progress pr = { cb, udata };
+    const int rows = LAYOUT_PAGESIZE / 8;
+    uint32_t drawn = 0;
+    for(int p = 0; p < pg->npages; p++) {
+      memset(page, 0, sizeof(uint32_t) * LAYOUT_PAGESIZE * LAYOUT_PAGESIZE);
+      for(uint32_t i = 0; i < cut.count; i++) {
+        const LayoutTile * t = pg->tiles + i;
+        if(t->page != p) continue;
+        if(cb && (drawn % 8) == 0) cb(udata, "Drawing pieces", drawn, cut.count);
+        drawn++;
+        uint32_t n = cutter_outline(&cut, i, l->cell, -t->ox, -t->oy, outline);
+        piecebake_tile(&pb, outline, n, img, l->width, l->height, t->ox, t->oy, t->w, t->h, tile);
+        for(uint32_t y = 0; y < t->h; y++) {
+          memcpy(page + (size_t)(t->y + y) * LAYOUT_PAGESIZE + t->x, tile + y * t->w, sizeof(uint32_t) * t->w);
+        }
+      }
+      etc1a4_encode_page(page, LAYOUT_PAGESIZE, LAYOUT_PAGESIZE, pg->pages[p].data, PGFX_ETC1_QUALITY, &pr,
+          "Encoding pieces", p * rows, pg->npages * rows);
+    }
+  }
+  for(uint32_t i = 0; i < cut.count && pgfx_res[pg->res].fmt != GPU_ETC1A4; i++) {
     if(cb && (i % 8) == 0) cb(udata, "Drawing pieces", i, cut.count);
     const LayoutTile * t = pg->tiles + i;
     uint32_t n = cutter_outline(&cut, i, l->cell, -t->ox, -t->oy, outline);
@@ -316,6 +343,7 @@ done:
   free(img);
   free(prev);
   free(tile);
+  free(page);
   free(boxes);
   free(outline);
   if(hascut) cutter_free(&cut);

@@ -19,7 +19,7 @@ void hidSetRepeatParameters(u32 delay, u32 interval);
 typedef enum { GFX_TOP, GFX_BOTTOM } gfxScreen_t;
 typedef enum { GFX_LEFT, GFX_RIGHT } gfx3dSide_t;
 void gfxInitDefault(void); void gfxExit(void);
-bool aptMainLoop(void);
+bool aptMainLoop(void); Result APT_CheckNew3DS(bool * out);
 typedef enum { APTHOOK_ONSUSPEND, APTHOOK_ONRESTORE, APTHOOK_ONSLEEP, APTHOOK_ONWAKEUP, APTHOOK_ONEXIT } APT_HookType;
 typedef void (*aptHookFn)(APT_HookType hook, void * param);
 typedef struct { void * next; aptHookFn callback; void * param; } aptHookCookie;

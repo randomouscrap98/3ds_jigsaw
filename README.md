@@ -68,7 +68,7 @@ with the music off.
 The easy way: pick **+ Add files over Wi-Fi** at the top of the puzzle list. With the 3DS
 on Wi-Fi, open the address it shows (or scan the QR code) in a browser on a phone or
 computer on the same network, choose pictures (you can change their names) and press Send. The page shrinks them to
-1448 pixels and turns them into JPGs before sending, and they show up in the list when you
+2048 pixels and turns them into JPGs before sending, and they show up in the list when you
 press B. The same page sends music too. Only one file travels at a time; anyone on your network could reach the page
 while that screen is open.
 
@@ -81,23 +81,27 @@ puzzle: a soft color wash across the picture (blue, pink, green and yellow corne
 every area its own tint, so pieces are easier to sort. Light and dark stay where they were.
 **Rainbow** is a gentler wash, red at the top left through to purple at the bottom right.
 
-Big pictures can use **Resolution: Alt High**: the pieces are drawn from a picture up to 1448
-pixels instead of 1024, so they're sharper (and bigger on screen at the same zoom), in the same
-memory. The catch is fewer colors (smooth areas like sky get a fine dither pattern) and hard
-piece edges. Only offered for pictures bigger than 1024 pixels; the pictures that come with the
-game qualify (except in the lite version).
+Big pictures can use a sharper **Resolution** (same memory either way; only offered for pictures
+bigger than 1024 pixels, which includes the ones that come with the game, except in the lite
+version):
+
+- **Alt High**: pieces drawn from a picture up to 1448 pixels instead of 1024. Fewer colors
+  (smooth areas like sky get a fine dither pattern) and hard piece edges.
+- **Alt Max**: up to 2048 pixels, compressed (fine detail can smear a little in places, edges
+  stay soft). The pieces take a long time to make the first time, especially on an Old 3DS (it
+  asks first); after that the puzzle loads like any other.
 
 Or copy JPG, PNG or BMP files into `sdmc:/3ds/jigsaw/puzzles/` yourself. The first time you start a
 puzzle it gets cut and cached, which takes a few seconds; after that it loads quickly.
 
-- The game uses up to 1024 pixels on the long side, or 1448 with **Resolution** set to
-  **Alt High**, so anything bigger is wasted space and loading time.
+- The game uses up to 1024 pixels on the long side (1448 with **Resolution** set to **Alt
+  High**, 2048 with **Alt Max**), so anything bigger is wasted space and loading time.
 - Pictures bigger than about 2100×2100 are refused. Big PNGs can still run out of memory
   on an Old 3DS.
 - Phone photos may come out sideways, since the game ignores the EXIF rotation.
 
 The resize scripts in `tools/` fix all of that on your PC: they shrink every picture in a
-folder to 1448 pixels, apply any rotation, and put the results in a `resized` folder
+folder to 2048 pixels, apply any rotation, and put the results in a `resized` folder
 inside it.
 
 - Windows: drag the folder onto `resize_images.bat` (keep `resize_images.ps1` next to it).

@@ -1,6 +1,6 @@
 #pragma once
 #include "3ds.h"
-typedef enum { GPU_RGBA8 = 0, GPU_RGB8 = 1, GPU_RGBA5551 = 2 } GPU_TEXCOLOR;
+typedef enum { GPU_RGBA8 = 0, GPU_RGB8 = 1, GPU_RGBA5551 = 2, GPU_ETC1 = 0xC, GPU_ETC1A4 = 0xD } GPU_TEXCOLOR;
 typedef enum { GPU_NEAREST, GPU_LINEAR } GPU_TEXTURE_FILTER_PARAM;
 typedef enum { GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_BORDER, GPU_REPEAT } GPU_TEXTURE_WRAP_PARAM;
 typedef struct { void * data; GPU_TEXCOLOR fmt : 4; size_t size : 28; u16 width, height; } C3D_Tex;

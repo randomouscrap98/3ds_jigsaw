@@ -8,9 +8,10 @@
 #include "piecegeo.h"
 #include "progress.h"
 
-#define PGFX_MAXPAGES 6               // Most pages of any resolution (puzzlegfx.c table)
+#define PGFX_MAXPAGES 12              // Most pages of any resolution (puzzlegfx.c table)
 #define PGFX_MAXSIDE 1024             // Puzzle image is scaled to fit this (standard resolution)
 #define PGFX_MAXSIDE_HIGH 1448        // ... in Alt High (2x the pixels in the same memory, 2-byte texels)
+#define PGFX_MAXSIDE_MAX 2048         // ... in Alt Max (4x, 1-byte ETC1A4 texels)
 #define PGFX_PREVIEW_TEXW 512
 #define PGFX_PREVIEW_TEXH 256
 #define PGFX_PREVIEW_MAXW 400

@@ -66,6 +66,7 @@ int main(int argc, char ** argv) {
   RUN(test_edgegen_irregular);
   RUN(test_imgscale);
   RUN(test_swizzle);
+  RUN(test_etc1);
   RUN(test_piecebake);
   RUN(test_littlemenu);
   RUN(test_cutsample);

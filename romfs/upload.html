@@ -30,7 +30,7 @@
 <div id="main">
   <h2>Add to 3DS Jigsaw</h2>
   <h3>Pictures</h3>
-  <p>Pictures are shrunk to 1448 pixels on the long side before they're sent.</p>
+  <p>Pictures are shrunk to 2048 pixels on the long side before they're sent.</p>
   <div id="warn" hidden>
     <div>Your browser is blocking the picture shrinker (canvas access), so pictures would arrive
       ruined. Allow canvas access for this page (look for an icon in the address bar), then
@@ -51,7 +51,7 @@
   <ul id="log"></ul>
 </div>
 <script>
-const MAXSIDE = 1448, QUALITY = 0.92;   // 1448: enough for high res mode (2x the pixels of 1024)
+const MAXSIDE = 2048, QUALITY = 0.92;   // 2048: what Alt Max resolution uses
 
 // Browsers that block reading canvases (fingerprinting protection) hand back blank or made-up
 // pixels, which would upload as ruined pictures. Reading a small test canvas tells; doing it
