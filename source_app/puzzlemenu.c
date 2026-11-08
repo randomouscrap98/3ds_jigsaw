@@ -16,7 +16,10 @@
 #define PMENU_HINTY 220                          // Top of the hint bar (top screen)
 #define PMENU_HINTBG C2D_Color32(42, 45, 53, 255)  // A shade off the top screen background (title bar too)
 #define PMENU_BIGCOUNT 1000                      // Piece counts from here get the New 3DS hint
-#define PMENU_TITLEH 28                          // Title bar height (the list starts at y 32)
+#define PMENU_TITLEH 28                          // Title bar height
+#define PMENU_ROWH 16                            // List row height
+// List top: centered between the title bar and the hint bar
+#define PMENU_LISTY (PMENU_TITLEH + (PMENU_HINTY - PMENU_TITLEH - PMENU_HEIGHT * PMENU_ROWH) / 2)
 
 // The one list of each menu choice: the options rows are built from these (pmenu_join), and
 // the asserts catch a list that's out of step with its enum (a sized array would just get NULLs)
@@ -577,9 +580,9 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   char line[PMENU_WIDTH + 1];
   for(int i = 0; i < PMENU_HEIGHT; i++) {
     tui_menu_renderline(&pm->root, line, PMENU_WIDTH, i);
-    float y = 32 + i * 16;
+    float y = PMENU_LISTY + i * PMENU_ROWH;
     int cur = tui_menu_iscurrent(&pm->root, i) && active->numitems > 0 && active->top + i < active->numitems;
-    if(cur) C2D_DrawRectSolid(6, y, 0.5f, 388, 16, selbg);
+    if(cur) C2D_DrawRectSolid(6, y, 0.5f, 388, PMENU_ROWH, selbg);
     u32 fg = cur ? sel : white;
     if(active == &pm->options && puzzlemenu_optoff(pm, active->top + i)) fg = cur ? offsel : off;
     // littlemenu pads to character columns, but the system font is proportional, so the
