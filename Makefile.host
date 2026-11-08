@@ -21,6 +21,11 @@ build_host/prescale: tools/prescale.c source/imgscale.c source/imgscale.h
 	@mkdir -p build_host
 	$(CC) -O2 -Wall -Isource -Isource/external -Itools tools/prescale.c source/imgscale.c -lm -o $@
 
+# Piece texture quality: Standard / Alt High / ETC1 "Super" side by side (experiment)
+build_host/etc1_preview: tools/etc1_preview.c source/etc1.c source/etc1.h source/imgscale.c source/swizzle.c
+	@mkdir -p build_host
+	$(CC) -O2 -Wall -Isource -Isource/external -Itools tools/etc1_preview.c source/etc1.c source/imgscale.c source/swizzle.c -lm -o $@
+
 # App icon + CIA banner (tools/makeart.c). icon.png in the project root is picked up by the
 # 3DS Makefile; meta/banner.png by its cia target.
 build_host/makeart: tools/makeart.c source/edgegen.c source/imgscale.c source/rng.c source/edgegen.h source/imgscale.h
