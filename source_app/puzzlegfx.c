@@ -288,15 +288,16 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
     // Block compressed: blocks straddle tiles, so each page is baked whole (RGBA), then encoded
     page = malloc(sizeof(uint32_t) * LAYOUT_PAGESIZE * LAYOUT_PAGESIZE);
     if(!page) { PGFX_ERR("Out of memory (page)"); goto done; }
+    // One bar over both steps: pieces drawn plus page rows encoded
     Progress pr = { cb, udata };
-    const int rows = LAYOUT_PAGESIZE / 8;
+    const int rows = LAYOUT_PAGESIZE / 8, total = (int)cut.count + pg->npages * rows;
     uint32_t drawn = 0;
     for(int p = 0; p < pg->npages; p++) {
       memset(page, 0, sizeof(uint32_t) * LAYOUT_PAGESIZE * LAYOUT_PAGESIZE);
       for(uint32_t i = 0; i < cut.count; i++) {
         const LayoutTile * t = pg->tiles + i;
         if(t->page != p) continue;
-        if(cb && (drawn % 8) == 0) cb(udata, "Drawing pieces", drawn, cut.count);
+        if(cb && (drawn % 8) == 0) cb(udata, "Drawing pieces", (int)drawn + p * rows, total);
         drawn++;
         uint32_t n = cutter_outline(&cut, i, l->cell, -t->ox, -t->oy, outline);
         piecebake_tile(&pb, outline, n, img, l->width, l->height, t->ox, t->oy, t->w, t->h, tile);
@@ -305,7 +306,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
         }
       }
       etc1a4_encode_page(page, LAYOUT_PAGESIZE, LAYOUT_PAGESIZE, pg->pages[p].data, PGFX_ETC1_QUALITY, &pr,
-          "Encoding pieces", p * rows, pg->npages * rows);
+          "Drawing pieces", (int)drawn + p * rows, total);
     }
   }
   for(uint32_t i = 0; i < cut.count && pgfx_res[pg->res].fmt != GPU_ETC1A4; i++) {
