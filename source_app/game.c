@@ -14,7 +14,7 @@
 #define GAME_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
 
 int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay,
-    uint8_t music, SaveWriter * writer,
+    uint8_t res, uint8_t music, SaveWriter * writer,
     progress_fn cb, void * udata,
     char * err, size_t errlen) {
   memset(g, 0, sizeof(Game));
@@ -45,6 +45,7 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     whimsy = hdr.whimsy;
     whimsyset = hdr.whimsyset;
     overlay = hdr.overlay;
+    res = hdr.res;
     g->table = hdr.table;
     g->music = hdr.music;
     g->volume = hdr.volume;
@@ -60,6 +61,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   if(whimsy >= WHIMSY_LEVELS) whimsy = WHIMSY_NONE;
   if(whimsyset >= WHIMSY_SETS) whimsyset = WHIMSY_SET_CUTE;
   if(overlay >= OVERLAYS) overlay = OVERLAY_NONE;
+  if(res >= SAVEFILE_RESES) res = SAVEFILE_RES_STANDARD;
+  g->res = res;
   g->target = target;
   g->style = style;
   g->whimsy = whimsy;
@@ -67,8 +70,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
   g->picoverlay = overlay;
   char ipath[STORAGE_MAXPATH], cpath[STORAGE_MAXPATH];
   storage_puzzlepath(name, ipath);
-  storage_cachepath(name, target, style, whimsy, whimsyset, overlay, cpath);
-  if(puzzlegfx_load(&g->gfx, &g->geo, ipath, cpath, target, g->seed, style, whimsy, whimsyset, overlay,
+  storage_cachepath(name, target, style, whimsy, whimsyset, overlay, res, cpath);
+  if(puzzlegfx_load(&g->gfx, &g->geo, ipath, cpath, target, g->seed, style, whimsy, whimsyset, overlay, res,
       cb, udata, err, errlen)) {
     free(save);
     return 1;
@@ -172,6 +175,7 @@ int game_save(Game * g, int background) {
   sh.volume = g->volume;
   sh.top = g->top;
   sh.tray = g->trayopen;
+  sh.res = g->res;
   sh.seconds = g->playms / 1000;
   savefile_write(&sh, &g->board, buf);
   char path[STORAGE_MAXPATH];

@@ -78,13 +78,16 @@ void test_storage(void) {
   CHECK(storage_iscache(n, "Wheat Field.jpg_100_w1_s1.bin"));
   // Old names are unchanged
   char old[STORAGE_MAXPATH];
-  storage_cachepath(n, 500, 2, 0, 0, 0, old);
+  storage_cachepath(n, 500, 2, 0, 0, 0, 0, old);
   CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_500_s2.bin"));
-  storage_cachepath(n, 48, 0, 0, 0, 0, old);
+  storage_cachepath(n, 48, 0, 0, 0, 0, 0, old);
   CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_48.bin"));
-  // Overlay goes last
-  storage_cachepath(n, 100, 1, 2, 1, 1, old);
+  // Overlay, then resolution, go last
+  storage_cachepath(n, 100, 1, 2, 1, 1, 0, old);
   CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_100_s1_w2_g1_o1.bin"));
+  storage_cachepath(n, 100, 1, 2, 1, 1, 1, old);
+  CHECK(!strcmp(strrchr(old, '/') + 1, "Wheat Field.jpg_100_s1_w2_g1_o1_r1.bin"));
+  CHECK(storage_iscache(n, strrchr(old, '/') + 1));
   CHECK(storage_iscache(n, "Wheat Field.jpg_100_o1.bin"));
   CHECK(storage_iscache(n, "Wheat Field.jpg_100_o1_s1.bin"));
   CHECK(!storage_iscache(n, "Wheat Field.jpg_100_o1_.bin"));
@@ -95,7 +98,7 @@ void test_storage(void) {
   for(int c = 0; c < 4; c++) for(uint8_t st = 0; st < CUT_STYLES; st++) for(uint8_t w = 0; w < WHIMSY_LEVELS; w++)
       for(uint8_t g = 0; g <= WHIMSY_SETS; g++) for(uint8_t o = 0; o < OVERLAYS; o++) {
     char path[STORAGE_MAXPATH];
-    storage_cachepath(n, counts[c], st, w, g, o, path);
+    storage_cachepath(n, counts[c], st, w, g, o, c & 1, path);
     if(!storage_iscache(n, strrchr(path, '/') + 1)) all = 0;
   }
   CHECK(all);

@@ -15,10 +15,10 @@
 void storage_init(void);
 void storage_puzzlepath(const char * name, char * out);
 // Cache file for a picture cut a given way:
-// "<name>_<target>[_s<style>][_w<whimsy>[_g<set>]][_o<overlay>].bin"
+// "<name>_<target>[_s<style>][_w<whimsy>[_g<set>]][_o<overlay>][_r<res>].bin"
 // (each part only when nonzero, so 1.0-1.1 names are unchanged)
 void storage_cachepath(const char * name, uint32_t target, uint8_t style, uint8_t whimsy, uint8_t set, uint8_t overlay,
-    char * out);
+    uint8_t res, char * out);
 void storage_savepath(const char * name, char * out);
 // 1 if file (a name in the cache folder) is one of image name's caches, any count and
 // options: "<name>_<digits>" then any number of "_<a-z><digits>", then ".bin" (so a new

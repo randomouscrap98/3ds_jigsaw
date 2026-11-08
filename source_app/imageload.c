@@ -31,6 +31,11 @@ int imageload_check(const char * path) {
   return stbi_info(path, &w, &h, &comp) && (uint64_t)w * h <= (uint64_t)IMAGELOAD_MAXSIDE * IMAGELOAD_MAXSIDE;
 }
 
+int imageload_size(const char * path, int * w, int * h) {
+  int comp;
+  return !stbi_info(path, w, h, &comp);
+}
+
 void imageload_free(uint8_t * px) {
   stbi_image_free(px);
 }

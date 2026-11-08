@@ -329,6 +329,38 @@ void test_swizzle(void) {
   swizzle_copy_rgb(tex, 16, 8, 8, rgb, 2, 2);
   CHECK(tex[swizzle_offset(16, 8, 8)] == SWIZZLE_RGBA(1, 2, 3, 255));
   CHECK(tex[swizzle_offset(16, 9, 9)] == SWIZZLE_RGBA(10, 11, 12, 255));
+
+  // 16-bit: extremes exact, alpha cut at 128, placement as swizzle_copy
+  uint16_t t16[16 * 16];
+  uint32_t px[4] = { SWIZZLE_RGBA(255, 0, 255, 255), SWIZZLE_RGBA(0, 255, 0, 127),
+                     SWIZZLE_RGBA(255, 255, 255, 128), SWIZZLE_RGBA(0, 0, 0, 0) };
+  memset(t16, 0, sizeof(t16));
+  swizzle_copy5551(t16, 16, 4, 2, px, 2, 2, 2, 0, 0);
+  CHECK(t16[swizzle_offset(16, 4, 2)] == SWIZZLE_RGBA5551(31, 0, 31, 1));
+  CHECK(t16[swizzle_offset(16, 5, 2)] == SWIZZLE_RGBA5551(0, 31, 0, 0));
+  CHECK(t16[swizzle_offset(16, 4, 3)] == SWIZZLE_RGBA5551(31, 31, 31, 1));
+  CHECK(t16[swizzle_offset(16, 5, 3)] == 0);
+  // Dither: a flat in-between color averages out to itself over the 4x4 pattern (within a
+  // fraction of a step) and uses both neighbouring levels; the pattern follows the picture
+  // position, not the copy's
+  uint32_t flat[16];
+  for(int i = 0; i < 16; i++) flat[i] = SWIZZLE_RGBA(100, 100, 100, 255);
+  swizzle_copy5551(t16, 16, 0, 0, flat, 4, 4, 4, 0, 0);
+  float sum = 0;
+  int lo = 0, hi = 0;
+  for(int y = 0; y < 4; y++) for(int x = 0; x < 4; x++) {
+    uint32_t r5 = t16[swizzle_offset(16, x, y)] >> 11;
+    sum += r5 * 255.0f / 31;
+    lo |= r5 == 100 / 8;
+    hi |= r5 == 100 / 8 + 1;
+  }
+  CHECK(fabsf(sum / 16 - 100) < 4 && lo && hi);
+  swizzle_copy5551(t16, 16, 8, 0, flat, 4, 4, 4, 1, 0);   // Shifted one along: pattern shifts too
+  int same = 1;
+  for(int y = 0; y < 4; y++) for(int x = 0; x < 3; x++) {
+    same &= t16[swizzle_offset(16, 8 + x, y)] == t16[swizzle_offset(16, x + 1, y)];
+  }
+  CHECK(same);
 }
 
 void test_piecebake(void) {

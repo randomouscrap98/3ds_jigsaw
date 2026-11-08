@@ -1,4 +1,5 @@
 #include "puzzlegfx.h"
+#include "savefile.h"
 #include "cutter.h"
 #include "imageload.h"
 #include "imgscale.h"
@@ -28,7 +29,18 @@ typedef struct {
   u32 seed;
   u32 style;
   u32 whimsy, whimsyset;
+  u32 res;                // SAVEFILE_RES_*
 } PuzzleCacheKey;
+
+// Per resolution: picture cap, most pages, page format (pages are always LAYOUT_PAGESIZE square)
+static const struct {
+  u16 maxside;
+  u8 pages;
+  GPU_TEXCOLOR fmt;
+} pgfx_res[SAVEFILE_RESES] = {
+  [SAVEFILE_RES_STANDARD] = { PGFX_MAXSIDE, 3, GPU_RGBA8 },
+  [SAVEFILE_RES_ALTHIGH] = { PGFX_MAXSIDE_HIGH, 6, GPU_RGBA5551 },   // Same 12 MB
+};
 
 typedef struct {
   PuzzleCacheKey key;
@@ -81,7 +93,7 @@ void puzzlegfx_free(PuzzleGfx * pg) {
 // Textures and subtextures for pg->layout and pg->tiles (count of them)
 static int puzzlegfx_alloc(PuzzleGfx * pg, char * err, size_t errlen) {
   for(int i = 0; i < pg->layout.pages; i++) {
-    if(texutil_init(&pg->pages[i], LAYOUT_PAGESIZE, LAYOUT_PAGESIZE, 1)) {
+    if(texutil_initf(&pg->pages[i], LAYOUT_PAGESIZE, LAYOUT_PAGESIZE, 1, pgfx_res[pg->res].fmt)) {
       PGFX_ERR("Out of video memory (page %d)", i);
       return 1;
     }
@@ -126,7 +138,7 @@ static int puzzlegfx_readcache(PuzzleGfx * pg, PieceGeo * geo, const char * cach
   int result = 1;
   if(fread(&h, sizeof(h), 1, f) != 1) goto done;
   if(memcmp(&h.key, &want->key, sizeof(PuzzleCacheKey))) goto done;
-  if(h.layout.pages > PGFX_MAXPAGES || h.geosize == 0 || h.geosize > PGFX_MAXGEO ||
+  if(h.layout.pages > pgfx_res[pg->res].pages || h.geosize == 0 || h.geosize > PGFX_MAXGEO ||
      h.count == 0 || h.count > 0xFFF0) goto done;
   pg->layout = h.layout;
   pg->count = h.count;
@@ -207,6 +219,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   int hascut = 0;
   PieceBaker pb = {0};
   int sw, sh;
+  pg->res = h->key.res;   // A failed cache read zeroed pg
 
   if(cb) cb(udata, "Reading image", 0, 1);
   src = imageload_rgb(imagepath, &sw, &sh, err, errlen);
@@ -234,7 +247,7 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
     PGFX_ERR("Out of memory (tiles)");
     goto done;
   }
-  int r = layout_fit(l, boxes, cut.count, PGFX_MAXSIDE, PGFX_MAXPAGES, pg->tiles);
+  int r = layout_fit(l, boxes, cut.count, pgfx_res[pg->res].maxside, pgfx_res[pg->res].pages, pg->tiles);
   if(r) {
     if(r == 1) PGFX_ERR("Out of memory (tiles)");
     else PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->key.target);
@@ -273,7 +286,11 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
     const LayoutTile * t = pg->tiles + i;
     uint32_t n = cutter_outline(&cut, i, l->cell, -t->ox, -t->oy, outline);
     piecebake_tile(&pb, outline, n, img, l->width, l->height, t->ox, t->oy, t->w, t->h, tile);
-    swizzle_copy(pg->pages[t->page].data, LAYOUT_PAGESIZE, t->x, t->y, tile, t->w, t->h, t->w);
+    if(pgfx_res[pg->res].fmt == GPU_RGBA5551) {
+      swizzle_copy5551(pg->pages[t->page].data, LAYOUT_PAGESIZE, t->x, t->y, tile, t->w, t->h, t->w, t->ox, t->oy);
+    } else {
+      swizzle_copy(pg->pages[t->page].data, LAYOUT_PAGESIZE, t->x, t->y, tile, t->w, t->h, t->w);
+    }
   }
   for(int i = 0; i < pg->npages; i++) C3D_TexFlush(&pg->pages[i]);
 
@@ -311,9 +328,10 @@ done:
 }
 
 int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay,
+    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay, uint8_t res,
     progress_fn cb, void * udata, char * err, size_t errlen) {
   puzzlegfx_zero(pg);
+  pg->res = res < SAVEFILE_RESES ? res : SAVEFILE_RES_STANDARD;
   memset(geo, 0, sizeof(PieceGeo));
   err[0] = 0;
   PuzzleCacheHeader h;
@@ -330,6 +348,7 @@ int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const
   k->whimsy = whimsy;
   k->whimsyset = whimsyset;
   k->overlay = overlay ? overlay | OVERLAY_LOOK << 8 : 0;
+  k->res = pg->res;
   puzzlegfx_srcinfo(imagepath, &k->srcsize, &k->srcmtime);
   if(k->srcsize == 0) {
     PGFX_ERR("Can't find image %s", imagepath);

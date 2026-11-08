@@ -81,17 +81,23 @@ puzzle: a soft color wash across the picture (blue, pink, green and yellow corne
 every area its own tint, so pieces are easier to sort. Light and dark stay where they were.
 **Rainbow** is a gentler wash, red at the top left through to purple at the bottom right.
 
+Big pictures can use **Resolution: Alt High**: the pieces are drawn from a picture up to 1448
+pixels instead of 1024, so they're sharper (and bigger on screen at the same zoom), in the same
+memory. The catch is fewer colors (smooth areas like sky get a fine dither pattern) and hard
+piece edges. Only offered for pictures bigger than 1024 pixels; the pictures that come with the
+game qualify (except in the lite version).
+
 Or copy JPG, PNG or BMP files into `sdmc:/3ds/jigsaw/puzzles/` yourself. The first time you start a
 puzzle it gets cut and cached, which takes a few seconds; after that it loads quickly.
 
-- The game only uses up to 1024 pixels on the long side, so anything bigger is wasted space
-  and loading time.
+- The game uses up to 1024 pixels on the long side, or 1448 with **Resolution** set to
+  **Alt High**, so anything bigger is wasted space and loading time.
 - Pictures bigger than about 2100×2100 are refused. Big PNGs can still run out of memory
   on an Old 3DS.
 - Phone photos may come out sideways, since the game ignores the EXIF rotation.
 
 The resize scripts in `tools/` fix all of that on your PC: they shrink every picture in a
-folder to 1024 pixels, apply any rotation, and put the results in a `resized` folder
+folder to 1448 pixels, apply any rotation, and put the results in a `resized` folder
 inside it.
 
 - Windows: drag the folder onto `resize_images.bat` (keep `resize_images.ps1` next to it).

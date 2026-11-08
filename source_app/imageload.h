@@ -12,5 +12,7 @@ uint8_t * imageload_rgb(const char * path, int * w, int * h, char * err, size_t 
 void imageload_free(uint8_t * px);
 // 1 if path looks like a picture imageload_rgb would take (header and size only, no decode)
 int imageload_check(const char * path);
+// Picture size from its header (no decode). Returns 0 on success.
+int imageload_size(const char * path, int * w, int * h);
 
 #endif

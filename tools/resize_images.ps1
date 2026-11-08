@@ -1,6 +1,6 @@
 # Resize pictures for 3DS Jigsaw on Windows (same job as resize_images.sh, no extra tools:
 # uses the image support built into Windows). Every picture's long side is made at most
-# 1024 pixels (never enlarged), any EXIF rotation is applied (the game ignores it), and the
+# 1448 pixels (never enlarged), any EXIF rotation is applied (the game ignores it), and the
 # result is written as PNG. JPG/PNG/BMP files that are already fine are copied as they are.
 # Usually run through resize_images.bat (drag a folder onto it).
 #   powershell -ExecutionPolicy Bypass -File resize_images.ps1 INFOLDER [OUTFOLDER]
@@ -10,7 +10,7 @@ param(
   [string]$OutDir
 )
 Add-Type -AssemblyName System.Drawing
-$Max = 1024
+$Max = 1448
 
 if (-not (Test-Path -LiteralPath $InDir -PathType Container)) {
   Write-Error "Not a folder: $InDir"

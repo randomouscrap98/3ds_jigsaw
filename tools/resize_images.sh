@@ -1,11 +1,11 @@
 #!/bin/sh
-# Resize every image in a directory to long side <= 1024 (never upscaled) and write it
+# Resize every image in a directory to long side <= 1448 (never upscaled) and write it
 # as PNG, ready to drop into the 3DS puzzles folder. Images already small enough in a
 # format the app decodes (jpg/png/bmp) are copied untouched, unless EXIF says they're
 # rotated (the app ignores EXIF, so those are re-encoded with the rotation applied). Uses the first available of:
 # ImageMagick 7 (magick), ImageMagick 6 (convert), libvips (vipsthumbnail), ffmpeg.
 # Usage: resize_images.sh INDIR [OUTDIR]   (OUTDIR defaults to INDIR/resized)
-MAX=1024
+MAX=1448
 [ -d "$1" ] || { echo "usage: $0 INDIR [OUTDIR]" >&2; exit 1; }
 IN=$1
 OUT=${2:-$1/resized}

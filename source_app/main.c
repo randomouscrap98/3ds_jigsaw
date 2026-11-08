@@ -119,7 +119,7 @@ static void app_start_game(App * app, PuzzleChoice choice) {
   app_progress(app, "Loading", 0, 1);
   puzzlemenu_waitidle(&app->menu);
   speedup_begin();   // Decode, cut, draw pieces, overlay (or read the cache)
-  int r = game_init(&app->game, choice.name, choice.target, choice.style, choice.whimsy, choice.whimsyset, choice.overlay,
+  int r = game_init(&app->game, choice.name, choice.target, choice.style, choice.whimsy, choice.whimsyset, choice.overlay, choice.res,
       choice.music, &app->writer, app_progress, app, err, sizeof(err));
   speedup_end();
   if(r) {

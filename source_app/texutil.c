@@ -1,7 +1,11 @@
 #include "texutil.h"
 
 int texutil_init(C3D_Tex * t, uint16_t w, uint16_t h, int clamp) {
-  if(!C3D_TexInit(t, w, h, GPU_RGBA8)) return 1;
+  return texutil_initf(t, w, h, clamp, GPU_RGBA8);
+}
+
+int texutil_initf(C3D_Tex * t, uint16_t w, uint16_t h, int clamp, GPU_TEXCOLOR fmt) {
+  if(!C3D_TexInit(t, w, h, fmt)) return 1;
   C3D_TexSetFilter(t, GPU_LINEAR, GPU_LINEAR);
   if(clamp) C3D_TexSetWrap(t, GPU_CLAMP_TO_EDGE, GPU_CLAMP_TO_EDGE);
   return 0;

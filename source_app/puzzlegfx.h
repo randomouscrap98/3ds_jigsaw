@@ -8,17 +8,19 @@
 #include "piecegeo.h"
 #include "progress.h"
 
-#define PGFX_MAXPAGES 3
-#define PGFX_MAXSIDE 1024             // Puzzle image is scaled to fit this
+#define PGFX_MAXPAGES 6               // Most pages of any resolution (puzzlegfx.c table)
+#define PGFX_MAXSIDE 1024             // Puzzle image is scaled to fit this (standard resolution)
+#define PGFX_MAXSIDE_HIGH 1448        // ... in Alt High (2x the pixels in the same memory, 2-byte texels)
 #define PGFX_PREVIEW_TEXW 512
 #define PGFX_PREVIEW_TEXH 256
 #define PGFX_PREVIEW_MAXW 400
 #define PGFX_PREVIEW_MAXH 240
-#define PGFX_CACHE_VERSION 7     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
+#define PGFX_CACHE_VERSION 8     // 3: validated cuts, Wild style, 3 pages. 4: + PieceGeo.
                                  // 5: packed tiles (table in the cache), Random style.
                                  // 6: whimsies (+ level and set in the header), cut hash,
                                  //    struct sizes
                                  // 7: header starts with PuzzleCacheKey (compared whole)
+                                 // 8: resolution in the key
 #define PGFX_MAXGEO (4 << 20)    // Sanity limit on the cached PieceGeo size
 
 
@@ -35,15 +37,16 @@ typedef struct {
   Tex3DS_SubTexture * subs;     // One per piece
   Tex3DS_SubTexture previewsub;
   uint16_t npages;              // Number of initialized page textures
+  uint8_t res;                  // SAVEFILE_RES_*: page format
   uint8_t haspreview;
 } PuzzleGfx;
 
 // Load (from cache if valid, otherwise build + write cache). seed picks the cut, style is
-// CUT_STYLE_*, whimsy/set WHIMSY_* / WHIMSY_SET_*, overlay OVERLAY_*. The cut's piece geometry goes to geo (cached with the textures; the
+// CUT_STYLE_*, whimsy/set WHIMSY_* / WHIMSY_SET_*, overlay OVERLAY_*, res SAVEFILE_RES_*. The cut's piece geometry goes to geo (cached with the textures; the
 // caller frees it). On failure, a human readable reason is written to err and geo is left
 // empty. Returns 0 on success.
 int puzzlegfx_load(PuzzleGfx * pg, PieceGeo * geo, const char * imagepath, const char * cachepath,
-    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay,
+    uint32_t target, uint32_t seed, uint8_t style, uint8_t whimsy, uint8_t whimsyset, uint8_t overlay, uint8_t res,
     progress_fn cb, void * udata, char * err, size_t errlen);
 void puzzlegfx_free(PuzzleGfx * pg);
 C2D_Image puzzlegfx_piece(PuzzleGfx * pg, uint32_t piece);

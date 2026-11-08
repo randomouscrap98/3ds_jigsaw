@@ -43,6 +43,7 @@ typedef struct {
   uint8_t whimsyset;    // Whimsy shapes for a new game (WHIMSY_SET_*)
   uint8_t overlay;      // Picture overlay for a new game (OVERLAY_*)
   uint8_t music;        // Music mode for a new game (SAVEFILE_MUSIC_*)
+  uint8_t res;          // Resolution for a new game (SAVEFILE_RES_*)
   u8 upload;            // "Add files over Wi-Fi" was picked
   u8 rename;            // "Rename picture" was picked (name is the picture)
   u8 del;               // "Delete puzzle" was confirmed (name is the picture)
@@ -63,12 +64,15 @@ typedef struct {
   u8 optcut[PMENU_MAXOPTS];              // Options item shows the cut sample over the picture
   int optwhimsy;                         // Options item index of Whimsies (-1 = none)
   int optpieces;                         // Options item index of Pieces (-1 = none)
+  int optres;                            // Options item index of Resolution (-1 = none)
+  u8 bigpic;                             // The picture is bigger than standard resolution uses
   u8 showcut;                            // Cursor is on such an item (or on Continue)
   u8 cutsrc;                             // Cut sample last asked for: 1 = the save's, 2 = the settings'
   tui_menu_number_t pieces;              // Piece count picked in options: index into the counts
   tui_menu_number_t style;               // Piece style picked in options (kept between puzzles)
   tui_menu_number_t whimsy;              // Whimsies picked in options (kept between puzzles)
   tui_menu_number_t overlay;             // Overlay picked in options (kept between puzzles)
+  tui_menu_number_t res;                 // Resolution picked in options (kept between puzzles)
   tui_menu_number_t music;               // Music picked in options: PMENU_MUSIC_* order
   char status[128];                      // Shown under the menu (errors etc.)
   Thumb thumb;                           // Picture of the puzzle being set up (bottom screen)

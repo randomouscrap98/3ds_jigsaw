@@ -1,6 +1,8 @@
 #include "puzzlemenu.h"
 #include "cutter.h"
+#include "imageload.h"
 #include "overlay.h"
+#include "puzzlegfx.h"
 
 #include <citro2d.h>
 #include <ctype.h>
@@ -20,11 +22,14 @@ static const char * const pmenu_whimsynames[] = { "None", "Few", "Many" };  // W
 static const char * const pmenu_whimsies[] = { "", ", few whimsies", ", many whimsies" };  // Summaries
 static const char * const pmenu_overlaynames[] = { "None", "Hologram", "Rainbow" };  // OVERLAY_*
 static const char * const pmenu_overlays[] = { "", ", hologram", ", rainbow" };  // Summaries
+static const char * const pmenu_resnames[] = { "Standard", "Alt High" };  // SAVEFILE_RES_*
+static const char * const pmenu_reses[] = { "", ", alt high" };  // Summaries
 static const char * const pmenu_musicnames[] = { "Off", "In order", "Shuffled" };  // Menu order ...
 static const uint8_t pmenu_musicmodes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };  // ... as saved
 _Static_assert(PMENU_LEN(pmenu_counts) == PMENU_NUMCOUNTS, "pmenu_counts");
 _Static_assert(PMENU_LEN(pmenu_whimsynames) == WHIMSY_LEVELS && PMENU_LEN(pmenu_whimsies) == WHIMSY_LEVELS, "whimsy names");
 _Static_assert(PMENU_LEN(pmenu_overlaynames) == OVERLAYS && PMENU_LEN(pmenu_overlays) == OVERLAYS, "overlay names");
+_Static_assert(PMENU_LEN(pmenu_resnames) == SAVEFILE_RESES && PMENU_LEN(pmenu_reses) == SAVEFILE_RESES, "resolution names");
 _Static_assert(PMENU_LEN(pmenu_musicnames) == SAVEFILE_MUSIC_MODES && PMENU_LEN(pmenu_musicmodes) == SAVEFILE_MUSIC_MODES, "music modes");
 
 // littlemenu enums take their values as one string with \n between them. buf holds
@@ -76,6 +81,11 @@ static void puzzlemenu_fitpieces(PuzzleMenu * pm) {
   }
 }
 
+// Resolution a new game gets: what's picked, unless the picture is too small for it to matter
+static uint8_t puzzlemenu_res(PuzzleMenu * pm) {
+  return pm->bigpic ? (unsigned)pm->res % SAVEFILE_RESES : SAVEFILE_RES_STANDARD;
+}
+
 // Confirm menu only appears when there's a save to throw away. Returning NULL makes
 // littlemenu treat the item as a plain click.
 static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
@@ -83,9 +93,10 @@ static tui_menu * puzzlemenu_create_confirm(tui_menu_item_data * data, tui_menu 
   int sel = pm->root.current - PMENU_FIRST;
   if(sel < 0 || sel >= pm->nentries || !pm->entries[sel].hassave) return NULL;
   // Say what's about to start, since the settings aren't on the line that was pressed
-  snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s%s%s",
+  snprintf(pm->confirm.items[1].name, sizeof(pm->confirm.items[1].name), "Yes, erase it: new %lu pieces, %s%s%s%s",
       (unsigned long)pmenu_counts[(unsigned)pm->pieces % PMENU_NUMCOUNTS], cutter_info((unsigned)pm->style % CUT_STYLES)->name,
-      pmenu_whimsies[(unsigned)pm->whimsy % WHIMSY_LEVELS], pmenu_overlays[(unsigned)pm->overlay % OVERLAYS]);
+      pmenu_whimsies[(unsigned)pm->whimsy % WHIMSY_LEVELS], pmenu_overlays[(unsigned)pm->overlay % OVERLAYS],
+      pmenu_reses[puzzlemenu_res(pm)]);
   tui_menu_reset_ui(&pm->confirm);
   return &pm->confirm;
 }
@@ -128,11 +139,15 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   memset(pm->optcut, 0, sizeof(pm->optcut));
   pm->optwhimsy = -1;
   pm->optpieces = -1;
+  pm->optres = -1;
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
   char values[TUIMENU_MAXENUMTOTAL];
   char path[STORAGE_MAXPATH];
   storage_puzzlepath(e->name, path);
+  // Alt High only helps pictures bigger than standard resolution uses (header read only)
+  int pw, ph;
+  pm->bigpic = !imageload_size(path, &pw, &ph) && (pw > PGFX_MAXSIDE || ph > PGFX_MAXSIDE);
   thumb_request(&pm->thumb, path, e->hassave ? e->save.header.overlay : (unsigned)pm->overlay % OVERLAYS);
   if(e->hassave) {
     char time[16];
@@ -170,6 +185,11 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Overlay", &pm->overlay, pmenu_join(values, pmenu_overlaynames, OVERLAYS));
+    if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);
+  }
+  if(!err) {
+    TUIMITEM_ENUM(&pm->options, err, "Resolution", &pm->res, pmenu_join(values, pmenu_resnames, SAVEFILE_RESES));
+    pm->optres = n;
     if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);
   }
   if(!err) {
@@ -346,9 +366,13 @@ static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
   return 1;
 }
 
-// Options item that's grayed out and can't be changed: Whimsies while the style has none
+// Options item that's grayed out and can't be changed: Whimsies while the style has none,
+// Resolution for a picture too small to gain from Alt High
 static int puzzlemenu_optoff(PuzzleMenu * pm, int item) {
-  return item >= 0 && item == pm->optwhimsy && !cutter_info((unsigned)pm->style % CUT_STYLES)->whimsies;
+  if(item < 0) return 0;
+  if(item == pm->optwhimsy) return !cutter_info((unsigned)pm->style % CUT_STYLES)->whimsies;
+  if(item == pm->optres) return !pm->bigpic;
+  return 0;
 }
 
 PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
@@ -425,6 +449,7 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
     choice.whimsyset = WHIMSY_SET_CUTE;   // The only set for now (no menu option yet)
     choice.overlay = (unsigned)pm->overlay % OVERLAYS;
     choice.music = pmenu_musicmodes[(unsigned)pm->music % SAVEFILE_MUSIC_MODES];
+    choice.res = puzzlemenu_res(pm);
     thumb_clear(&pm->thumb, 0);  // Caller waits (puzzlemenu_waitidle) once Loading is showing
     tui_menu_reset(&pm->root);
     // Keep the cursor on this puzzle when we come back
