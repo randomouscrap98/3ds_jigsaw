@@ -85,17 +85,17 @@ Big pictures can use a sharper **Resolution** (same memory either way; only offe
 bigger than 1024 pixels, which includes the ones that come with the game, except in the lite
 version):
 
-- **Alt High**: pieces drawn from a picture up to 1448 pixels instead of 1024. Fewer colors
-  (smooth areas like sky get a fine dither pattern) and hard piece edges.
-- **Alt Max**: up to 2048 pixels, compressed (fine detail can smear a little in places, edges
+- **High**: pieces drawn from a picture up to 1448 pixels instead of 1024, quick to make.
+  Fewer colors (smooth areas like sky get a fine dither pattern).
+- **Max**: up to 2048 pixels, compressed (fine detail can smear a little in places, edges
   stay soft). The pieces take a long time to make the first time, especially on an Old 3DS (it
   asks first); after that the puzzle loads like any other.
 
 Or copy JPG, PNG or BMP files into `sdmc:/3ds/jigsaw/puzzles/` yourself. The first time you start a
 puzzle it gets cut and cached, which takes a few seconds; after that it loads quickly.
 
-- The game uses up to 1024 pixels on the long side (1448 with **Resolution** set to **Alt
-  High**, 2048 with **Alt Max**), so anything bigger is wasted space and loading time.
+- The game uses up to 1024 pixels on the long side (1448 with **Resolution** set to **High**,
+  2048 with **Max**), so anything bigger is wasted space and loading time.
 - Pictures bigger than about 2100×2100 are refused. Big PNGs can still run out of memory
   on an Old 3DS.
 - Phone photos may come out sideways, since the game ignores the EXIF rotation.

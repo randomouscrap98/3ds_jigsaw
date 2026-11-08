@@ -40,8 +40,8 @@ static const struct {
   GPU_TEXCOLOR fmt;
 } pgfx_res[SAVEFILE_RESES] = {
   [SAVEFILE_RES_STANDARD] = { PGFX_MAXSIDE, 3, GPU_RGBA8 },
-  [SAVEFILE_RES_ALTHIGH] = { PGFX_MAXSIDE_HIGH, 6, GPU_RGBA5551 },   // Same 12 MB
-  [SAVEFILE_RES_ALTMAX] = { PGFX_MAXSIDE_MAX, 12, GPU_ETC1A4 },
+  [SAVEFILE_RES_HIGH] = { PGFX_MAXSIDE_HIGH, 6, GPU_RGBA4 },   // Same 12 MB (RGBA5551 also works: swizzle_copy5551)
+  [SAVEFILE_RES_MAX] = { PGFX_MAXSIDE_MAX, 12, GPU_ETC1A4 },
 };
 
 typedef struct {
@@ -56,7 +56,7 @@ typedef struct {
 #define PGFX_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
 #define PGFX_CUTBAR_MS 1500     // The cut's progress bar shows only after this long...
 #define PGFX_CUTBAR_LEFT 0.5f   // ...and only if at least this much of the cut is left then
-#define PGFX_ETC1_QUALITY 0     // etc1_encode quality for Alt Max (0 = fast: refit costs ~2x for ~0.3 dB)
+#define PGFX_ETC1_QUALITY 0     // etc1_encode quality for Max (0 = fast: refit costs ~2x for ~0.3 dB)
 
 // Passes the cutter's reports on, except the cut stage's own (PROGRESS_CUTTING): those are dropped
 // for PGFX_CUTBAR_MS, then show from there on if enough is left (fast cuts never show a bar)
@@ -314,7 +314,9 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
     const LayoutTile * t = pg->tiles + i;
     uint32_t n = cutter_outline(&cut, i, l->cell, -t->ox, -t->oy, outline);
     piecebake_tile(&pb, outline, n, img, l->width, l->height, t->ox, t->oy, t->w, t->h, tile);
-    if(pgfx_res[pg->res].fmt == GPU_RGBA5551) {
+    if(pgfx_res[pg->res].fmt == GPU_RGBA4) {
+      swizzle_copy4444(pg->pages[t->page].data, LAYOUT_PAGESIZE, t->x, t->y, tile, t->w, t->h, t->w, t->ox, t->oy);
+    } else if(pgfx_res[pg->res].fmt == GPU_RGBA5551) {
       swizzle_copy5551(pg->pages[t->page].data, LAYOUT_PAGESIZE, t->x, t->y, tile, t->w, t->h, t->w, t->ox, t->oy);
     } else {
       swizzle_copy(pg->pages[t->page].data, LAYOUT_PAGESIZE, t->x, t->y, tile, t->w, t->h, t->w);

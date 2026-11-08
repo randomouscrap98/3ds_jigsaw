@@ -361,6 +361,17 @@ void test_swizzle(void) {
     same &= t16[swizzle_offset(16, 8 + x, y)] == t16[swizzle_offset(16, x + 1, y)];
   }
   CHECK(same);
+  // 4444: extremes exact, alpha to 4 bits, flat color averages to itself
+  memset(t16, 0, sizeof(t16));
+  swizzle_copy4444(t16, 16, 4, 2, px, 2, 2, 2, 0, 0);
+  CHECK(t16[swizzle_offset(16, 4, 2)] == SWIZZLE_RGBA4444(15, 0, 15, 15));
+  CHECK(t16[swizzle_offset(16, 5, 2)] == SWIZZLE_RGBA4444(0, 15, 0, 7));
+  CHECK(t16[swizzle_offset(16, 4, 3)] == SWIZZLE_RGBA4444(15, 15, 15, 8));
+  CHECK(t16[swizzle_offset(16, 5, 3)] == 0);
+  swizzle_copy4444(t16, 16, 0, 0, flat, 4, 4, 4, 0, 0);
+  sum = 0;
+  for(int y = 0; y < 4; y++) for(int x = 0; x < 4; x++) sum += (t16[swizzle_offset(16, x, y)] >> 12) * 17;
+  CHECK(fabsf(sum / 16 - 100) < 3);
 }
 
 void test_piecebake(void) {

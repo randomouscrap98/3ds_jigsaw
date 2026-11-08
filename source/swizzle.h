@@ -12,6 +12,10 @@
 #define SWIZZLE_RGBA5551(r5, g5, b5, a1) \
   (uint16_t)(((uint32_t)(r5) << 11) | ((uint32_t)(g5) << 6) | ((uint32_t)(b5) << 1) | (uint32_t)(a1))
 
+// GPU_RGBA4: 4 bits each of red, green, blue, alpha (high to low)
+#define SWIZZLE_RGBA4444(r4, g4, b4, a4) \
+  (uint16_t)(((uint32_t)(r4) << 12) | ((uint32_t)(g4) << 8) | ((uint32_t)(b4) << 4) | (uint32_t)(a4))
+
 // The 3DS GPU stores textures in 8x8 tiles, each tile in Morton (Z) order.
 // Copy a linear w x h block of 32-bit pixels into a tiled texture of width texw
 // (multiple of 8) at (dx, dy). Row 0 of src is the top of the image.
@@ -21,9 +25,12 @@ void swizzle_copy(uint32_t * tex, uint32_t texw, uint32_t dx, uint32_t dy,
 void swizzle_copy_rgb(uint32_t * tex, uint32_t texw, uint32_t dx, uint32_t dy,
     const uint8_t * rgb, uint32_t w, uint32_t h);
 // swizzle_copy into a 16-bit GPU_RGBA5551 texture: src pixels are SWIZZLE_RGBA, colors cut to 5
-// bits with a 4x4 ordered dither keyed to (ox + x, oy + y) (src's position in the whole picture, so
+// bits with a 4x4 ordered dither (unbiased) keyed to (ox + x, oy + y) (src's position in the whole picture, so
 // separately copied pieces line up), alpha on at >= 128
 void swizzle_copy5551(uint16_t * tex, uint32_t texw, uint32_t dx, uint32_t dy,
+    const uint32_t * src, uint32_t w, uint32_t h, uint32_t srcstride, int32_t ox, int32_t oy);
+// The same into a GPU_RGBA4 texture: colors cut to 4 bits with the same dither, alpha rounded to 4 bits
+void swizzle_copy4444(uint16_t * tex, uint32_t texw, uint32_t dx, uint32_t dy,
     const uint32_t * src, uint32_t w, uint32_t h, uint32_t srcstride, int32_t ox, int32_t oy);
 // Offset (in pixels) of texture pixel (x, y)
 uint32_t swizzle_offset(uint32_t texw, uint32_t x, uint32_t y);

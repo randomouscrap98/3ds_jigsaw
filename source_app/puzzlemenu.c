@@ -13,6 +13,8 @@
 #include <strings.h>
 
 #define PMENU_HELP_MOVE "Up/Down: move   A: select   B: back"
+#define PMENU_HINTY 220                          // Top of the hint bar (top screen)
+#define PMENU_HINTBG C2D_Color32(42, 45, 53, 255)  // A shade off the top screen background
 
 // The one list of each menu choice: the options rows are built from these (pmenu_join), and
 // the asserts catch a list that's out of step with its enum (a sized array would just get NULLs)
@@ -22,14 +24,27 @@ static const char * const pmenu_whimsynames[] = { "None", "Few", "Many" };  // W
 static const char * const pmenu_whimsies[] = { "", ", few whimsies", ", many whimsies" };  // Summaries
 static const char * const pmenu_overlaynames[] = { "None", "Hologram", "Rainbow" };  // OVERLAY_*
 static const char * const pmenu_overlays[] = { "", ", hologram", ", rainbow" };  // Summaries
-static const char * const pmenu_resnames[] = { "Standard", "Alt High", "Alt Max" };  // SAVEFILE_RES_*
-static const char * const pmenu_reses[] = { "", ", alt high", ", alt max" };  // Summaries
+static const char * const pmenu_resnames[] = { "Standard", "High", "Max" };  // SAVEFILE_RES_*
+static const char * const pmenu_reses[] = { "", ", high detail", ", max detail" };  // Summaries
+// Hint bar lines (NULL = none): what a choice is like, in plain words; nothing the screen already says
+static const char * const pmenu_reshints[] = {
+  "Best colors, and quick to make.",
+  "More detail, but grainier colors. Still quick to make.",
+  "The most detail and good colors, but slow to make the first time.",
+};
+static const char * const pmenu_overlayhints[] = {
+  NULL,
+  "A soft color wash, so black and white pictures are easier to sort.",
+  "A gentle rainbow from corner to corner.",
+};
 static const char * const pmenu_musicnames[] = { "Off", "In order", "Shuffled" };  // Menu order ...
 static const uint8_t pmenu_musicmodes[] = { SAVEFILE_MUSIC_OFF, SAVEFILE_MUSIC_ORDER, SAVEFILE_MUSIC_SHUFFLE };  // ... as saved
 _Static_assert(PMENU_LEN(pmenu_counts) == PMENU_NUMCOUNTS, "pmenu_counts");
 _Static_assert(PMENU_LEN(pmenu_whimsynames) == WHIMSY_LEVELS && PMENU_LEN(pmenu_whimsies) == WHIMSY_LEVELS, "whimsy names");
 _Static_assert(PMENU_LEN(pmenu_overlaynames) == OVERLAYS && PMENU_LEN(pmenu_overlays) == OVERLAYS, "overlay names");
-_Static_assert(PMENU_LEN(pmenu_resnames) == SAVEFILE_RESES && PMENU_LEN(pmenu_reses) == SAVEFILE_RESES, "resolution names");
+_Static_assert(PMENU_LEN(pmenu_resnames) == SAVEFILE_RESES && PMENU_LEN(pmenu_reses) == SAVEFILE_RESES &&
+    PMENU_LEN(pmenu_reshints) == SAVEFILE_RESES, "resolution names");
+_Static_assert(PMENU_LEN(pmenu_overlayhints) == OVERLAYS, "overlay hints");
 _Static_assert(PMENU_LEN(pmenu_musicnames) == SAVEFILE_MUSIC_MODES && PMENU_LEN(pmenu_musicmodes) == SAVEFILE_MUSIC_MODES, "music modes");
 
 // littlemenu enums take their values as one string with \n between them. buf holds
@@ -81,7 +96,7 @@ static void puzzlemenu_fitpieces(PuzzleMenu * pm) {
   }
 }
 
-// Resolution offers the alternatives only for pictures bigger than Standard uses (Alt Max even when
+// Resolution offers the alternatives only for pictures bigger than Standard uses (Max even when
 // the picture can't fill it: it looks different, so it's a choice); a small picture clamps it down
 static void puzzlemenu_fitres(PuzzleMenu * pm) {
   if((unsigned)pm->res % SAVEFILE_RESES > pm->maxres) pm->res = pm->maxres;
@@ -96,9 +111,9 @@ static uint8_t puzzlemenu_res(PuzzleMenu * pm) {
   return r > pm->maxres ? pm->maxres : r;
 }
 
-// Old 3DS: Alt Max asks once more before starting (encoding takes a long time)
+// Old 3DS: Max asks once more before starting (encoding takes a long time)
 static int puzzlemenu_needwarn(PuzzleMenu * pm) {
-  return puzzlemenu_res(pm) == SAVEFILE_RES_ALTMAX && !pm->new3ds;
+  return puzzlemenu_res(pm) == SAVEFILE_RES_MAX && !pm->new3ds;
 }
 
 static tui_menu * puzzlemenu_create_slowwarn(tui_menu_item_data * data, tui_menu * parent, tui_menu_unit_t pos) {
@@ -163,6 +178,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   pm->optwhimsy = -1;
   pm->optpieces = -1;
   pm->optres = -1;
+  pm->optoverlay = -1;
   int err = 0, n = 0;
   char name[TUIMENU_MAXNAME];
   char values[TUIMENU_MAXENUMTOTAL];
@@ -209,6 +225,7 @@ static tui_menu * puzzlemenu_create_options(tui_menu_item_data * data, tui_menu 
   }
   if(!err) {
     TUIMITEM_ENUM(&pm->options, err, "Overlay", &pm->overlay, pmenu_join(values, pmenu_overlaynames, OVERLAYS));
+    pm->optoverlay = n;
     if(!err) err = puzzlemenu_opt(pm, &n, PMENU_ACT_NONE, 0);
   }
   if(!err) {
@@ -332,7 +349,7 @@ int puzzlemenu_init(PuzzleMenu * pm) {
   int err = 0;
   TUIMITEM_BASIC(&pm->confirm, err, "No, keep my save", 1);
   if(!err) {
-    // Reworded on open; goes on to the Alt Max warning when there is one
+    // Reworded on open; goes on to the Max warning when there is one
     tui_menu_item_data * idata;
     TUIMITEM_SUBMENU(&pm->confirm, err, "Yes, erase it and start over", puzzlemenu_create_slowwarn,
         tui_menu_submenu_destroy_existing_menu, idata, 0);
@@ -406,7 +423,7 @@ static int puzzlemenu_thumbcut(PuzzleMenu * pm, const PuzzleEntry * e) {
 }
 
 // Options item that's grayed out and can't be changed: Whimsies while the style has none,
-// Resolution for a picture too small to gain from Alt High
+// Resolution for a picture too small to gain from High
 static int puzzlemenu_optoff(PuzzleMenu * pm, int item) {
   if(item < 0) return 0;
   if(item == pm->optwhimsy) return !cutter_info((unsigned)pm->style % CUT_STYLES)->whimsies;
@@ -500,6 +517,25 @@ PuzzleChoice puzzlemenu_update(PuzzleMenu * pm, u32 down, u32 repeat) {
   return choice;
 }
 
+// The hint for where the cursor is, or NULL
+static const char * puzzlemenu_hint(PuzzleMenu * pm) {
+  tui_menu * active = puzzlemenu_active(pm);
+  int cur = active->current;
+  if(active == &pm->root) return cur == 0 ? "Send pictures and music from a phone or computer." : NULL;
+  if(active == &pm->slowwarn) return "It only happens once; after that the puzzle loads quickly.";
+  if(active != &pm->options || cur < 0) return NULL;
+  if(cur == pm->optres) {
+    if(pm->maxres == SAVEFILE_RES_STANDARD) return "Sharper pieces need a bigger picture.";
+    return pmenu_reshints[puzzlemenu_res(pm)];
+  }
+  if(cur == pm->optoverlay) return pmenu_overlayhints[(unsigned)pm->overlay % OVERLAYS];
+  if(cur == pm->optwhimsy) {
+    if(!cutter_info((unsigned)pm->style % CUT_STYLES)->whimsies) return "This piece style doesn't have them.";
+    return (unsigned)pm->whimsy % WHIMSY_LEVELS ? "Little hearts, stars and flowers mixed in with the pieces." : NULL;
+  }
+  return NULL;
+}
+
 void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   const u32 white = C2D_Color32(230, 230, 230, 255), sel = C2D_Color32(20, 20, 20, 255);
   const u32 selbg = C2D_Color32(240, 200, 90, 255), title = C2D_Color32(240, 200, 90, 255);
@@ -507,17 +543,21 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
   tui_menu * active = puzzlemenu_active(pm);
   const char * heading = active == &pm->root ? "Pick a puzzle" :
       active == &pm->confirm ? "Erase the saved game?" :
-      active == &pm->slowwarn ? "Alt Max takes a while on this 3DS" : pm->entries[pm->root.current - PMENU_FIRST].name;
+      active == &pm->slowwarn ? "Max takes a while on this 3DS" : pm->entries[pm->root.current - PMENU_FIRST].name;
   int hlen = active == &pm->root || active == &pm->confirm || active == &pm->slowwarn ? (int)strlen(heading) :
       puzzlemenu_namelen(heading);
   if(active == &pm->delconfirm) textdraw_print(td, 10, 6, 0.6f, title, "Delete %.*s?", hlen, heading);
   else textdraw_print(td, 10, 6, 0.6f, title, "%.*s", hlen, heading);
-  // The puzzle's disk use (picture + save + caches), small in the corner like the version
-  if(active != &pm->root && pm->thumb.hasbytes) {
+  // Hint bar across the bottom: a line about what's under the cursor, or else the puzzle's disk use
+  // (picture + save + caches) small on the right
+  const u32 dim = C2D_Color32(140, 140, 140, 255);
+  C2D_DrawRectSolid(0, PMENU_HINTY, 0.4f, 400, 240 - PMENU_HINTY, PMENU_HINTBG);
+  const char * hint = puzzlemenu_hint(pm);
+  if(hint) textdraw_print(td, 8, PMENU_HINTY + 4, 0.45f, C2D_Color32(200, 200, 200, 255), "%s", hint);
+  if(active != &pm->root && pm->thumb.hasbytes && !hint) {
     uint64_t b = pm->thumb.bytes;
-    const u32 dim = C2D_Color32(140, 140, 140, 255);
-    if(b < 1000 * 1024) textdraw_right(td, 394, 224, 0.4f, dim, "%lu KB", (unsigned long)((b + 1023) / 1024));
-    else textdraw_right(td, 394, 224, 0.4f, dim, "%.1f MB", b / (1024.0 * 1024.0));
+    if(b < 1000 * 1024) textdraw_right(td, 394, PMENU_HINTY + 5, 0.4f, dim, "%lu KB", (unsigned long)((b + 1023) / 1024));
+    else textdraw_right(td, 394, PMENU_HINTY + 5, 0.4f, dim, "%.1f MB", b / (1024.0 * 1024.0));
   }
   char line[PMENU_WIDTH + 1];
   for(int i = 0; i < PMENU_HEIGHT; i++) {

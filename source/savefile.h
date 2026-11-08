@@ -21,8 +21,8 @@
 #define SAVEFILE_TOP_INFO      1 // Top screen: info panel, hold Y for the picture
 #define SAVEFILE_TOPS          2
 #define SAVEFILE_RES_STANDARD  0 // Piece textures: RGBA8, picture up to 1024 px (zero: the old way)
-#define SAVEFILE_RES_ALTHIGH   1 // RGB5A1 (dithered), picture up to 1448 px: sharper pieces, fewer colors
-#define SAVEFILE_RES_ALTMAX    2 // ETC1A4 (block compressed, slow to encode), picture up to 2048 px
+#define SAVEFILE_RES_HIGH  1 // RGBA4444 (dithered), picture up to 1448 px: sharper pieces, fewer colors
+#define SAVEFILE_RES_MAX       2 // ETC1A4 (block compressed, slow to encode), picture up to 2048 px
 #define SAVEFILE_RESES         3
 
 // A whole save file: this header, then a boardsave blob. Little endian. Header layout

@@ -9,7 +9,7 @@
 #include "textdraw.h"
 #include "thumb.h"
 
-#define PMENU_HEIGHT 12
+#define PMENU_HEIGHT 11     // Rows on the top screen (the hint bar is under them)
 #define PMENU_WIDTH 46
 #define PMENU_MAXNAME 128
 #define PMENU_NUMCOUNTS 6
@@ -58,7 +58,7 @@ typedef struct {
   tui_menu options;
   tui_menu confirm;
   tui_menu delconfirm;                   // "Delete this puzzle?"
-  tui_menu slowwarn;                     // "Alt Max takes a while" (Old 3DS), after confirm
+  tui_menu slowwarn;                     // "Max takes a while" (Old 3DS), after confirm
   PuzzleEntry * entries;
   int nentries;
   uint32_t optact[PMENU_MAXOPTS];        // Action for each options item
@@ -66,8 +66,9 @@ typedef struct {
   int optwhimsy;                         // Options item index of Whimsies (-1 = none)
   int optpieces;                         // Options item index of Pieces (-1 = none)
   int optres;                            // Options item index of Resolution (-1 = none)
+  int optoverlay;                        // Options item index of Overlay (-1 = none)
   u8 maxres;                             // Highest resolution offered for the picture
-  u8 new3ds;                             // Running on a New 3DS (Alt Max is quick enough to not warn)
+  u8 new3ds;                             // Running on a New 3DS (Max is quick enough to not warn)
   u8 showcut;                            // Cursor is on such an item (or on Continue)
   u8 cutsrc;                             // Cut sample last asked for: 1 = the save's, 2 = the settings'
   tui_menu_number_t pieces;              // Piece count picked in options: index into the counts

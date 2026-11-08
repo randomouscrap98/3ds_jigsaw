@@ -5,7 +5,7 @@
 
 #include <stdint.h>
 
-// ETC1 block compression, for Alt Max piece pages (GPU_ETC1A4, 1 byte per pixel).
+// ETC1 block compression, for Max piece pages (GPU_ETC1A4, 1 byte per pixel).
 // A block is 4x4 pixels in 64 bits, as the ETC1 spec lays it out (bit 63 = first bit).
 
 // rgb: 16 pixels, 3 bytes each, row by row (index y * 4 + x). quality 0 = fast (base colors from

@@ -138,7 +138,7 @@ void test_savefile_layout(void) {
   h.cuthash = 0x11223344; h.seed = 0x55667788; h.overlay = 2; h.volume = SAVEFILE_VOLUME_MEDIUM;
   h.top = SAVEFILE_TOP_INFO;
   h.tray = 1;
-  h.res = SAVEFILE_RES_ALTHIGH;
+  h.res = SAVEFILE_RES_HIGH;
   uint8_t * buf = malloc(savefile_size(&b));
   savefile_write(&h, &b, buf);
   static const uint8_t want[39] = {
@@ -160,7 +160,7 @@ void test_savefile_layout(void) {
   CHECK(r.style == 6 && r.target == 0x1234 && r.table == 7 && r.seconds == 0xA1B2C3D4 &&
       r.music == SAVEFILE_MUSIC_SHUFFLE && r.whimsy == 2 && r.whimsyset == 1 && r.cuthash == 0x11223344 &&
       r.seed == 0x55667788 && r.overlay == 2 && r.volume == SAVEFILE_VOLUME_MEDIUM && r.top == SAVEFILE_TOP_INFO &&
-      r.tray == 1 && r.res == SAVEFILE_RES_ALTHIGH);
+      r.tray == 1 && r.res == SAVEFILE_RES_HIGH);
   // A shorter header (an older version's) reads the fields it has, the rest default to 0
   buf[10] = 26;
   CHECK(savefile_readheader(buf, SAVEFILE_HEADER, &r) == SAVEFILE_OK);
