@@ -118,6 +118,9 @@ static void app_start_game(App * app, PuzzleChoice choice) {
     return;
   }
   app->mode = MODE_GAME;
+#if GAME_SHOWCPU
+  speedup_begin();   // Debug builds: speedup for the whole game, to measure it
+#endif
   app_music(app);
 }
 
@@ -162,6 +165,9 @@ static void app_delete(App * app, const char * name) {
 static void app_end_game(App * app) {
   music_setmode(&app->music, MUSIC_OFF);  // Fades out; the thread frees the decoder within a DSP frame (~5 ms)
   game_free(&app->game);
+#if GAME_SHOWCPU
+  speedup_end();
+#endif
   app->mode = MODE_MENU;
   savewriter_flush(&app->writer);  // The menu reads saves back
   puzzlemenu_refresh(&app->menu);
