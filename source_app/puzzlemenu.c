@@ -454,10 +454,10 @@ void puzzlemenu_render_top(PuzzleMenu * pm, TextDraw * td) {
       if(pm->nentries && ei >= 0 && ei < pm->nentries && pm->entries[ei].hassave) {
         const u32 rowbg = cur ? selbg : C2D_Color32(30, 32, 38, 255);   // MAIN_BG_TOP
         if(pm->entries[ei].save.groups <= 1) {
-          C2D_DrawCircleSolid(13, y + 9, 0.5f, 2.5f, cur ? C2D_Color32(30, 120, 50, 255) : C2D_Color32(110, 200, 120, 255));
+          C2D_DrawCircleSolid(11, y + 9, 0.5f, 3.0f, cur ? C2D_Color32(30, 120, 50, 255) : C2D_Color32(110, 200, 120, 255));
         } else {
-          C2D_DrawCircleSolid(13, y + 9, 0.5f, 2.5f, cur ? sel : title);
-          C2D_DrawCircleSolid(13, y + 9, 0.5f, 1.5f, rowbg);
+          C2D_DrawCircleSolid(11, y + 9, 0.5f, 3.0f, cur ? sel : title);
+          C2D_DrawCircleSolid(11, y + 9, 0.5f, 2.0f, rowbg);
         }
       }
     }
