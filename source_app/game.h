@@ -77,6 +77,7 @@ typedef struct {
   float music;            // Music thread decoding, per frame
   float musicsd;          // Music thread waiting on file reads, per frame
   char song[256];         // Music file playing ("" = none)
+  float gpu;              // GPU drawing time (citro3d's C3D_GetDrawingTime, last frame)
   uint32_t drawn, texswaps;
   float build;            // Last drawlist rebuild (not smoothed)
   uint32_t layers;        // Drawlist layers

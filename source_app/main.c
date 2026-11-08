@@ -257,6 +257,7 @@ int main(int argc, char ** argv) {
     u64 t3 = svcGetSystemTick();
     C3D_FrameEnd(0);
     main_smooth(&pf->cpu, main_ms((t1 - t0) + (t3 - t2)));
+    main_smooth(&pf->gpu, C3D_GetDrawingTime());
     u64 mdec, msd;
     music_busy(&app.music, &mdec, &msd);
     main_smooth(&pf->music, main_ms(mdec));

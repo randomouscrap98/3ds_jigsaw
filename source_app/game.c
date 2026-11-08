@@ -525,7 +525,7 @@ void game_render_top(Game * g, TextDraw * td) {
     u8 a = (u8)(panel * 255);
     char time[16];
     textdraw_fmttime(time, sizeof(time), g->playms / 1000);
-    const float cpuh = GAME_SHOWCPU ? 0 : 16;  // Without the CPU line the song moves up into its row
+    const float cpuh = GAME_SHOWCPU ? -16 : 16;  // CPU + GPU lines push the song down; without them it moves up
     C2D_DrawRectSolid(70, 66, 0.7f, 260, 98 - cpuh, C2D_Color32(16, 16, 20, (u8)(panel * 210)));
     textdraw_center(td, 200, 74, 0.8f, C2D_Color32(255, 220, 90, a), "%s", time);
     textdraw_center(td, 200, 108, 0.5f, C2D_Color32(230, 230, 230, a), "%lu pieces, %lu groups left",
@@ -538,6 +538,9 @@ void game_render_top(Game * g, TextDraw * td) {
     int mpct = pf->frame > 0 ? (int)(100 * (pf->music + pf->musicsd) / pf->frame) : 0;
     textdraw_center(td, 200, 128, 0.45f, pc, "CPU %.1f ms (%d%%)  music %.1f+%.1fms (%d%%)",
         pf->cpu, pct, pf->music, pf->musicsd, mpct);
+    // GPU drawing time, pieces drawn and texture page switches on the bottom screen
+    textdraw_center(td, 200, 144, 0.45f, pc, "GPU %.1f ms  frame %.1f ms  %lu drawn  %lu swaps",
+        pf->gpu, pf->frame, (unsigned long)pf->drawn, (unsigned long)pf->texswaps);
 #endif
     // Song name rolls if it's too long, starting over each time the song changes
     if(strcmp(g->lastsong, pf->song)) {
