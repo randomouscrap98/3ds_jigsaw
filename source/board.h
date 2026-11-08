@@ -24,11 +24,14 @@ typedef struct {
 // the world, and rot (0-3, clockwise quarter turns) rotates the whole puzzle around that
 // point. So a piece's world center = (x, y) + R(rot) * (its PieceGeo home center). Two
 // groups are correctly aligned with each other exactly when they have the same x, y and rot.
+// A group in the tray has its (x, y) in tray space instead of the world (the app maps it to the
+// screen); it only snaps with other tray groups, and picking / marking sees one side at a time.
 typedef struct {
   float x, y;
   uint16_t first;   // First piece in this group's list (BOARD_NONE = dead group)
   uint16_t count;   // Pieces in this group (0 = dead group)
   uint8_t rot;
+  uint8_t tray;     // 1 = in the tray
 } BoardGroup;
 
 // The puzzle table: pieces, groups, draw order. All coordinates are world units.
@@ -58,6 +61,8 @@ int board_scatterpack(Board * b, uint32_t seed, float x, float y, float w, float
 // Topmost group under world point, or -1 if none (exact hitboxes first, then loose grab
 // shapes if the geometry has them). Does not change draw order.
 int32_t board_pick(Board * b, float x, float y);
+// The same among tray groups (tray = 1, point in tray space) or table groups (0)
+int32_t board_pickin(Board * b, float x, float y, uint8_t tray);
 // Move group to the top of the draw order
 void board_raise(Board * b, uint16_t group);
 void board_move(Board * b, uint16_t group, float dx, float dy);
@@ -66,7 +71,7 @@ void board_move(Board * b, uint16_t group, float dx, float dy);
 void board_rotate(Board * b, uint16_t group, int dir, float px, float py);
 // Would board_drop merge anything? (Changes nothing)
 int board_can_merge(Board * b, uint16_t group, float snap);
-// Let go of a group: snap/merge it with any matching neighbours within snap distance.
+// Let go of a group: snap/merge it (only with groups on the same side: tray or table) with any matching neighbours within snap distance.
 // Repeats until nothing else merges. The dropped group keeps its id and absorbs the
 // others. It moves to line up with the first one it snaps to; in the merges that follow
 // (cascades) the bigger of the two stays put (ties: the dropped one), so a late cascade never
@@ -78,6 +83,8 @@ int board_complete(Board * b);
 // Mark every group with a piece center inside the rectangle (corners in any order).
 // Returns how many groups were newly marked.
 uint32_t board_mark_rect(Board * b, float x0, float y0, float x1, float y1, uint8_t * mark);
+// The same among tray groups (tray = 1, rectangle in tray space) or table groups (0)
+uint32_t board_markin(Board * b, float x0, float y0, float x1, float y1, uint8_t * mark, uint8_t tray);
 // Move all marked groups to the top of the draw order, keeping their order among themselves
 void board_raise_marked(Board * b, const uint8_t * mark);
 // Bounds of the piece centers of all marked groups. Returns 0 if nothing is marked.

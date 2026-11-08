@@ -48,6 +48,7 @@ int main(int argc, char ** argv) {
   RUN(test_drawlist);
   RUN(test_musicdec);
   RUN(test_boardsave);
+  RUN(test_board_tray);
   RUN(test_savefile);
   RUN(test_savefile_layout);
   RUN(test_sfxgen);

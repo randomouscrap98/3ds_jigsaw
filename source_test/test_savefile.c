@@ -137,9 +137,10 @@ void test_savefile_layout(void) {
   h.music = SAVEFILE_MUSIC_SHUFFLE; h.whimsy = 2; h.whimsyset = 1;
   h.cuthash = 0x11223344; h.seed = 0x55667788; h.overlay = 2; h.volume = SAVEFILE_VOLUME_MEDIUM;
   h.top = SAVEFILE_TOP_INFO;
+  h.tray = 1;
   uint8_t * buf = malloc(savefile_size(&b));
   savefile_write(&h, &b, buf);
-  static const uint8_t want[37] = {
+  static const uint8_t want[38] = {
     '3', 'D', 'S', 'J', 'G', 'S', 'A', 'W',  // 0 magic
     1, 0, 64, 0,                             // 8 version, 10 header size
     1, 4, 9,                                 // 12 app version
@@ -148,7 +149,7 @@ void test_savefile_layout(void) {
     2, 2, 1,                                 // 23 music, 24 whimsy, 25 whimsy set
     0x44, 0x33, 0x22, 0x11,                  // 26 cut hash
     0x88, 0x77, 0x66, 0x55,                  // 30 cut seed
-    2, 2, 1,                                 // 34 overlay, 35 volume, 36 top
+    2, 2, 1, 1,                              // 34 overlay, 35 volume, 36 top, 37 tray
   };
   CHECK(memcmp(buf, want, sizeof want) == 0);
   int zero = 1;
@@ -157,11 +158,12 @@ void test_savefile_layout(void) {
   CHECK(savefile_readheader(buf, SAVEFILE_HEADER, &r) == SAVEFILE_OK);
   CHECK(r.style == 6 && r.target == 0x1234 && r.table == 7 && r.seconds == 0xA1B2C3D4 &&
       r.music == SAVEFILE_MUSIC_SHUFFLE && r.whimsy == 2 && r.whimsyset == 1 && r.cuthash == 0x11223344 &&
-      r.seed == 0x55667788 && r.overlay == 2 && r.volume == SAVEFILE_VOLUME_MEDIUM && r.top == SAVEFILE_TOP_INFO);
+      r.seed == 0x55667788 && r.overlay == 2 && r.volume == SAVEFILE_VOLUME_MEDIUM && r.top == SAVEFILE_TOP_INFO &&
+      r.tray == 1);
   // A shorter header (an older version's) reads the fields it has, the rest default to 0
   buf[10] = 26;
   CHECK(savefile_readheader(buf, SAVEFILE_HEADER, &r) == SAVEFILE_OK);
-  CHECK(r.whimsyset == 1 && r.cuthash == 0 && r.seed == 0 && r.overlay == 0 && r.volume == 0 && r.top == 0);
+  CHECK(r.whimsyset == 1 && r.cuthash == 0 && r.seed == 0 && r.overlay == 0 && r.volume == 0 && r.top == 0 && r.tray == 0);
   free(buf);
   test_board_free(&b);
 }

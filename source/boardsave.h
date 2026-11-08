@@ -6,15 +6,17 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define BOARDSAVE_VERSION 2
+#define BOARDSAVE_VERSION 3
+
+#define BOARDSAVE_TRAY 1   // Group flags bit (version 3): in the tray
 
 // Board <-> flat byte buffer. Little endian, platform independent. Layout:
 //   "JIGS" u16 version, u16 cols, u16 rows, f32 cell, u32 ngroups
-//   version 2 only: u32 count (pieces; version 1 means cols * rows)
-//   ngroups x { f32 x, f32 y, u8 rot }   (in draw order, bottom first)
+//   version 2+: u32 count (pieces; version 1 means cols * rows)
+//   ngroups x { f32 x, f32 y, u8 rot, version 3: u8 flags (BOARDSAVE_TRAY) }   (in draw order, bottom first)
 //   count x u16 group index (into the list above)
-// Boards with exactly cols * rows pieces (no whimsies) are written as version 1, so those
-// saves stay readable by 1.0-1.1.
+// Written as the lowest version that holds the board: 3 only with groups in the tray (1.5), 2
+// with pieces beyond the grid (whimsies, hex), else 1 (readable by 1.0-1.1).
 typedef struct {
   uint16_t version;
   uint16_t cols, rows;

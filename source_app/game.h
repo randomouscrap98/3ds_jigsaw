@@ -45,6 +45,9 @@
 #define GAME_TURNDIST 5           // Tapping a piece (moving less than this, pixels)...
 #define GAME_TURNMS 100           // ...and letting go within this turns it, unless it would snap
 #define GAME_TURNMAX 50           // Groups bigger than this don't turn on a tap
+#define GAME_TRAYH 80             // Tray height when open (a third of the bottom screen), border included
+#define GAME_TRAYPEEK 15          // Closed tray with pieces in it still shows this much (border + 10)
+#define GAME_TRAYMS 150           // Tray slide in / out time
 
 #define GAME_EV_MERGE    (1 << 0)
 #define GAME_EV_COMPLETE (1 << 1)
@@ -58,6 +61,7 @@
 #define GAME_MOD_MUSICMODE KEY_A  // Cycles off -> in order -> shuffled
 #define GAME_MOD_VOLUME KEY_B     // Cycles low -> medium -> high
 #define GAME_MOD_TOP KEY_SELECT     // Swaps the top screen: picture (Y = info) or info (Y = picture)
+#define GAME_MOD_TRAY (KEY_L | KEY_R)  // Opens / closes the tray
 #define GAME_MOD_CONDENSE KEY_DLEFT  // Squish the selection into a tidy block (also held, then Y)
 #define GAME_MOD_KEEPKEYS (KEY_DUP | KEY_DDOWN)  // Buttons that keep working with the modifier (zoom)
 
@@ -117,7 +121,12 @@ typedef struct {
   uint8_t * sel;          // Selected groups: one byte per group slot (board.count)
   uint32_t nsel;          // Number of selected groups
   uint8_t * boxsel;       // Scratch: what the box being drawn covers (for display)
-  float boxwx, boxwy;     // World point where the box started
+  float boxwx, boxwy;     // World point where the box started (tray space if boxtray)
+  u8 boxtray;             // The box started in the tray: it only marks tray groups
+  u8 seltray;             // The selection is tray groups (a selection is all one side)
+  u8 trayopen;            // Tray open (saved), or closed / closing
+  float trayanim;         // Tray slide 0 (closed) .. 1 (open)
+  float trayzoom;         // Zoom the tray groups were last kept inside the tray at
   float downsx, downsy;   // Screen point where the stylus touched down
   float downmove;         // Farthest the stylus got from there (pixels)
   u64 downms;             // osGetTime at touch-down

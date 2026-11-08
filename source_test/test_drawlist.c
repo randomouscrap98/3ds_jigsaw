@@ -149,6 +149,35 @@ void test_drawlist(void) {
   check_grid_same(&d, &b, pad, perpage, 0);
   printf("  fresh build, %lu groups: grid %.3f ms, all pairs %.3f ms (host)\n", (unsigned long)b.ngroups,
       build_ms(&d, &b, pad, perpage, 0), build_ms(&d, &b, pad, perpage, 1));
+
+  // Tray groups are left out; the moving groups' pieces are the last `moving` entries
+  const uint32_t ntop = 5;
+  uint32_t want = 0, wantmoving = 0;
+  for(uint32_t i = 0; i < b.ngroups; i++) {
+    BoardGroup * gr = b.groups + b.order[i];
+    gr->tray = i % 7 == 3 && i < b.ngroups - ntop;
+    if(!gr->tray) want += gr->count;
+    if(i >= b.ngroups - ntop) wantmoving += gr->count;
+  }
+  uint16_t * first = malloc(sizeof(uint16_t) * b.count);
+  for(int nogrid = 1; nogrid >= 0; nogrid--) {
+    d.nogrid = nogrid;
+    drawlist_build(&d, &b, pad, test_pages(&b, perpage), (b.count + perpage - 1) / perpage, ntop);
+    CHECK(d.count == want && d.moving == wantmoving);
+    int notray = 1, topend = 1, same = 1;
+    for(uint32_t i = 0; i < d.count; i++) {
+      uint16_t gid = b.pieces[d.pieces[i]].group;
+      notray &= !b.groups[gid].tray;
+      int top = 0;
+      for(uint32_t k = b.ngroups - ntop; k < b.ngroups; k++) top |= b.order[k] == gid;
+      topend &= top == (i >= d.count - d.moving);
+      if(nogrid) first[i] = d.pieces[i];
+      else same &= first[i] == d.pieces[i];
+    }
+    CHECK(notray && topend && same);
+  }
+  free(first);
+  for(uint32_t i = 0; i < b.ngroups; i++) b.groups[b.order[i]].tray = 0;
   drawlist_free(&d);
   test_board_free(&b);
 }

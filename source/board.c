@@ -130,9 +130,14 @@ void board_scatter(Board * b, uint32_t seed, float x, float y, float w, float h)
 }
 
 int32_t board_pick(Board * b, float x, float y) {
+  return board_pickin(b, x, y, 0);
+}
+
+int32_t board_pickin(Board * b, float x, float y, uint8_t tray) {
   for(int32_t i = (int32_t)b->ngroups - 1; i >= 0; i--) {
     uint16_t gid = b->order[i];
     BoardGroup * g = b->groups + gid;
+    if(g->tray != tray) continue;
     // Undo the group transform to land in the puzzle frame
     float lx, ly;
     board_rotvec((4 - g->rot) & 3, x - g->x, y - g->y, &lx, &ly);
@@ -145,6 +150,7 @@ int32_t board_pick(Board * b, float x, float y) {
   for(int32_t i = (int32_t)b->ngroups - 1; i >= 0; i--) {
     uint16_t gid = b->order[i];
     BoardGroup * g = b->groups + gid;
+    if(g->tray != tray) continue;
     float lx, ly;
     board_rotvec((4 - g->rot) & 3, x - g->x, y - g->y, &lx, &ly);
     for(uint16_t p = g->first; p != BOARD_NONE; p = b->pieces[p].next) {
@@ -217,7 +223,7 @@ static int32_t board_find_merge(Board * b, uint16_t gid, float snap) {
       uint16_t hid = b->pieces[b->geo->nb[i]].group;
       if(hid == gid) continue;
       BoardGroup * h = b->groups + hid;
-      if(h->rot != g->rot) continue;
+      if(h->rot != g->rot || h->tray != g->tray) continue;   // Tray and table frames differ
       float dx = h->x - g->x, dy = h->y - g->y;
       if(dx * dx + dy * dy <= snap2) return hid;
     }
@@ -251,12 +257,16 @@ int board_complete(Board * b) {
 }
 
 uint32_t board_mark_rect(Board * b, float x0, float y0, float x1, float y1, uint8_t * mark) {
+  return board_markin(b, x0, y0, x1, y1, mark, 0);
+}
+
+uint32_t board_markin(Board * b, float x0, float y0, float x1, float y1, uint8_t * mark, uint8_t tray) {
   if(x0 > x1) { float t = x0; x0 = x1; x1 = t; }
   if(y0 > y1) { float t = y0; y0 = y1; y1 = t; }
   uint32_t n = 0;
   for(uint32_t p = 0; p < b->count; p++) {
     uint16_t gid = b->pieces[p].group;
-    if(mark[gid]) continue;
+    if(mark[gid] || b->groups[gid].tray != tray) continue;
     float x, y;
     board_piece_center(b, p, &x, &y);
     if(x >= x0 && x <= x1 && y >= y0 && y <= y1) {

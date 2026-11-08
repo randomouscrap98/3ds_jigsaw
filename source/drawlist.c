@@ -37,10 +37,12 @@ static int32_t drawlist_layers_all(DrawList * d, Board * b, uint32_t from, uint3
   int32_t top = base - 1;
   for(uint32_t k = from; k < to; k++) {
     uint16_t gk = b->order[k];
+    if(b->groups[gk].tray) continue;
     const float * bk = d->box + 4 * gk;
     int32_t l = base;
     for(uint32_t j = from; j < k; j++) {
       uint16_t gj = b->order[j];
+      if(b->groups[gj].tray) continue;
       if(d->layer[gj] >= l && drawlist_overlap(bk, d->box + 4 * gj)) l = d->layer[gj] + 1;
     }
     d->layer[gk] = l;
@@ -80,6 +82,7 @@ static int32_t drawlist_layers_grid(DrawList * d, Board * b, DrawGrid * g, uint3
   int32_t top = base - 1;
   for(uint32_t k = from; k < to; k++) {
     uint16_t gk = b->order[k];
+    if(b->groups[gk].tray) continue;
     const float * bk = d->box + 4 * gk;
     int32_t c0, r0, c1, r1;
     drawgrid_range(g, bk, &c0, &r0, &c1, &r1);
@@ -159,10 +162,12 @@ void drawlist_build(DrawList * d, Board * b, float pad, const uint8_t * page, ui
   }
   uint32_t split = b->ngroups - ntop;
   int32_t top = drawlist_layers(d, b, &g, 0, split, 0);
+  int32_t firstmoving = top + 1;
   top = drawlist_layers(d, b, &g, split, b->ngroups, top + 1);
   free(g.head);
   free(g.ent);
   d->layers = top + 1;
+  d->moving = 0;
   // Counting sort of pieces by (layer, page)
   if(pages == 0) pages = 1;
   uint32_t nkeys = d->layers * pages;
@@ -171,15 +176,29 @@ void drawlist_build(DrawList * d, Board * b, float pad, const uint8_t * page, ui
     // No memory for the sort: plain board order is always correct, just slower
     uint32_t n = 0;
     for(uint32_t i = 0; i < b->ngroups; i++) {
-      for(uint16_t p = b->groups[b->order[i]].first; p != BOARD_NONE; p = b->pieces[p].next) d->pieces[n++] = p;
+      const BoardGroup * gr = b->groups + b->order[i];
+      if(gr->tray) continue;
+      for(uint16_t p = gr->first; p != BOARD_NONE; p = b->pieces[p].next) {
+        d->pieces[n++] = p;
+        if(i >= split) d->moving++;
+      }
     }
+    d->count = n;
     return;
   }
+  uint32_t n = 0;
   for(uint32_t p = 0; p < b->count; p++) {
-    d->key[p] = d->layer[b->pieces[p].group] * pages + (page[p] < pages ? page[p] : pages - 1);
+    uint16_t gid = b->pieces[p].group;
+    if(b->groups[gid].tray) continue;
+    d->key[p] = d->layer[gid] * pages + (page[p] < pages ? page[p] : pages - 1);
     start[d->key[p] + 1]++;
+    if(d->layer[gid] >= firstmoving) d->moving++;
+    n++;
   }
   for(uint32_t k = 0; k < nkeys; k++) start[k + 1] += start[k];
-  for(uint32_t p = 0; p < b->count; p++) d->pieces[start[d->key[p]]++] = p;
+  for(uint32_t p = 0; p < b->count; p++) {
+    if(!b->groups[b->pieces[p].group].tray) d->pieces[start[d->key[p]]++] = p;
+  }
+  d->count = n;
   free(start);
 }

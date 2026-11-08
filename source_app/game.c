@@ -49,6 +49,8 @@ int game_init(Game * g, const char * name, uint32_t target, uint8_t style, uint8
     g->music = hdr.music;
     g->volume = hdr.volume;
     g->top = hdr.top;
+    g->trayopen = hdr.tray;
+    g->trayanim = hdr.tray;
     g->playms = (u64)hdr.seconds * 1000;
     g->seed = savefile_seedfor(&hdr, name);
   } else {
@@ -169,6 +171,7 @@ int game_save(Game * g, int background) {
   sh.music = g->music;
   sh.volume = g->volume;
   sh.top = g->top;
+  sh.tray = g->trayopen;
   sh.seconds = g->playms / 1000;
   savefile_write(&sh, &g->board, buf);
   char path[STORAGE_MAXPATH];
@@ -192,6 +195,71 @@ int game_save(Game * g, int background) {
 static void game_clearsel(Game * g) {
   if(g->nsel) memset(g->sel, 0, g->board.count);
   g->nsel = 0;
+}
+
+// Tray: a strip over the bottom of the table. Tray groups are in tray space: world units (the
+// table's zoom, so pieces keep their size going in and out) from the tray's top-left corner.
+
+// Anything in the tray?
+static int game_trayhas(Game * g) {
+  for(uint32_t i = 0; i < g->board.ngroups; i++) {
+    if(g->board.groups[g->board.order[i]].tray) return 1;
+  }
+  return 0;
+}
+
+// Screen y of the tray's top edge right now (the screen height when none of it shows). A closed
+// tray with pieces in it still peeks out.
+static float game_traytop(Game * g) {
+  float a = g->trayanim * g->trayanim * (3 - 2 * g->trayanim);
+  float closed = game_trayhas(g) ? GAME_TRAYPEEK : 0;
+  return g->cam.sh - (closed + (GAME_TRAYH - closed) * a);
+}
+
+// Camera from tray space to the screen, for a tray whose top edge is at top
+static void game_traycam(Game * g, float top, Camera * tc) {
+  *tc = g->cam;
+  tc->cx = tc->sw / 2 / tc->zoom;
+  tc->cy = (tc->sh / 2 - top) / tc->zoom;
+}
+
+// Move a group between the tray and the table, staying where it is on the screen
+static void game_totable(Game * g, uint16_t gid, Camera * tc) {
+  BoardGroup * gr = g->board.groups + gid;
+  float sx, sy;
+  camera_to_screen(tc, gr->x, gr->y, &sx, &sy);
+  camera_to_world(&g->cam, sx, sy, &gr->x, &gr->y);
+  gr->tray = 0;
+}
+
+static void game_totray(Game * g, uint16_t gid, Camera * tc) {
+  BoardGroup * gr = g->board.groups + gid;
+  float sx, sy;
+  camera_to_screen(&g->cam, gr->x, gr->y, &sx, &sy);
+  camera_to_world(tc, sx, sy, &gr->x, &gr->y);
+  gr->tray = 1;
+}
+
+// Push every tray group back inside the open tray (piece centers), e.g. after zooming in
+static void game_traykeep(Game * g) {
+  Board * b = &g->board;
+  float z = g->cam.zoom, w = g->cam.sw / z, y0 = RENDER_TRAY_EDGE / z, y1 = GAME_TRAYH / z;
+  for(uint32_t i = 0; i < b->ngroups; i++) {
+    uint16_t gid = b->order[i];
+    if(!b->groups[gid].tray) continue;
+    float bx0 = 1e30f, by0 = 1e30f, bx1 = -1e30f, by1 = -1e30f;
+    for(uint16_t p = b->groups[gid].first; p != BOARD_NONE; p = b->pieces[p].next) {
+      float x, y;
+      board_piece_center(b, p, &x, &y);
+      bx0 = fminf(bx0, x); by0 = fminf(by0, y);
+      bx1 = fmaxf(bx1, x); by1 = fmaxf(by1, y);
+    }
+    float dx = 0, dy = 0;
+    if(bx1 - bx0 <= w) dx = bx0 < 0 ? -bx0 : bx1 > w ? w - bx1 : 0;
+    if(by1 - by0 <= y1 - y0) dy = by0 < y0 ? y0 - by0 : by1 > y1 ? y1 - by1 : 0;
+    if(dx || dy) board_move(b, gid, dx, dy);
+  }
+  g->trayzoom = z;
 }
 
 // Move every selected group by (dx, dy), cut short so all their piece centers stay on the
@@ -218,9 +286,14 @@ static void game_movesel(Game * g, float dx, float dy) {
 // selection with what the box covers
 static void game_endbox(Game * g) {
   float wx, wy;
-  camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
+  Camera tc;
+  game_traycam(g, game_traytop(g), &tc);
+  camera_to_world(g->boxtray ? &tc : &g->cam, g->lastsx, g->lastsy, &wx, &wy);
+  // A selection is all on one side: starting on the other side starts over
+  if(g->nsel && g->seltray != g->boxtray) game_clearsel(g);
+  g->seltray = g->boxtray;
   if(g->downmove < GAME_TAPDIST) {
-    int32_t gid = board_pick(&g->board, wx, wy);
+    int32_t gid = board_pickin(&g->board, wx, wy, g->boxtray);
     if(gid >= 0) {
       g->sel[gid] = !g->sel[gid];
       if(g->sel[gid]) g->nsel++;
@@ -228,7 +301,7 @@ static void game_endbox(Game * g) {
     }
   } else {
     game_clearsel(g);
-    g->nsel = board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->sel);
+    g->nsel = board_markin(&g->board, g->boxwx, g->boxwy, wx, wy, g->sel, g->boxtray);
   }
   g->boxing = 0;
 }
@@ -237,21 +310,40 @@ static void game_endbox(Game * g) {
 static int game_release(Game * g) {
   int ev = 0;
   if(g->boxing) game_endbox(g);
+  // Let go over the open tray: whatever is held goes in (no snapping in there)
+  Camera tc;
+  float top = game_traytop(g);
+  game_traycam(g, top, &tc);
+  int totray = g->trayopen && g->lastsy >= top;
   if(g->movingsel) {
     // Moving a selection never snaps: it only goes where it's put
+    if(totray) {
+      for(uint32_t i = 0; i < g->board.count; i++) {
+        if(g->sel[i]) game_totray(g, i, &tc);
+      }
+      g->seltray = 1;
+      game_traykeep(g);
+    }
     g->dirty = 1;
   } else if(g->held >= 0) {
+    // Into the tray first, so it snaps with tray neighbours (in tray space, pivot too)
+    Board * b = &g->board;
+    float px = g->lastwx, py = g->lastwy;
+    if(totray) {
+      game_totray(g, g->held, &tc);
+      camera_to_world(&tc, g->lastsx, g->lastsy, &px, &py);
+    }
     // A quick tap turns the group a quarter, around the stylus, unless it would snap where
     // it is (snapping wins, so turns are deliberate)
-    Board * b = &g->board;
     float snap = b->geo->cell * GAME_SNAP;
     if(g->downmove < GAME_TURNDIST && osGetTime() - g->downms < GAME_TURNMS &&
        b->groups[g->held].count <= GAME_TURNMAX && !board_can_merge(b, g->held, snap)) {
-      board_rotate(b, g->held, 1, g->lastwx, g->lastwy);
+      board_rotate(b, g->held, 1, px, py);
     }
     int merges = board_drop(b, g->held, snap);
     if(merges) ev |= GAME_EV_MERGE;
     if(merges && board_complete(&g->board)) ev |= GAME_EV_COMPLETE;
+    if(totray) game_traykeep(g);
     g->dirty = 1;
   }
   if(g->held >= 0) g->dldirty = 1;
@@ -268,6 +360,7 @@ static void game_condense(Game * g) {
   Board * b = &g->board;
   if(board_condense_marked(b, g->sel, b->geo->cell * GAME_CONDENSE, cutter_info(g->style)->sprawl)) return;
   board_raise_marked(b, g->sel);
+  if(g->seltray) game_traykeep(g);
   g->dldirty = 1;
   g->dirty = 1;
 }
@@ -301,6 +394,13 @@ int game_update(Game * g, const GameInput * gin) {
       g->dirty = 1;
       ev |= GAME_EV_VOLUME;
     }
+    // Tray in / out (not while something is held or a box is being drawn); a selection in the
+    // tray is dropped when it closes
+    if((gin->down & GAME_MOD_TRAY) && g->held < 0 && !g->boxing) {
+      g->trayopen = !g->trayopen;
+      if(!g->trayopen && g->seltray) game_clearsel(g);
+      g->dirty = 1;
+    }
     if(gin->down & GAME_MOD_TOP) {
       g->top = g->top == SAVEFILE_TOP_INFO ? SAVEFILE_TOP_PICTURE : SAVEFILE_TOP_INFO;
       g->dirty = 1;
@@ -324,6 +424,9 @@ int game_update(Game * g, const GameInput * gin) {
   g->overlay += (in->held & GAME_MODKEY ? 1.0f : -1.0f) * dt / GAME_OVERLAY_FADE_MS;
   if(g->overlay < 0) g->overlay = 0;
   if(g->overlay > 1) g->overlay = 1;
+  g->trayanim += (g->trayopen ? 1.0f : -1.0f) * dt / GAME_TRAYMS;
+  if(g->trayanim < 0) g->trayanim = 0;
+  if(g->trayanim > 1) g->trayanim = 1;
 
   if(in->down & KEY_START) {
     ev |= game_release(g);
@@ -349,12 +452,58 @@ int game_update(Game * g, const GameInput * gin) {
     camera_pan(c, px * GAME_PANSPEED, py * GAME_PANSPEED);
   }
 
-  if(in->down & KEY_TOUCH) {
+  float traytop = game_traytop(g);
+  if((in->down & KEY_TOUCH) && in->touch.py >= traytop) {
+    // On the tray. Held pieces come out onto the table at once (drawn over the tray, dropped
+    // back into it or onto the table). A closed tray's peeking edge does nothing.
+    float wx, wy, tx, ty;
+    Camera tc;
+    game_traycam(g, traytop, &tc);
+    camera_to_world(c, in->touch.px, in->touch.py, &wx, &wy);
+    camera_to_world(&tc, in->touch.px, in->touch.py, &tx, &ty);
+    int32_t gid = g->trayopen ? board_pickin(&g->board, tx, ty, 1) : -1;
+    if(!g->trayopen) {
+      // Nothing
+    } else if(in->held & GAME_SELECTKEYS) {
+      g->boxing = 1;
+      g->boxtray = 1;
+      g->boxwx = tx;
+      g->boxwy = ty;
+    } else if(gid >= 0 && g->sel[gid]) {
+      for(uint32_t i = 0; i < g->board.count; i++) {
+        if(g->sel[i]) game_totable(g, i, &tc);
+      }
+      g->seltray = 0;
+      g->held = gid;
+      g->movingsel = 1;
+      board_raise_marked(&g->board, g->sel);
+      g->ntop = g->nsel;
+      g->dldirty = 1;
+    } else {
+      game_clearsel(g);
+      if(gid >= 0) {
+        game_totable(g, gid, &tc);
+        g->held = gid;
+        board_raise(&g->board, gid);
+        g->ntop = 1;
+        g->dldirty = 1;
+      }
+    }
+    g->lastwx = wx;
+    g->lastwy = wy;
+    g->lastsx = in->touch.px;
+    g->lastsy = in->touch.py;
+    g->downsx = in->touch.px;
+    g->downsy = in->touch.py;
+    g->downmove = 0;
+    g->downms = now;
+  } else if(in->down & KEY_TOUCH) {
     float wx, wy;
     camera_to_world(c, in->touch.px, in->touch.py, &wx, &wy);
     int32_t gid = board_pick(&g->board, wx, wy);
     if(in->held & GAME_SELECTKEYS) {
       g->boxing = 1;
+      g->boxtray = 0;
       g->boxwx = wx;
       g->boxwy = wy;
     } else if(gid >= 0 && g->sel[gid]) {
@@ -395,7 +544,7 @@ int game_update(Game * g, const GameInput * gin) {
       if(sx < GAME_EDGEPAN) ex = -GAME_EDGEPANSPEED;
       if(sx > c->sw - GAME_EDGEPAN) ex = GAME_EDGEPANSPEED;
       if(sy < GAME_EDGEPAN) ey = -GAME_EDGEPANSPEED;
-      if(sy > c->sh - GAME_EDGEPAN) ey = GAME_EDGEPANSPEED;
+      if(sy > c->sh - GAME_EDGEPAN && !g->trayopen) ey = GAME_EDGEPANSPEED;  // The open tray is down there
       if(ex || ey) camera_pan(c, ex, ey);
     }
     g->lastsx = sx;
@@ -431,6 +580,7 @@ int game_update(Game * g, const GameInput * gin) {
     }
   }
 
+  if(g->cam.zoom != g->trayzoom) game_traykeep(g);
   if(g->dldirty) {
     u64 t = svcGetSystemTick();
     Layout * l = &g->gfx.layout;
@@ -444,16 +594,21 @@ int game_update(Game * g, const GameInput * gin) {
 }
 
 void game_render_bottom(Game * g, Render * r) {
+  RenderTray tray;
+  tray.top = game_traytop(g);
+  game_traycam(g, tray.top, &tray.cam);
+  const RenderTray * rt = tray.top < g->cam.sh ? &tray : NULL;
   if(g->boxing && g->downmove >= GAME_TAPDIST) {
     // Show what the box would select while it's being drawn (it replaces the selection)
+    Camera * bc = g->boxtray ? &tray.cam : &g->cam;
     float wx, wy;
-    camera_to_world(&g->cam, g->lastsx, g->lastsy, &wx, &wy);
+    camera_to_world(bc, g->lastsx, g->lastsy, &wx, &wy);
     memset(g->boxsel, 0, g->board.count);
-    board_mark_rect(&g->board, g->boxwx, g->boxwy, wx, wy, g->boxsel);
-    render_table(r, &g->board, &g->dl, &g->cam, &g->gfx, g->held, g->boxsel, g->table);
-    render_box(&g->cam, g->boxwx, g->boxwy, wx, wy);
+    board_markin(&g->board, g->boxwx, g->boxwy, wx, wy, g->boxsel, g->boxtray);
+    render_table(r, &g->board, &g->dl, &g->cam, &g->gfx, g->held, g->boxsel, g->table, rt);
+    render_box(bc, g->boxwx, g->boxwy, wx, wy);
   } else {
-    render_table(r, &g->board, &g->dl, &g->cam, &g->gfx, g->held, g->sel, g->table);
+    render_table(r, &g->board, &g->dl, &g->cam, &g->gfx, g->held, g->sel, g->table, rt);
   }
 }
 

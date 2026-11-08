@@ -22,6 +22,10 @@
 #define RENDER_GLOW_TEX     64
 #define RENDER_COLOR_SELECT C2D_Color32(240, 200, 90, 255)  // Selected pieces tint (menu yellow)
 #define RENDER_SELECT_BLEND 0.85f   // How much of the select color goes into a selected piece
+#define RENDER_TRAY_SHADE   0.07f   // Tray color: the table color this far toward white (dark tables) or black
+#define RENDER_TRAY_EDGESHADE 0.2f  // The same for the tray's top border
+#define RENDER_TRAY_EDGE    5       // Top border height, pixels
+#define RENDER_TRAY_DARK    110     // Tables with luma under this count as dark (the tray goes lighter)
 #define RENDER_COLOR_BOX    C2D_Color32(240, 200, 90, 60)   // Selection box fill
 #define RENDER_COLOR_BOXEDGE C2D_Color32(240, 200, 90, 230) // Selection box border
 
@@ -36,14 +40,22 @@ typedef struct {
   const C3D_Tex * lasttex;
 } Render;
 
+// The tray: a strip from screen y top down to the bottom of the screen, its pieces (tray groups)
+// drawn through cam (tray space -> screen)
+typedef struct {
+  float top;
+  Camera cam;
+} RenderTray;
+
 int render_init(Render * r);
 void render_free(Render * r);
 // Draw the table and every piece as seen through the camera, pieces in drawlist order. held is the group being
 // dragged (gets a soft offset shadow on the table, underneath everything) or -1. sel is
 // one byte per group slot, nonzero = selected (tinted; if held is selected, the whole
-// selection gets the shadow). table is an index into the table color palette (wraps).
+// selection gets the shadow). table is an index into the table color palette (wraps). tray (NULL =
+// none) is drawn over the table pieces and under the moving ones (the drawlist's last `moving`).
 void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, PuzzleGfx * pg,
-    int32_t held, const uint8_t * sel, int table);
+    int32_t held, const uint8_t * sel, int table, const RenderTray * tray);
 // Selection box between two world points, on top of everything
 void render_box(Camera * c, float wx0, float wy0, float wx1, float wy1);
 // Draw the preview picture centered in the given box, scaled down to fit if needed, at depth

@@ -32,6 +32,7 @@ you haven't). Without it the game just runs silently.
 | Y + B | Music volume: low, medium, high (saved with the puzzle) |
 | Y + SELECT | Top screen: picture (hold Y for info) or info (hold Y for the picture); saved with the puzzle |
 | Y + D-Pad Left | Squish the selection into a tidy block (it stays selected). Pressing Y while still holding Left after a box select works too |
+| Y + L or Y + R | Open or close the tray |
 | SELECT | Change felt (saved with puzzle) |
 | START | Save and go back to the menu |
 
@@ -40,6 +41,11 @@ leave by accident. The stylus and sticks still work.
 
 A moved selection never snaps to anything; it goes exactly where you put it. Touch the
 table or any unselected piece to clear the selection.
+
+The tray is a strip over the bottom third of the table that stays put while you move around:
+drop pieces (or a selection) on it to carry them, drag them back out anywhere. Pieces in the
+tray snap together like on the table. Box select works in it too (only on tray pieces). A closed tray with pieces
+in it peeks out a little. The tray and what's in it are saved with the puzzle.
 
 Pieces snap together when you drop them close to a matching neighbour with the same
 rotation. The puzzle is done once every piece is joined, wherever it ends up on the table.

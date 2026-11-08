@@ -81,12 +81,39 @@ static void render_glow(Render * r, Board * b, Camera * c, uint16_t gid) {
   }
 }
 
+// A table color shifted toward white (dark colors) or black (light ones) by t
+static u32 render_shade(u32 c, float t) {
+  int r = c & 0xFF, g = (c >> 8) & 0xFF, b = (c >> 16) & 0xFF;
+  int to = (r * 3 + g * 6 + b) / 10 < RENDER_TRAY_DARK ? 255 : 0;
+  r += (int)lroundf((to - r) * t);
+  g += (int)lroundf((to - g) * t);
+  b += (int)lroundf((to - b) * t);
+  return RENDER_RGB(r, g, b);
+}
+
+// One piece through camera c, skipped when off the screen (half = generous sprite reach)
+static void render_piece(Render * r, Board * b, Camera * c, PuzzleGfx * pg, uint16_t p, const uint8_t * sel,
+    const C2D_ImageTint * seltint, float half) {
+  uint16_t gid = b->pieces[p].group;
+  float wx, wy, sx, sy;
+  board_piece_center(b, p, &wx, &wy);
+  camera_to_screen(c, wx, wy, &sx, &sy);
+  if(sx < -half || sy < -half || sx > c->sw + half || sy > c->sh + half) return;
+  C2D_Image img = puzzlegfx_piece(pg, p);
+  if(img.tex != r->lasttex) r->texswaps++;
+  r->lasttex = img.tex;
+  r->drawn++;
+  float angle = RENDER_ANGLE_SIGN * b->groups[gid].rot * (float)M_PI_2;
+  C2D_DrawImageAtRotated(img, sx, sy, 0.5f, angle, sel[gid] ? seltint : NULL, c->zoom, c->zoom);
+}
+
 void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, PuzzleGfx * pg,
-    int32_t held, const uint8_t * sel, int table) {
+    int32_t held, const uint8_t * sel, int table, const RenderTray * tray) {
   float x0, y0, x1, y1;
+  u32 tc = render_tablecolors[(unsigned)table % RENDER_TABLECOLORS];
   camera_to_screen(c, 0, 0, &x0, &y0);
   camera_to_screen(c, b->width, b->height, &x1, &y1);
-  C2D_DrawRectSolid(x0, y0, 0.1f, x1 - x0, y1 - y0, render_tablecolors[(unsigned)table % RENDER_TABLECOLORS]);
+  C2D_DrawRectSolid(x0, y0, 0.1f, x1 - x0, y1 - y0, tc);
   if(held >= 0) {
     if(sel[held]) {
       for(uint32_t i = 0; i < b->ngroups; i++) {
@@ -100,22 +127,21 @@ void render_table(Render * r, Board * b, const DrawList * dl, Camera * c, Puzzle
   r->lasttex = NULL;
   C2D_ImageTint seltint;
   C2D_PlainImageTint(&seltint, RENDER_COLOR_SELECT, RENDER_SELECT_BLEND);
-  float zoom = c->zoom;
-  float half = (pg->layout.maxw > pg->layout.maxh ? pg->layout.maxw : pg->layout.maxh) * zoom * 0.75f;  // Generous: rotated tile corner reach
-  for(uint32_t i = 0; i < dl->count; i++) {
-    uint16_t p = dl->pieces[i];
-    uint16_t gid = b->pieces[p].group;
-    float wx, wy, sx, sy;
-    board_piece_center(b, p, &wx, &wy);
-    camera_to_screen(c, wx, wy, &sx, &sy);
-    if(sx < -half || sy < -half || sx > c->sw + half || sy > c->sh + half) continue;
-    C2D_Image img = puzzlegfx_piece(pg, p);
-    if(img.tex != r->lasttex) r->texswaps++;
-    r->lasttex = img.tex;
-    r->drawn++;
-    float angle = RENDER_ANGLE_SIGN * b->groups[gid].rot * (float)M_PI_2;
-    C2D_DrawImageAtRotated(img, sx, sy, 0.5f, angle, sel[gid] ? &seltint : NULL, zoom, zoom);
+  float half = (pg->layout.maxw > pg->layout.maxh ? pg->layout.maxw : pg->layout.maxh) * c->zoom * 0.75f;  // Generous: rotated tile corner reach
+  uint32_t still = dl->count - dl->moving;
+  for(uint32_t i = 0; i < still; i++) render_piece(r, b, c, pg, dl->pieces[i], sel, &seltint, half);
+  if(tray && tray->top < c->sh) {
+    // Drawn in order, straight after the table pieces (same depth: later sprites cover earlier ones)
+    C2D_DrawRectSolid(0, tray->top, 0.5f, c->sw, c->sh - tray->top, render_shade(tc, RENDER_TRAY_SHADE));
+    C2D_DrawRectSolid(0, tray->top, 0.5f, c->sw, RENDER_TRAY_EDGE, render_shade(tc, RENDER_TRAY_EDGESHADE));
+    Camera tcam = tray->cam;
+    for(uint32_t i = 0; i < b->ngroups; i++) {
+      const BoardGroup * g = b->groups + b->order[i];
+      if(!g->tray) continue;
+      for(uint16_t p = g->first; p != BOARD_NONE; p = b->pieces[p].next) render_piece(r, b, &tcam, pg, p, sel, &seltint, half);
+    }
   }
+  for(uint32_t i = still; i < dl->count; i++) render_piece(r, b, c, pg, dl->pieces[i], sel, &seltint, half);
 }
 
 void render_box(Camera * c, float wx0, float wy0, float wx1, float wy1) {

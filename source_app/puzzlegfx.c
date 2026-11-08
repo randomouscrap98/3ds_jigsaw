@@ -40,7 +40,7 @@ typedef struct {
 } PuzzleCacheHeader;
 
 #define PGFX_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
-#define PGFX_CUTBAR_MS 2000     // The cut's progress bar shows only after this long...
+#define PGFX_CUTBAR_MS 1500     // The cut's progress bar shows only after this long...
 #define PGFX_CUTBAR_LEFT 0.5f   // ...and only if at least this much of the cut is left then
 
 // Passes the cutter's reports on, except the cut stage's own (PROGRESS_CUTTING): those are dropped

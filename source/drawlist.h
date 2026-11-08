@@ -14,10 +14,12 @@
 // Each layer is drawn page by page. The top ntop groups of the board order are "moving"
 // (held / dragged selection) and always go above everything else, so the list stays
 // valid while they move. Rebuild after anything that changes the board order or moves
-// a non-moving group, or changes moving groups relative to each other.
+// a non-moving group, or changes moving groups relative to each other. Tray groups are left
+// out (drawn separately, in their own space).
 typedef struct {
   uint16_t * pieces;    // Draw order, bottom first (count entries)
   uint32_t count;
+  uint32_t moving;      // The last this many entries are the moving groups' pieces
   uint32_t layers;      // Layers used by the last build
   uint8_t nogrid;       // Testing: compare every pair of groups instead of using the grid
   // Scratch

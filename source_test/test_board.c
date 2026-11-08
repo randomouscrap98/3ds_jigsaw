@@ -5,6 +5,7 @@
 #include "stick.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 // Put single piece p's group so the piece sits at its solved spot shifted by (ox,oy), rotated
 static void place(Board * b, uint16_t p, float ox, float oy, uint8_t rot) {
@@ -372,6 +373,56 @@ void test_boardsave(void) {
   CHECK(boardsave_read(&c, buf, len) != 0);
   test_board_free(&c);
   free(buf);
+  test_board_free(&b);
+}
+
+// Tray groups: picked / marked / snapped only on their own side, saved as version 3 (only when
+// there are any)
+void test_board_tray(void) {
+  Board b, c;
+  CHECK(test_board_grid(&b, 4, 3, 20, 400, 300) == 0);
+  // Pieces 0 and 1 are neighbours, both at home (the rest moved off); 1 goes in the tray at the
+  // same coordinates
+  for(uint32_t i = 2; i < b.count; i++) b.groups[i].x = 100 + 30 * i;
+  b.groups[1].tray = 1;
+  float x, y;
+  board_piece_center(&b, 1, &x, &y);
+  CHECK(board_pick(&b, x, y) == -1);
+  CHECK(board_pickin(&b, x, y, 1) == 1);
+  board_piece_center(&b, 0, &x, &y);
+  CHECK(board_pick(&b, x, y) == 0 && board_pickin(&b, x, y, 1) == -1);
+  CHECK(!board_can_merge(&b, 0, 1) && board_drop(&b, 0, 1) == 0);
+  CHECK(!board_can_merge(&b, 1, 1) && board_drop(&b, 1, 1) == 0);
+  b.groups[0].tray = 1;   // Both in the tray: they snap there
+  CHECK(board_can_merge(&b, 0, 1) && board_can_merge(&b, 1, 1));
+  b.groups[0].tray = 0;
+  uint8_t mark[12] = { 0 };
+  CHECK(board_mark_rect(&b, -1e6, -1e6, 1e6, 1e6, mark) == 11 && !mark[1]);
+  memset(mark, 0, sizeof mark);
+  CHECK(board_markin(&b, -1e6, -1e6, 1e6, 1e6, mark, 1) == 1 && mark[1] && !mark[0]);
+
+  // Save: version 3 with the flag; without tray groups the old version again
+  size_t len = boardsave_size(&b);
+  uint8_t * buf = malloc(len);
+  CHECK(boardsave_write(&b, buf) == len);
+  BoardSaveInfo info;
+  CHECK(boardsave_peek(buf, len, &info) == 0 && info.version == 3);
+  CHECK(test_board_grid(&c, 4, 3, 20, 400, 300) == 0);
+  CHECK(boardsave_read(&c, buf, len) == 0);
+  int trays = 0;
+  for(uint32_t i = 0; i < c.count; i++) trays += c.groups[c.pieces[i].group].tray;
+  CHECK(trays == 1 && c.groups[c.pieces[1].group].tray);
+  CHECK(boardsave_read(&c, buf, len - 1) != 0);
+  free(buf);
+  b.groups[1].tray = 0;
+  CHECK(board_can_merge(&b, 0, 1));   // Out of the tray the same pair snaps
+  len = boardsave_size(&b);
+  buf = malloc(len);
+  CHECK(boardsave_write(&b, buf) == len);
+  CHECK(boardsave_peek(buf, len, &info) == 0 && info.version == 1);
+  CHECK(boardsave_read(&c, buf, len) == 0 && !c.groups[c.pieces[1].group].tray);
+  free(buf);
+  test_board_free(&c);
   test_board_free(&b);
 }
 
