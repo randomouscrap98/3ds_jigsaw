@@ -2,6 +2,7 @@
 #define __HEADER_JIGSAW_TESSCUT__
 
 #include "cutgraph.h"
+#include "progress.h"
 
 #include <stdint.h>
 
@@ -78,8 +79,8 @@ uint32_t tesscut_tilepoints(const TessShape * sh);
 uint32_t tesscut_tile(const TessShape * sh, float * xy);
 // About cols x rows pieces over (0,0)-(cols,rows) (tile size fitted to the count). orient
 // (malloc'd, count bytes; NULL = not wanted) gets each piece's orientation 0-2. Returns 0 on
-// success.
+// success. pr (may be NULL) hears "Cutting pieces" once per build (up to TESS_FITS).
 int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const TessVary * v, uint32_t seed,
-    CutGraph * g, uint8_t ** orient, TessStats * stats);
+    CutGraph * g, uint8_t ** orient, TessStats * stats, const Progress * pr);
 
 #endif

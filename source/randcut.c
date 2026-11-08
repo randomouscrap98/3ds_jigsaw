@@ -326,7 +326,8 @@ static int randcut_topology(CutGraph * c, RcWork * w) {
 
 // ---- Whole cut ----
 
-int randcut_graph(CutGraph * c, float w, float h, uint32_t count, uint32_t seed, const RandCutStyle * st) {
+int randcut_graph(CutGraph * c, float w, float h, uint32_t count, uint32_t seed, const RandCutStyle * st,
+    const Progress * pr) {
   memset(c, 0, sizeof(CutGraph));
   if(count < 2 || count > 0xFFF0 || !(w > 0) || !(h > 0)) return 1;
   c->count = count;
@@ -356,6 +357,7 @@ int randcut_graph(CutGraph * c, float w, float h, uint32_t count, uint32_t seed,
     for(int pass = 0; pass <= st->relax && !err; pass++) {
       uint32_t n = 0;
       for(uint32_t i = 0; i < count && !err; i++) {
+        if(i % 64 == 0) progress_report(pr, "Cutting pieces", pass * count + i, (st->relax + 1) * count);
         wk.cstart[i] = n;
         int m = randcut_cell(sites, count, i, w, h, near, wk.cell + n);
         if(m == 0) err = 1;
@@ -413,13 +415,14 @@ uint32_t randcut_tryseed(uint32_t seed, uint32_t t) {
   return seed ^ (t * 0x85EBCA6Bu);
 }
 
-int randcut_init(CutGraph * c, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st) {
+int randcut_init(CutGraph * c, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st,
+    const Progress * pr) {
   memset(c, 0, sizeof(CutGraph));
   CutTabStyle ts;
   randcut_tabstyle(st, &ts);
   for(uint32_t t = 0; t < RANDCUT_MAXTRIES; t++) {
     uint32_t s = randcut_tryseed(seed, t);
-    if(!randcut_graph(c, width, height, count, s, st)) {
+    if(!randcut_graph(c, width, height, count, s, st, pr)) {
       c->tries = t + 1;
       if(!randcut_tabs(c, st, &ts, s)) return 0;
       cutgraph_free(c);

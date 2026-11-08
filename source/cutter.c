@@ -78,7 +78,7 @@ static int cutter_hex(Cutter * c) {
 }
 
 // Tessellations: the piece count is whatever the border leaves near cols x rows
-static int cutter_tess(Cutter * c, uint8_t shape, uint32_t seed) {
+static int cutter_tess(Cutter * c, uint8_t shape, uint32_t seed, const Progress * pr) {
   c->usegraph = 1;
   TessVary v = { CUTTER_TESSJITTER, CUTTER_TESSBUMP, CUTTER_TESSCLEAR, CUTTER_TESSMINAREA, CUTTER_TESSNECK, 0, 0, 0 };
   if(shape == TESSCUT_SHAPE_PINWHEEL) v.jitter = v.bump = CUTTER_PINVARY;
@@ -87,7 +87,7 @@ static int cutter_tess(Cutter * c, uint8_t shape, uint32_t seed) {
     v.slide = CUTTER_TRISLIDE;
   }
   TessStats st;
-  if(tesscut_graph(c->cols, c->rows, tesscut_shape(shape), &v, seed, &c->g, NULL, &st)) return 1;
+  if(tesscut_graph(c->cols, c->rows, tesscut_shape(shape), &v, seed, &c->g, NULL, &st, pr)) return 1;
   c->g.tries = st.fits + st.failed;
   c->count = c->g.count;
   c->maxpoints = cutgraph_maxpoints(&c->g);
@@ -95,6 +95,11 @@ static int cutter_tess(Cutter * c, uint8_t shape, uint32_t seed) {
 }
 
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed) {
+  return cutter_initp(c, style, whimsy, set, cols, rows, seed, NULL);
+}
+
+int cutter_initp(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed,
+    const Progress * pr) {
   const CutStyleInfo * si = cutter_info(style);
   memset(c, 0, sizeof(Cutter));
   c->style = style < CUT_STYLES ? style : CUT_STYLE_CLASSIC;
@@ -106,22 +111,22 @@ int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t
   switch(si->kind) {
   case CUT_KIND_MAZE: return cutter_maze(c, seed);
   case CUT_KIND_HEX: return cutter_hex(c);
-  case CUT_KIND_TESS: return cutter_tess(c, si->sub, seed);
-  case CUT_KIND_RANDOM: return cutter_graph(c, randcut_style(si->sub), seed);
+  case CUT_KIND_TESS: return cutter_tess(c, si->sub, seed, pr);
+  case CUT_KIND_RANDOM: return cutter_graph(c, randcut_style(si->sub), seed, pr);
   default:
-    if(c->whimsy != WHIMSY_NONE) return cutter_graph(c, NULL, seed);
+    if(c->whimsy != WHIMSY_NONE) return cutter_graph(c, NULL, seed, pr);
     if(edgegen_init(&c->eg, cols, rows, seed, edgegen_style(si->sub))) return 1;
     c->maxpoints = EDGEGEN_MAXPOINTS;
     return 0;
   }
 }
 
-int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed) {
+int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed, const Progress * pr) {
   int rnd = rst != NULL;
   uint16_t cols = c->cols, rows = c->rows;
   c->usegraph = 1;
   if(rnd && c->whimsy == WHIMSY_NONE) {
-    if(randcut_init(&c->g, cols, rows, c->count, seed, rst)) return 1;
+    if(randcut_init(&c->g, cols, rows, c->count, seed, rst, pr)) return 1;
   } else {
     // Whimsies go in before tabs; a cut that can't be tabbed cleanly is retried with new
     // whimsy spots (and for random, new points)
@@ -135,12 +140,12 @@ int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed) {
     int ok = 0;
     for(uint32_t t = 0; t < CUTTER_MAXTRIES && !ok; t++) {
       uint32_t s = randcut_tryseed(seed, t);
-      int err = rnd ? randcut_graph(&c->g, cols, rows, c->count, s, rst)
+      int err = rnd ? randcut_graph(&c->g, cols, rows, c->count, s, rst, pr)
           : cutgraph_grid(&c->g, &c->eg);
       if(err) continue;
       c->g.tries = t + 1;
       // A cut with whimsies asked for gets at least one (or tries again)
-      int placed = whimsy_add(&c->g, c->whimsy, c->set, s);
+      int placed = whimsy_add(&c->g, c->whimsy, c->set, s, pr);
       if(placed > 0 && !(rnd ? randcut_tabs(&c->g, rst, &ts, s) : cutgraph_tabs(&c->g, &ts, s))) {
         c->whimsies = placed;
         ok = 1;
@@ -152,7 +157,7 @@ int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed) {
     // same every time for this seed)
     if(!ok) {
       c->whimsies = 0;
-      if(rnd) ok = !randcut_init(&c->g, cols, rows, c->count, seed, rst);
+      if(rnd) ok = !randcut_init(&c->g, cols, rows, c->count, seed, rst, pr);
       else ok = !cutgraph_grid(&c->g, &c->eg) && !cutgraph_tabs(&c->g, &ts, seed);
       c->g.tries = CUTTER_MAXTRIES + 1;
     }

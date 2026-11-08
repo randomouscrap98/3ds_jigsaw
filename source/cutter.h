@@ -6,6 +6,7 @@
 #include "cutgraph.h"
 #include "whimsy.h"
 #include "piecegeo.h"
+#include "progress.h"
 
 #include <stdint.h>
 
@@ -85,11 +86,15 @@ typedef struct {
 // Same style + whimsy level + set + seed = same cut. Unknown styles cut classic, unknown
 // whimsy levels/sets are none/cute. Returns 0 on success.
 int cutter_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed);
+// cutter_init with progress reports for the slow parts (pr may be NULL): "Cutting pieces" in random and
+// tessellation cuts, "Adding whimsies"
+int cutter_initp(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_t cols, uint16_t rows, uint32_t seed,
+    const Progress * pr);
 void cutter_free(Cutter * c);
 // For cutter_init and woodcut: with style, whimsy, set, cols, rows and count filled in,
 // builds c->g (usegraph): a random cut with rst, or a grid (c->style's edgegen style) with
-// whimsies when rst is NULL. Sets whimsies, count and maxpoints. Returns 0 on success.
-int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed);
+// whimsies when rst is NULL. Sets whimsies, count and maxpoints. Returns 0 on success. pr may be NULL.
+int cutter_graph(Cutter * c, const RandCutStyle * rst, uint32_t seed, const Progress * pr);
 // Closed outline of piece p (clockwise, y down) in the puzzle frame scaled by cell, then
 // offset by (ox, oy). xy must hold maxpoints pairs. Returns the number of points.
 uint32_t cutter_outline(const Cutter * c, uint32_t p, float cell, float ox, float oy, float * xy);

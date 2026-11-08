@@ -194,7 +194,8 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   // Cut first (in cells), then pick the piece size whose tiles fit the pages
   if(cb) cb(udata, "Cutting pieces", 0, 1);
-  if(cutter_init(&cut, h->key.style, h->key.whimsy, h->key.whimsyset, l->cols, l->rows, h->key.seed)) {
+  Progress pr = { cb, udata };
+  if(cutter_initp(&cut, h->key.style, h->key.whimsy, h->key.whimsyset, l->cols, l->rows, h->key.seed, &pr)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
   }

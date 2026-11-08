@@ -28,6 +28,7 @@
 #define MAIN_VOLUME_MEDIUM 0.55f
 
 #define MAIN_PERF_SMOOTH 0.1f  // Weight of the newest frame in the perf averages
+#define MAIN_PROGRESS_MS 100   // Progress screens with an unchanged message redraw at most this often
 
 static float main_ms(u64 ticks) {
   return ticks / (SYSCLOCK_ARM11 / 1000.0f);
@@ -53,6 +54,8 @@ typedef struct {
   Upload upload;
   MainMode mode;
   aptHookCookie hook;
+  char progmsg[64];       // Last progress screen drawn ("" = something else since) and when
+  u64 progtick;
 } App;
 
 static void app_frame_begin(App * app) {
@@ -65,6 +68,12 @@ static void app_frame_begin(App * app) {
 // Called while cutting a puzzle, which blocks for a while; draws a progress screen
 static void app_progress(void * udata, const char * msg, int done, int total) {
   App * app = udata;
+  // Each screen waits for a frame: the same message only redraws every MAIN_PROGRESS_MS
+  u64 now = svcGetSystemTick();
+  if(!strncmp(app->progmsg, msg, sizeof(app->progmsg) - 1) && now - app->progtick < MAIN_PROGRESS_MS * (u64)(SYSCLOCK_ARM11 / 1000))
+    return;
+  snprintf(app->progmsg, sizeof(app->progmsg), "%s", msg);
+  app->progtick = now;
   app_frame_begin(app);
   C2D_SceneBegin(app->top);
   textdraw_center(&app->td, 200, 100, 0.7f, C2D_Color32(230, 230, 230, 255), "%s", msg);
@@ -239,6 +248,7 @@ int main(int argc, char ** argv) {
     }
 
     sfx_tick(&app.sfx);
+    app.progmsg[0] = 0;   // A normal frame replaces any progress screen
     u64 t1 = svcGetSystemTick();
     app_frame_begin(&app);
     u64 t2 = svcGetSystemTick();

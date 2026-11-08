@@ -2,6 +2,7 @@
 #define __HEADER_JIGSAW_WHIMSY__
 
 #include "cutgraph.h"
+#include "progress.h"
 
 #include <stdint.h>
 
@@ -46,8 +47,9 @@ uint32_t whimsy_shape(uint8_t set, uint32_t shape, float * xy);
 uint32_t whimsy_count(uint8_t level, uint32_t count);
 // Place whimsies into g (straight edges, tabs not given out yet except grid presets).
 // New pieces are appended (their indices start at the old count). Returns the number
-// placed (can be fewer than asked if no spot works), or -1 out of memory.
-int whimsy_add(CutGraph * g, uint8_t level, uint8_t set, uint32_t seed);
+// placed (can be fewer than asked if no spot works), or -1 out of memory. pr (may be NULL)
+// hears "Adding whimsies" once per whimsy.
+int whimsy_add(CutGraph * g, uint8_t level, uint8_t set, uint32_t seed, const Progress * pr);
 // Insert one shape (absolute coordinates, xy n points, clockwise) as a new piece. Returns 0
 // on success, 1 if it doesn't fit cleanly (g unchanged), -1 out of memory.
 int whimsy_insert(CutGraph * g, const float * xy, uint32_t n);

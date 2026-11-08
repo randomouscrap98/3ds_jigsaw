@@ -46,7 +46,7 @@ int main(int argc, char ** argv) {
     }
     sh = &custom;
   }
-  if(tesscut_graph(cols, rows, sh, &v, seed, &g, &ori, &st)) {
+  if(tesscut_graph(cols, rows, sh, &v, seed, &g, &ori, &st, NULL)) {
     fprintf(stderr, "cut failed\n");
     return 1;
   }

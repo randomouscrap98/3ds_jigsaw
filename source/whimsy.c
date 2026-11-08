@@ -533,7 +533,7 @@ done:
   return result;
 }
 
-int whimsy_add(CutGraph * g, uint8_t level, uint8_t set, uint32_t seed) {
+int whimsy_add(CutGraph * g, uint8_t level, uint8_t set, uint32_t seed, const Progress * pr) {
   uint32_t want = whimsy_count(level, g->count);
   if(!want) return 0;
   Rng r;
@@ -543,6 +543,7 @@ int whimsy_add(CutGraph * g, uint8_t level, uint8_t set, uint32_t seed) {
   if(!cx) return -1;
   uint32_t placed = 0, nshapes = whimsy_setsize(set), first = rng_below(&r, nshapes);
   for(uint32_t k = 0; k < want; k++) {
+    progress_report(pr, "Adding whimsies", k, want);
     // This whimsy's shape, or if it fits nowhere, the set's other shapes in turn
     int done = 0;
     for(uint32_t alt = 0; alt < nshapes && !done; alt++) {

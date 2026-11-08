@@ -9,12 +9,12 @@
 
 static void test_randcut_one(uint8_t style, float w, float h, uint32_t count, uint32_t seed) {
   CutGraph c;
-  CHECK(randcut_init(&c, w, h, count, seed, randcut_style(style)) == 0);
+  CHECK(randcut_init(&c, w, h, count, seed, randcut_style(style), NULL) == 0);
   if(!c.count) return;
   CHECK(c.count == count);
   // Same seed, same cut
   CutGraph d;
-  CHECK(randcut_init(&d, w, h, count, seed, randcut_style(style)) == 0);
+  CHECK(randcut_init(&d, w, h, count, seed, randcut_style(style), NULL) == 0);
   CHECK(d.nv == c.nv && d.ne == c.ne && !memcmp(d.v, c.v, sizeof(CutVert) * c.nv) &&
       !memcmp(d.e, c.e, sizeof(CutEdge) * c.ne));
   cutgraph_free(&d);
@@ -94,5 +94,5 @@ void test_randcut(void) {
   test_randcut_style(RANDCUT_STYLE_EVEN);
   test_randcut_style(RANDCUT_STYLE_RECT);
   CutGraph c;
-  CHECK(randcut_init(&c, 5, 5, 1, 1, randcut_style(0)) == 1);
+  CHECK(randcut_init(&c, 5, 5, 1, 1, randcut_style(0), NULL) == 1);
 }

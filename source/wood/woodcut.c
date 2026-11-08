@@ -14,7 +14,7 @@ int woodcut_init(Cutter * c, uint8_t style, uint8_t whimsy, uint8_t set, uint16_
   c->cols = cols;
   c->rows = rows;
   c->count = (uint32_t)cols * rows;
-  if(style == CUT_STYLE_WOODEN) return cutter_graph(c, randcut_style(RANDCUT_STYLE_WOOD), seed);
+  if(style == CUT_STYLE_WOODEN) return cutter_graph(c, randcut_style(RANDCUT_STYLE_WOOD), seed, NULL);
   c->usegraph = 1;
   // Stroke / Potts cut: whimsies are part of them (placed first). Wooden2's tab rules for all.
   CutTabStyle ts;

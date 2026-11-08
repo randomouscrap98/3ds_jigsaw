@@ -1031,7 +1031,7 @@ static int tess_necks(CutGraph * g, uint8_t * ori, const TessVary * v, TessStats
 }
 
 int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const TessVary * v, uint32_t seed,
-    CutGraph * g, uint8_t ** orient, TessStats * stats) {
+    CutGraph * g, uint8_t ** orient, TessStats * stats, const Progress * pr) {
   memset(g, 0, sizeof(CutGraph));
   memset(stats, 0, sizeof(TessStats));
   if(orient) *orient = NULL;
@@ -1049,6 +1049,7 @@ int tesscut_graph(uint16_t cols, uint16_t rows, const TessShape * sh, const Tess
   // order is then a toss-up): the lattice moves a little and the same size is built again
   int fails = 0;
   for(int fit = 0; fit < TESS_FITS && fails < TESS_MAXFAILS; fit++) {
+    progress_report(pr, "Cutting pieces", fit, TESS_FITS);
     TessStats st = { 0 };
     CutGraph full, c;
     uint8_t * ori = NULL;

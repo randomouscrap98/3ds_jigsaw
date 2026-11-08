@@ -2,6 +2,7 @@
 #define __HEADER_JIGSAW_RANDCUT__
 
 #include "cutgraph.h"
+#include "progress.h"
 
 #include <stdint.h>
 
@@ -41,14 +42,17 @@ const RandCutStyle * randcut_style(uint8_t style);
 #define RANDCUT_MAXTRIES 8        // Whole-cut retries (new points) before failing
 
 // Just the graph (no tabs) for one attempt: whimsies go in before tabs. Returns 0 on success.
-int randcut_graph(CutGraph * g, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st);
+// pr (may be NULL) hears "Cutting pieces" through the Voronoi passes.
+int randcut_graph(CutGraph * g, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st,
+    const Progress * pr);
 // Tab rules for random cuts
 void randcut_tabstyle(const RandCutStyle * st, CutTabStyle * ts);
 // Give out tabs (cutgraph_tabs), with corner-paired stroke directions first if the style bends
 int randcut_tabs(CutGraph * g, const RandCutStyle * st, const CutTabStyle * ts, uint32_t seed);
 // Whole cut with tabs: retries with new points until one works. Same seed + style = same
-// cut. Free with cutgraph_free. Returns 0 on success.
-int randcut_init(CutGraph * g, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st);
+// cut. Free with cutgraph_free. Returns 0 on success. pr: as randcut_graph.
+int randcut_init(CutGraph * g, float width, float height, uint32_t count, uint32_t seed, const RandCutStyle * st,
+    const Progress * pr);
 // Seed for attempt t (randcut_init's retries; callers doing their own retries use the same)
 uint32_t randcut_tryseed(uint32_t seed, uint32_t t);
 
