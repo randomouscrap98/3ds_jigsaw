@@ -1,4 +1,5 @@
 #include "defaults.h"
+#include "boardsave.h"
 #include "imageload.h"
 #include "layout.h"
 #include "savefile.h"
@@ -57,39 +58,40 @@ static int defaults_installed(void) {
   return v;
 }
 
-// Would the save of picture name still fit the picture at w x h? (Its cut comes from the grid its
-// piece count gives for the picture's shape.) No save = yes.
-static int defaults_savefits(const char * name, int oldw, int oldh, int w, int h) {
+// Would the save of picture name fit a picture of w x h? Its cut comes from the grid its piece count
+// gives for the picture's shape, and the save records that grid. No save = yes; unreadable = no.
+static int defaults_savefits(const char * name, int w, int h) {
   char path[STORAGE_MAXPATH];
   storage_savepath(name, path);
-  uint8_t buf[SAVEFILE_HEADER];
+  uint8_t buf[DEFAULTS_SAVEHEAD];
   size_t len = 0;
   SaveHeader hdr;
+  BoardSaveInfo info;
+  Layout l;
   if(storage_readhead(path, buf, sizeof(buf), &len)) return 1;
-  if(savefile_readheader(buf, len, &hdr)) return 0;   // Can't tell: keep the old picture
-  Layout a, b;
-  if(layout_crop(&a, oldw, oldh, hdr.target) || layout_crop(&b, w, h, hdr.target)) return 0;
-  return a.cols == b.cols && a.rows == b.rows;
+  if(savefile_readheader(buf, len, &hdr) || hdr.size >= len) return 0;
+  if(boardsave_peek(buf + hdr.size, len - hdr.size, &info) || layout_crop(&l, w, h, hdr.target)) return 0;
+  return l.cols == info.cols && l.rows == info.rows;
 }
 
-// Should bundled picture src go to dst? First install: if it isn't there. Update: if it is there, the
-// bundled one is bigger, and any save still fits.
-static int defaults_wanted(const char * name, const char * src, const char * dst, int update) {
+// Should bundled picture src go to dst? Missing: only when nothing's been installed yet (deleted
+// defaults stay deleted). There: when the bundled one is bigger. Either way not if a save wouldn't
+// fit it. Non-pictures (credits) are only ever copied when missing.
+static int defaults_wanted(const char * name, const char * src, const char * dst, int fresh) {
   struct stat st;
-  int there = stat(dst, &st) == 0;
-  if(!update) return !there;
-  int w0, h0, w1, h1;
-  if(!there || imageload_size(dst, &w0, &h0) || imageload_size(src, &w1, &h1)) return 0;
-  if((long)w1 * h1 <= (long)w0 * h0) return 0;
-  return defaults_savefits(name, w0, h0, w1, h1);
+  int there = stat(dst, &st) == 0, w0, h0, w1, h1;
+  int pic = !imageload_size(src, &w1, &h1);
+  if(!there) return fresh && (!pic || defaults_savefits(name, w1, h1));
+  if(!pic || imageload_size(dst, &w0, &h0) || (long)w1 * h1 <= (long)w0 * h0) return 0;
+  return defaults_savefits(name, w1, h1);
 }
 
 int defaults_install(progress_fn cb, void * udata) {
   struct stat st;
   int installed = defaults_installed();
   if(installed >= DEFAULTS_VERSION) return 0;
-  int update = installed > 0;
-  DefaultsCopy dc = { .cb = cb, .udata = udata, .msg = update ? "Updating default puzzles" : "Installing default puzzles" };
+  int fresh = installed == 0;   // No marker (first launch, or deleted to reinstall): missing ones too
+  DefaultsCopy dc = { .cb = cb, .udata = udata, .msg = fresh ? "Installing default puzzles" : "Updating default puzzles" };
   char src[STORAGE_MAXPATH], dst[STORAGE_MAXPATH];
   // First pass: what needs copying (decided once: copying changes the answer), total size for the bar
   DIR * d = opendir(DEFAULTS_SRC);
@@ -102,7 +104,7 @@ int defaults_install(progress_fn cb, void * udata) {
     if(de->d_name[0] == '.') continue;
     snprintf(src, sizeof(src), "%s/%s", DEFAULTS_SRC, de->d_name);
     snprintf(dst, sizeof(dst), "%s/%s", STORAGE_PUZZLES, de->d_name);
-    if(!defaults_wanted(de->d_name, src, dst, update) || stat(src, &st) != 0) continue;
+    if(!defaults_wanted(de->d_name, src, dst, fresh) || stat(src, &st) != 0) continue;
     dc.total += st.st_size;
     size_t n = strlen(de->d_name) + 1;
     char * w = realloc(want, wantlen + n + 1);
