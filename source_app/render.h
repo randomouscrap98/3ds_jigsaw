@@ -23,7 +23,7 @@
 #define RENDER_COLOR_SELECT C2D_Color32(240, 200, 90, 255)  // Selected pieces tint (menu yellow)
 #define RENDER_SELECT_BLEND 0.85f   // How much of the select color goes into a selected piece
 #define RENDER_TRAY_LIGHTEN 0.09f   // Tray color: the table color this far toward white (dark tables)...
-#define RENDER_TRAY_DARKEN  0.10f   // ...or toward black (light tables; needs a bit more to show)
+#define RENDER_TRAY_DARKEN  0.12f   // ...or toward black (light tables; needs a bit more to show)
 #define RENDER_TRAY_EDGESHADE 0.2f  // The same (either way) for the tray's top border
 #define RENDER_TRAY_EDGE    5       // Top border height, pixels
 #define RENDER_TRAY_DARK    110     // Tables with luma under this count as dark (the tray goes lighter)
