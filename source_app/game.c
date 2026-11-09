@@ -369,6 +369,38 @@ static void game_condense(Game * g) {
   g->dirty = 1;
 }
 
+#if GAME_SHOWCPU
+// Debug: join one random pair of neighbouring table groups (the smaller moves onto the
+// bigger). Returns events; stops the run when no pair is left.
+static int game_autojoin(Game * g) {
+  Board * b = &g->board;
+  const PieceGeo * geo = b->geo;
+  uint32_t start = (uint32_t)rand() % b->count;
+  for(uint32_t i = 0; i < b->count; i++) {
+    uint32_t p = (start + i) % b->count;
+    uint16_t gp = b->pieces[p].group;
+    if(b->groups[gp].tray) continue;
+    for(uint32_t n = geo->nbstart[p]; n < geo->nbstart[p + 1]; n++) {
+      uint16_t gq = b->pieces[geo->nb[n]].group;
+      if(gq == gp || b->groups[gq].tray) continue;
+      if(b->groups[gp].count > b->groups[gq].count) { uint16_t t = gp; gp = gq; gq = t; }
+      b->groups[gp].x = b->groups[gq].x;
+      b->groups[gp].y = b->groups[gq].y;
+      b->groups[gp].rot = b->groups[gq].rot;
+      board_raise(b, gp);
+      int ev = 0;
+      if(board_drop(b, gp, geo->cell * GAME_SNAP)) ev |= GAME_EV_MERGE;
+      if(board_complete(b)) ev |= GAME_EV_COMPLETE;
+      g->dldirty = 1;
+      g->dirty = 1;
+      return ev;
+    }
+  }
+  g->autojoin = 0;
+  return 0;
+}
+#endif
+
 int game_update(Game * g, const GameInput * gin) {
   int ev = 0;
   // While the modifier is held the buttons do only their modifier jobs; the sticks and
@@ -413,6 +445,12 @@ int game_update(Game * g, const GameInput * gin) {
     // select key still held condenses with just a Y press
     if((gin->down & (GAME_MOD_CONDENSE | GAME_MODKEY)) && (gin->held & GAME_MOD_CONDENSE) &&
         g->nsel && g->held < 0 && !g->boxing) game_condense(g);
+#if GAME_SHOWCPU
+    if((gin->down & KEY_START) && (gin->held & KEY_DRIGHT)) {
+      game_clearsel(g);  // Merges kill group slots the selection may point at
+      g->autojoin = g->board.count / 20 + 1;
+    }
+#endif
     const u32 keep = KEY_TOUCH | GAME_MODKEY | GAME_MOD_KEEPKEYS;
     fin.down &= keep;
     fin.held &= keep;
@@ -444,16 +482,31 @@ int game_update(Game * g, const GameInput * gin) {
     g->table = (g->table + 1) % RENDER_TABLECOLORS;
     g->dirty = 1;
   }
-  // Zoom: up/down, or X/B for the other hand
-  if(in->repeat & (KEY_DUP | KEY_X)) camera_zoom(c, GAME_ZOOMSTEP);
-  if(in->repeat & (KEY_DDOWN | KEY_B)) camera_zoom(c, 1.0f / GAME_ZOOMSTEP);
+  // Movement speeds are per 60 fps frame: scale by this frame's time
+  const float step = (dt > GAME_MAXSTEP_MS ? GAME_MAXSTEP_MS : dt) / GAME_FRAME_MS;
+  // Zoom: up/down, or X/B for the other hand; held repeats on its own clock (hid repeat counts frames)
+  const u32 zin = KEY_DUP | KEY_X, zout = KEY_DDOWN | KEY_B;
+  int zsteps = 0;
+  if(in->down & (zin | zout)) {
+    zsteps = 1;
+    g->zoomnext = now + GAME_ZOOMDELAY_MS;
+  } else if(in->held & (zin | zout)) {
+    if(now > g->zoomnext + GAME_MAXSTEP_MS) g->zoomnext = now;  // Back from a hitch: no burst
+    while(now >= g->zoomnext) {
+      zsteps++;
+      g->zoomnext += GAME_ZOOMREPEAT_MS;
+    }
+  }
+  int zdir = !!(in->held & zin) - !!(in->held & zout);
+  if(in->down & (zin | zout)) zdir = !!(in->down & zin) - !!(in->down & zout);
+  if(zsteps && zdir) camera_zoom(c, powf(GAME_ZOOMSTEP, (float)(zsteps * zdir)));
   // Smooth zoom on the New 3DS C-stick, up = in, same response curve as panning
   float zx, zy;
-  if(stick_read(&g->cstick, 0, in->cstick.dy, &zx, &zy)) camera_zoom(c, powf(GAME_STICKZOOM, zy));
+  if(stick_read(&g->cstick, 0, in->cstick.dy, &zx, &zy)) camera_zoom(c, powf(GAME_STICKZOOM, zy * step));
   // Pan: circle pad
   float px, py;
   if(stick_read(&g->stick, in->circle.dx, -in->circle.dy, &px, &py)) {
-    camera_pan(c, px * GAME_PANSPEED, py * GAME_PANSPEED);
+    camera_pan(c, px * GAME_PANSPEED * step, py * GAME_PANSPEED * step);
   }
 
   float traytop = game_traytop(g);
@@ -549,7 +602,7 @@ int game_update(Game * g, const GameInput * gin) {
       if(sx > c->sw - GAME_EDGEPAN) ex = GAME_EDGEPANSPEED;
       if(sy < GAME_EDGEPAN) ey = -GAME_EDGEPANSPEED;
       if(sy > c->sh - GAME_EDGEPAN && !g->trayopen) ey = GAME_EDGEPANSPEED;  // The open tray is down there
-      if(ex || ey) camera_pan(c, ex, ey);
+      if(ex || ey) camera_pan(c, ex * step, ey * step);
     }
     g->lastsx = sx;
     g->lastsy = sy;
@@ -584,6 +637,12 @@ int game_update(Game * g, const GameInput * gin) {
     }
   }
 
+#if GAME_SHOWCPU
+  if(g->autojoin && g->held < 0 && !g->boxing && !g->movingsel) {
+    g->autojoin--;
+    ev |= game_autojoin(g);
+  }
+#endif
   if(g->cam.zoom != g->trayzoom) game_traykeep(g);
   if(g->dldirty) {
     u64 t = svcGetSystemTick();

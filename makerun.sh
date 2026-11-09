@@ -24,4 +24,4 @@ then
    make clean
 fi
 
-make -j EXTRA_CFLAGS="$FLAGS" && mkdir -p build && echo "$FLAGS" > build/.makerun_flags && $DEVKITPRO/tools/bin/3dslink -a $1 $CURRENTNAME.3dsx
+make EXTRA_CFLAGS="$FLAGS" && mkdir -p build && echo "$FLAGS" > build/.makerun_flags && $DEVKITPRO/tools/bin/3dslink -a $1 $CURRENTNAME.3dsx

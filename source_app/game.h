@@ -23,6 +23,8 @@
 #define GAME_MAXZOOM 2.0f
 #define GAME_STARTCELL 28.0f      // Starting zoom shows a cell this many pixels wide
 #define GAME_ZOOMSTEP 1.15f       // Per D-pad / X / B press or repeat
+#define GAME_ZOOMDELAY_MS 333     // Holding a zoom button repeats after this (was 20 frames)
+#define GAME_ZOOMREPEAT_MS 83     // ... then every this often (was 5 frames)
 #define GAME_STICKZOOM 1.053f     // Per frame zoom factor at full C-stick tilt (New 3DS)
 #define GAME_CIRCLE_RANGE 156     // Circle pad full tilt
 #define GAME_CSTICK_RANGE 146     // C-stick full tilt (guess; values past it just clamp)
@@ -34,6 +36,8 @@
 #define GAME_EDGEPANSPEED 4.0f
 #define GAME_AUTOSAVE_MS 30000
 #define GAME_MAXFRAME_MS 100      // Longer frames (HOME menu, sleep) only count this much play time
+#define GAME_FRAME_MS 16.667f     // Speeds below are per frame at 60 fps; slower frames move further
+#define GAME_MAXSTEP_MS 50        // One frame moves at most this much time's worth (hitches don't jump)
 #define GAME_OVERLAY_FADE_MS 200  // Info overlay (hold Y) fade in / out time
 #ifndef GAME_SHOWCPU
 #define GAME_SHOWCPU 0            // 1 = CPU use line on the info overlay (make EXTRA_CFLAGS=-DGAME_SHOWCPU=1)
@@ -142,6 +146,8 @@ typedef struct {
   GamePerf perf;          // Filled in by main, shown on the overlay
   char lastsong[256];     // Song the marquee is showing, and when it started
   u64 songstart;
+  u64 zoomnext;           // osGetTime of the next zoom button repeat
+  uint32_t autojoin;      // Debug (GAME_SHOWCPU): joins left, one per frame (Y + D-Right + START)
 } Game;
 
 // Start a puzzle. target = piece count for a new game (cut in the given style, with the
