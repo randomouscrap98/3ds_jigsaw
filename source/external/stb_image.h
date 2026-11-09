@@ -1,3 +1,4 @@
+/* stb_image v2.30 (nothings/stb), patched by 3ds_jigsaw: search "3ds_jigsaw patch"; see notes/research/stb-image-patches.md. */
 /* stb_image - v2.30 - public domain image loader - http://nothings.org/stb
                                   no warranty implied; use at your own risk
 
@@ -4542,7 +4543,7 @@ STBIDEF char *stbi_zlib_decode_malloc_guesssize_headerflag(const char *buffer, i
 {
    stbi__zbuf a;
    char *p = (char *) stbi__malloc(initial_size);
-   if (p == NULL) return NULL;
+   if (p == NULL) { stbi__err("outofmem", "Out of memory"); return NULL; } // 3ds_jigsaw patch: was return NULL (stale error text)
    a.zbuffer = (stbi_uc *) buffer;
    a.zbuffer_end = (stbi_uc *) buffer + len;
    if (stbi__do_zlib(&a, p, initial_size, 1, parse_header)) {
