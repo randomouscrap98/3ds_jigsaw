@@ -278,6 +278,14 @@ void test_edgegen_irregular(void) {
   edgegen_free(&eg);
 }
 
+// Counts imgscale_areap reports in calls[0], last row done in calls[1]
+static void imgscale_testprogress(void * udata, const char * msg, int done, int total) {
+  int * calls = udata;
+  if(strcmp(msg, PROGRESS_SCALING) || total != 70 || done <= calls[1]) return;
+  calls[0]++;
+  calls[1] = done;
+}
+
 void test_imgscale(void) {
   // 4x2 RGB -> 2x1 averages 2x2 blocks
   uint8_t src[4 * 2 * 3], dst[2 * 1 * 3];
@@ -293,6 +301,14 @@ void test_imgscale(void) {
   uint8_t g[4] = { 10, 20, 30, 40 }, o[1];
   CHECK(imgscale_area(g, 4, 1, 1, 2, 0, 2, 1, o, 1, 1) == 0);
   CHECK(o[0] == 35);
+  // Progress: every 32 rows from 0, out of the output height, same pixels as without
+  uint8_t big[1 * 100], bo[1 * 70], bp[1 * 70];
+  for(int i = 0; i < 100; i++) big[i] = (uint8_t)(i * 2);
+  int calls[2] = { 0, -1 };
+  Progress pr = { imgscale_testprogress, calls };
+  CHECK(imgscale_areap(big, 1, 100, 1, 0, 0, 1, 100, bp, 1, 70, &pr) == 0);
+  CHECK(imgscale_area(big, 1, 100, 1, 0, 0, 1, 100, bo, 1, 70) == 0);
+  CHECK(calls[0] == 3 && calls[1] == 64 && !memcmp(bo, bp, sizeof(bo)));
   // Fit: shrink to the tighter side, never upscale, never 0
   uint16_t w, h;
   imgscale_fit(1000, 500, 320, 200, &w, &h);

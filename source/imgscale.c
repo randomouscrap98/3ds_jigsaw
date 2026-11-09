@@ -16,8 +16,15 @@
   } \
 }
 
+#define IMGSCALE_REPORTROWS 32
+
 int imgscale_area(const uint8_t * src, uint32_t srcw, uint32_t srch, int comp,
     float sx, float sy, float sw, float sh, uint8_t * dst, uint32_t dw, uint32_t dh) {
+  return imgscale_areap(src, srcw, srch, comp, sx, sy, sw, sh, dst, dw, dh, NULL);
+}
+
+int imgscale_areap(const uint8_t * src, uint32_t srcw, uint32_t srch, int comp,
+    float sx, float sy, float sw, float sh, uint8_t * dst, uint32_t dw, uint32_t dh, const Progress * pr) {
   if(comp < 1 || comp > 4 || dw == 0 || dh == 0) return 1;
   // Streams one output row at a time: each source row in the row's vertical span is
   // resampled horizontally and accumulated. Memory is just a couple of output rows.
@@ -30,6 +37,7 @@ int imgscale_area(const uint8_t * src, uint32_t srcw, uint32_t srch, int comp,
   }
   float fx = sw / dw, fy = sh / dh;
   for(uint32_t y = 0; y < dh; y++) {
+    if(y % IMGSCALE_REPORTROWS == 0) progress_report(pr, PROGRESS_SCALING, (int)y, (int)dh);
     float ystart = sy + y * fy, yend = ystart + fy, wtotal = 0;
     for(size_t k = 0; k < (size_t)dw * comp; k++) acc[k] = 0;
     IMGSCALE_SPAN(ystart, yend, srch, {

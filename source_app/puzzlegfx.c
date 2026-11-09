@@ -54,28 +54,30 @@ typedef struct {
 } PuzzleCacheHeader;
 
 #define PGFX_ERR(...) do { snprintf(err, errlen, __VA_ARGS__); } while(0)
-#define PGFX_CUTBAR_MS 1500     // The cut's progress bar shows only after this long...
-#define PGFX_CUTBAR_LEFT 0.5f   // ...and only if at least this much of the cut is left then
+#define PGFX_BAR_MS 1500        // Cutting / scaling bars show only after this long...
+#define PGFX_BAR_LEFT 0.5f      // ...and only if at least this much of the work is left then
 #define PGFX_ETC1_QUALITY 0     // etc1_encode quality for Max (0 = fast: refit costs ~2x for ~0.3 dB)
 
-// Passes the cutter's reports on, except the cut stage's own (PROGRESS_CUTTING): those are dropped
-// for PGFX_CUTBAR_MS, then show from there on if enough is left (fast cuts never show a bar)
+// Passes reports on, except those with message msg (the stage's own: PROGRESS_CUTTING,
+// PROGRESS_SCALING): those are dropped for PGFX_BAR_MS, then show from there on if enough is
+// left (fast stages never show a bar; whimsies' own reports pass straight through)
 typedef struct {
   progress_fn cb;
   void * udata;
+  const char * msg;
   u64 start;
   int bar;    // -1 not decided yet, 0 no bar, 1 bar
-} PgfxCutProgress;
+} PgfxDelayProgress;
 
-static void puzzlegfx_cutprogress(void * udata, const char * msg, int done, int total) {
-  PgfxCutProgress * p = udata;
-  if(strcmp(msg, PROGRESS_CUTTING)) {
+static void puzzlegfx_delayprogress(void * udata, const char * msg, int done, int total) {
+  PgfxDelayProgress * p = udata;
+  if(strcmp(msg, p->msg)) {
     p->cb(p->udata, msg, done, total);
     return;
   }
   if(p->bar < 0) {
-    if(svcGetSystemTick() - p->start < PGFX_CUTBAR_MS * (u64)(SYSCLOCK_ARM11 / 1000)) return;
-    p->bar = total > 1 && done <= total * (1 - PGFX_CUTBAR_LEFT);
+    if(svcGetSystemTick() - p->start < PGFX_BAR_MS * (u64)(SYSCLOCK_ARM11 / 1000)) return;
+    p->bar = total > 1 && done <= total * (1 - PGFX_BAR_LEFT);
   }
   if(p->bar) p->cb(p->udata, msg, done, total);
 }
@@ -234,8 +236,8 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
   }
   // Cut first (in cells), then pick the piece size whose tiles fit the pages
   if(cb) cb(udata, PROGRESS_CUTTING, 0, 1);
-  PgfxCutProgress cp = { cb, udata, svcGetSystemTick(), -1 };
-  Progress pr = { puzzlegfx_cutprogress, &cp };
+  PgfxDelayProgress cp = { cb, udata, PROGRESS_CUTTING, svcGetSystemTick(), -1 };
+  Progress pr = { puzzlegfx_delayprogress, &cp };
   if(cutter_initp(&cut, h->key.style, h->key.whimsy, h->key.whimsyset, l->cols, l->rows, h->key.seed, cb ? &pr : NULL)) {
     PGFX_ERR("Out of memory (cutter)");
     goto done;
@@ -256,10 +258,12 @@ static int puzzlegfx_build(PuzzleGfx * pg, PieceGeo * geo, const char * imagepat
     else PGFX_ERR("Image too small for %lu pieces", (unsigned long)h->key.target);
     goto done;
   }
-  if(cb) cb(udata, "Scaling image", 0, 1);
+  if(cb) cb(udata, PROGRESS_SCALING, 0, 1);
   img = malloc((size_t)l->width * l->height * 3);
   if(!img) { PGFX_ERR("Out of memory (image)"); goto done; }
-  if(imgscale_area(src, sw, sh, 3, l->cropx, l->cropy, l->cropw, l->croph, img, l->width, l->height)) {
+  PgfxDelayProgress sp = { cb, udata, PROGRESS_SCALING, svcGetSystemTick(), -1 };
+  Progress spr = { puzzlegfx_delayprogress, &sp };
+  if(imgscale_areap(src, sw, sh, 3, l->cropx, l->cropy, l->cropw, l->croph, img, l->width, l->height, cb ? &spr : NULL)) {
     PGFX_ERR("Out of memory (scaling)");
     goto done;
   }

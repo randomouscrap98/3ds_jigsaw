@@ -8,6 +8,8 @@ typedef void (*progress_fn)(void * udata, const char * msg, int done, int total)
 
 // Message for the cut generators' reports (an app can treat the cut stage specially)
 #define PROGRESS_CUTTING "Cutting pieces"
+// ... and imgscale_areap's
+#define PROGRESS_SCALING "Scaling image"
 
 // A callback and its data, passed down into slow code (NULL = nobody listening)
 typedef struct {
